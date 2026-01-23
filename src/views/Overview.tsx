@@ -86,7 +86,7 @@ export const Overview: React.FC<OverviewProps> = ({ entities, onToggle }) => {
                 {/* Quick-Action Chips */}
                 <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2">
                     <QuickActionChip
-                        icon="fa-coffee-maker"
+                        icon="fa-mug-hot"
                         label="Kaffee"
                         color="brown"
                         onClick={() => console.log('Open Kaffee')}
@@ -99,7 +99,7 @@ export const Overview: React.FC<OverviewProps> = ({ entities, onToggle }) => {
                         onClick={() => setShowLightsModal(true)}
                     />
                     <QuickActionChip
-                        icon="fa-window-shutter"
+                        icon="fa-window-maximize"
                         label="Storen"
                         color="blue"
                         onClick={() => setShowCoversModal(true)}
@@ -118,7 +118,7 @@ export const Overview: React.FC<OverviewProps> = ({ entities, onToggle }) => {
                         onClick={() => setShowShoppingModal(true)}
                     />
                     <QuickActionChip
-                        icon="fa-bell-ring"
+                        icon="fa-door-open"
                         label="Türen"
                         color="orange"
                         onClick={() => console.log('Unlock Doors')}

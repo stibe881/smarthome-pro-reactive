@@ -83,8 +83,8 @@ const App: React.FC = () => {
                             key={item.id}
                             onClick={() => setActiveView(item.id as ViewType)}
                             className={`w-full flex items-center gap-4 px-5 py-4 rounded-xl transition-all duration-200 group ${activeView === item.id
-                                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
-                                    : 'text-gray-500 hover:bg-white/5 hover:text-gray-200'
+                                ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
+                                : 'text-gray-500 hover:bg-white/5 hover:text-gray-200'
                                 }`}
                         >
                             <i className={`fa-solid ${item.icon} text-lg w-6 ${activeView === item.id ? 'scale-110' : 'group-hover:scale-110'} transition-transform`}></i>
@@ -127,7 +127,7 @@ const App: React.FC = () => {
 
                 <div className="flex-1 overflow-y-auto p-10 no-scrollbar">
                     <div className="max-w-6xl mx-auto">
-                        {activeView === 'overview' && <Overview entities={entities} onToggle={handleToggle} />}
+                        {activeView === 'overview' && <Overview entities={entities} onToggle={handleToggle} haService={haService} />}
                         {activeView === 'rooms' && <Rooms entities={entities} onToggle={handleToggle} />}
                         {activeView === 'media' && <Media entities={entities} />}
                         {activeView === 'family' && <Family entities={entities} />}
