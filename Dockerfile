@@ -7,13 +7,13 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies
-RUN npm ci
+RUN npm install --no-audit
 
 # Copy source code
 COPY . .
 
-# Build the application
-RUN npm run build
+# Build the application (use npx to avoid permission issues)
+RUN npx tsc && npx vite build
 
 # Production Stage
 FROM nginx:alpine
