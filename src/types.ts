@@ -8,6 +8,9 @@ export interface EntityState {
     icon: string;
     type: DeviceType;
     color?: string;
+    room?: string;
+    brightness?: number;
+    position?: number;
 }
 
 export interface Room {

@@ -4,6 +4,8 @@ import { QuickActionChip, SceneButton } from '../components/QuickActions';
 import { AppliancesSection } from '../components/AppliancesStatus';
 import { VacuumControl } from '../components/VacuumControl';
 import { ShoppingList } from '../components/ShoppingList';
+import { LightsControl } from '../components/LightsControl';
+import { CoversControl } from '../components/CoversControl';
 import { Modal } from '../components/Modal';
 
 interface OverviewProps {
@@ -13,11 +15,14 @@ interface OverviewProps {
 
 export const Overview: React.FC<OverviewProps> = ({ entities, onToggle }) => {
     const lights = entities.filter(e => e.type === 'light');
+    const covers = entities.filter(e => e.type === 'cover');
     const activeLightsCount = lights.filter(l => l.state === 'on').length;
 
     // Modal states
     const [showVacuumModal, setShowVacuumModal] = useState(false);
     const [showShoppingModal, setShowShoppingModal] = useState(false);
+    const [showLightsModal, setShowLightsModal] = useState(false);
+    const [showCoversModal, setShowCoversModal] = useState(false);
 
     // Mock shopping list - will be replaced with real HA entity
     const [shoppingItems, setShoppingItems] = useState([
@@ -91,13 +96,13 @@ export const Overview: React.FC<OverviewProps> = ({ entities, onToggle }) => {
                         label="Lichter"
                         active={activeLightsCount > 0}
                         color="amber"
-                        onClick={() => console.log('Open Lights')}
+                        onClick={() => setShowLightsModal(true)}
                     />
                     <QuickActionChip
                         icon="fa-window-shutter"
                         label="Storen"
                         color="blue"
-                        onClick={() => console.log('Open Storen')}
+                        onClick={() => setShowCoversModal(true)}
                     />
                     <QuickActionChip
                         icon="fa-robot"
@@ -248,6 +253,35 @@ export const Overview: React.FC<OverviewProps> = ({ entities, onToggle }) => {
                     onToggle={handleToggleTodo}
                     onAdd={handleAddTodo}
                     onDelete={handleDeleteTodo}
+                />
+            </Modal>
+
+            <Modal isOpen={showLightsModal} onClose={() => setShowLightsModal(false)} title="💡 Lichter">
+                <LightsControl
+                    lights={lights}
+                    onToggle={onToggle}
+                    onBrightnessChange={(id, brightness) => {
+                        console.log(`Set brightness for ${id} to ${brightness}`);
+                        // TODO: Call HA service to set brightness
+                    }}
+                />
+            </Modal>
+
+            <Modal isOpen={showCoversModal} onClose={() => setShowCoversModal(false)} title="🪟 Storen & Rolläden">
+                <CoversControl
+                    covers={covers}
+                    onOpen={(id) => {
+                        console.log(`Opening cover ${id}`);
+                        // TODO: Call HA service to open cover
+                    }}
+                    onClose={(id) => {
+                        console.log(`Closing cover ${id}`);
+                        // TODO: Call HA service to close cover
+                    }}
+                    onSetPosition={(id, position) => {
+                        console.log(`Set cover ${id} position to ${position}`);
+                        // TODO: Call HA service to set cover position
+                    }}
                 />
             </Modal>
         </>
