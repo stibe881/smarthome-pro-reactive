@@ -119,6 +119,14 @@ export class HomeAssistantService {
             console.warn('Cannot send - WebSocket not open');
             return;
         }
+
+        // Special handling for auth message - NO ID ALLOWED per HA WebSocket API spec
+        if (data.type === 'auth') {
+            console.log('Sending auth without ID (as per HA spec)');
+            this.socket.send(JSON.stringify(data));
+            return;
+        }
+
         const id = this.messageId++;
         if (callback) this.handlers.set(id, callback);
         this.socket.send(JSON.stringify({ ...data, id }));
