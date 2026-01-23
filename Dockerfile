@@ -12,8 +12,8 @@ RUN npm install --no-audit
 # Copy source code
 COPY . .
 
-# Build the application (use npx to avoid permission issues)
-RUN npx tsc && npx vite build
+# Fix permissions and build
+RUN chmod -R +x node_modules/.bin && npm run build
 
 # Production Stage
 FROM nginx:alpine
