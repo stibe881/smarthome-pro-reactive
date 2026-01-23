@@ -1,0 +1,8 @@
+version: '3.8'
+services:
+  dashboard:
+    build: .
+    container_name: titan-os-v2
+    ports:
+      - "8081:80"
+    restart: always
