@@ -148,11 +148,7 @@ export const Overview: React.FC<OverviewProps> = ({ entities, onToggle }) => {
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                     {/* Haushaltsgeräte Status */}
-                    <AppliancesSection
-                        dishwasher={dishwasher}
-                        washingMachine={washingMachine}
-                        dryer={dryer}
-                    />
+                    <AppliancesSection entities={entities} />
 
                     {/* Szenen & Modi */}
                     <div className="glass-card p-6 rounded-3xl border border-white/10">

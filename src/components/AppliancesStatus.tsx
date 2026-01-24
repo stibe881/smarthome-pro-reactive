@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useMemo } from 'react';
+import { EntityState } from '../types';
 
 interface ApplianceStatusProps {
     name: string;
@@ -66,31 +67,92 @@ export const ApplianceStatus: React.FC<ApplianceStatusProps> = ({
 };
 
 interface AppliancesSectionProps {
-    dishwasher?: {
-        state: 'running' | 'finished' | 'standby';
-        remainingTime?: string;
-        program?: string;
-    };
-    washingMachine?: {
-        state: 'running' | 'finished' | 'standby';
-        remainingTime?: string;
-        program?: string;
-    };
-    dryer?: {
-        state: 'running' | 'finished' | 'standby';
-        current?: number;
-    };
+    entities: EntityState[];
 }
 
-export const AppliancesSection: React.FC<AppliancesSectionProps> = ({
-    dishwasher,
-    washingMachine,
-    dryer
-}) => {
+export const AppliancesSection: React.FC<AppliancesSectionProps> = ({ entities }) => {
+    // Extract appliance data from HA entities
+    const appliances = useMemo(() => {
+        const result: {
+            dishwasher?: { state: 'running' | 'finished' | 'standby'; remainingTime?: string; program?: string };
+            washingMachine?: { state: 'running' | 'finished' | 'standby'; remainingTime?: string; program?: string };
+            dryer?: { state: 'running' | 'finished' | 'standby'; current?: number };
+        } = {};
+
+        // Geschirrspüler (Dishwasher)
+        const dishwasherEntity = entities.find(e =>
+            e.id.includes('dishwasher') ||
+            e.id.includes('geschirrspuler') ||
+            e.name.toLowerCase().includes('geschirrspüler') ||
+            e.name.toLowerCase().includes('dishwasher')
+        );
+
+        if (dishwasherEntity) {
+            const isRunning = dishwasherEntity.state === 'on' || dishwasherEntity.state === 'running';
+            const isOff = dishwasherEntity.state === 'off' || dishwasherEntity.state === 'idle';
+
+            result.dishwasher = {
+                state: isRunning ? 'running' : isOff ? 'standby' : 'finished',
+                remainingTime: dishwasherEntity.attributes?.remaining_time,
+                program: dishwasherEntity.attributes?.program || dishwasherEntity.attributes?.current_program
+            };
+        }
+
+        // Waschmaschine (Washing Machine)
+        const washingMachineEntity = entities.find(e =>
+            e.id.includes('washing') ||
+            e.id.includes('waschmaschine') ||
+            e.name.toLowerCase().includes('waschmaschine') ||
+            e.name.toLowerCase().includes('washing machine')
+        );
+
+        if (washingMachineEntity) {
+            const isRunning = washingMachineEntity.state === 'on' || washingMachineEntity.state === 'running';
+            const isOff = washingMachineEntity.state === 'off' || washingMachineEntity.state === 'idle';
+
+            result.washingMachine = {
+                state: isRunning ? 'running' : isOff ? 'standby' : 'finished',
+                remainingTime: washingMachineEntity.attributes?.remaining_time,
+                program: washingMachineEntity.attributes?.program || washingMachineEntity.attributes?.current_program
+            };
+        }
+
+        // Tumbler/Trockner (Dryer)
+        const dryerEntity = entities.find(e =>
+            e.id.includes('dryer') ||
+            e.id.includes('tumbler') ||
+            e.id.includes('trockner') ||
+            e.name.toLowerCase().includes('trockner') ||
+            e.name.toLowerCase().includes('tumbler') ||
+            e.name.toLowerCase().includes('dryer')
+        );
+
+        if (dryerEntity) {
+            const current = typeof dryerEntity.state === 'number' ? dryerEntity.state : parseInt(dryerEntity.state);
+            const isRunning = dryerEntity.state === 'on' || dryerEntity.state === 'running' || current >= 12;
+            const isOff = dryerEntity.state === 'off' || dryerEntity.state === 'idle';
+
+            result.dryer = {
+                state: isRunning ? 'running' : isOff ? 'standby' : 'finished',
+                current: !isNaN(current) ? current : undefined
+            };
+        }
+
+        return result;
+    }, [entities]);
+
+    const { dishwasher, washingMachine, dryer } = appliances;
+
+    // Check if any appliance is running
     const anyRunning =
         dishwasher?.state === 'running' ||
         washingMachine?.state === 'running' ||
         (dryer?.current && dryer.current >= 12);
+
+    // Don't show section if no appliances found
+    if (!dishwasher && !washingMachine && !dryer) {
+        return null;
+    }
 
     return (
         <div className={`
@@ -134,7 +196,7 @@ export const AppliancesSection: React.FC<AppliancesSectionProps> = ({
                     <ApplianceStatus
                         name="Tumbler"
                         icon="fa-wind"
-                        state={dryer.current && dryer.current >= 12 ? 'running' : 'finished'}
+                        state={dryer.current && dryer.current >= 12 ? 'running' : dryer.state}
                         remainingTime={dryer.current && dryer.current >= 12 ? 'Trocknen...' : undefined}
                     />
                 )}
