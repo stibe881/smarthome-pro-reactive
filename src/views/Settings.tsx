@@ -1,4 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
+import { changePassword, deactivateUserAccount } from '../services/userManagement';
 
 interface SettingsProps {
     onConnect?: (url: string, token: string) => Promise<boolean>;
@@ -6,9 +9,51 @@ interface SettingsProps {
 }
 
 export const Settings: React.FC<SettingsProps> = ({ onConnect, isConnected }) => {
-    const [url, setUrl] = useState(localStorage.getItem('ha_url') || '');
-    const [token, setToken] = useState(localStorage.getItem('ha_token') || '');
+    const { user, logout } = useAuth();
+    const [url, setUrl] = useState('');
+    const [token, setToken] = useState('');
     const [status, setStatus] = useState<'idle' | 'connecting' | 'success' | 'error'>('idle');
+    const [isLoadingSettings, setIsLoadingSettings] = useState(true);
+
+    // Password change states
+    const [showPasswordChange, setShowPasswordChange] = useState(false);
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [passwordError, setPasswordError] = useState('');
+
+    // Account deletion states
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [deleteConfirmText, setDeleteConfirmText] = useState('');
+
+    // Load settings from Supabase on mount
+    useEffect(() => {
+        const loadSettings = async () => {
+            if (!user) return;
+
+            try {
+                const { data, error } = await supabase
+                    .from('user_settings')
+                    .select('*')
+                    .eq('user_id', user.id)
+                    .single();
+
+                if (error && error.code !== 'PGRST116') {
+                    // PGRST116 = no rows returned, which is OK
+                    throw error;
+                }
+
+                if (data) {
+                    if (data.ha_url) setUrl(data.ha_url);
+                    if (data.ha_token) setToken(data.ha_token);
+                }
+            } catch (err) {
+                console.error('Failed to load settings:', err);
+            } finally {
+                setIsLoadingSettings(false);
+            }
+        };
+        loadSettings();
+    }, [user]);
 
     useEffect(() => {
         if (isConnected) setStatus('success');
@@ -20,11 +65,26 @@ export const Settings: React.FC<SettingsProps> = ({ onConnect, isConnected }) =>
             return;
         }
 
+        if (!user) return;
+
         setStatus('connecting');
-        localStorage.setItem('ha_url', url);
-        localStorage.setItem('ha_token', token);
 
         try {
+            // Save to Supabase (upsert)
+            const { error } = await supabase
+                .from('user_settings')
+                .upsert({
+                    user_id: user.id,
+                    ha_url: url,
+                    ha_token: token,
+                    updated_at: new Date().toISOString(),
+                }, {
+                    onConflict: 'user_id'
+                });
+
+            if (error) throw error;
+
+            // Connect to HA
             const success = await onConnect?.(url, token);
             if (success) {
                 setStatus('success');
@@ -32,110 +92,207 @@ export const Settings: React.FC<SettingsProps> = ({ onConnect, isConnected }) =>
                 setStatus('error');
             }
         } catch (err) {
+            console.error('Save error:', err);
             setStatus('error');
         }
     };
 
+    const handleLogout = async () => {
+        try {
+            await logout();
+            window.location.reload();
+        } catch (err) {
+            console.error('Logout error:', err);
+        }
+    };
+
+    if (isLoadingSettings) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <i className="fa-solid fa-circle-notch animate-spin text-blue-500 text-2xl"></i>
+            </div>
+        );
+    }
+
     return (
         <div className="max-w-5xl mx-auto space-y-10 pb-20 animate-in fade-in">
-            <div className="glass-card p-8 md:p-12 rounded-[3rem] border-2 border-white/5 space-y-8 relative overflow-hidden">
-                <div className="absolute top-8 right-8">
-                    {status === 'connecting' && (
-                        <div className="flex items-center gap-2 px-4 py-2 bg-blue-500/10 border border-blue-500/20 rounded-full">
-                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-ping"></div>
-                            <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Verbinden...</span>
-                        </div>
-                    )}
-                    {status === 'success' && (
-                        <div className="flex items-center gap-2 px-4 py-2 bg-green-500/10 border border-green-500/20 rounded-full">
-                            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                            <span className="text-[10px] font-black text-green-400 uppercase tracking-widest">Verbunden</span>
-                        </div>
-                    )}
-                    {status === 'error' && (
-                        <div className="flex items-center gap-2 px-4 py-2 bg-red-500/10 border border-red-500/20 rounded-full">
-                            <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-                            <span className="text-[10px] font-black text-red-400 uppercase tracking-widest">Fehler</span>
-                        </div>
-                    )}
-                </div>
-
-                <div className="space-y-2">
-                    <h3 className="text-3xl font-black flex items-center gap-4">
-                        <i className="fa-solid fa-link text-blue-400"></i>
-                        Home Assistant
-                    </h3>
-                    <p className="text-slate-400 text-sm max-w-xl">
-                        Verbinden Sie Ihr Dashboard mit Ihrer Home Assistant Instanz. Erstellen Sie dazu unter Ihrem Profil in HA einen "Langlebigen Zugangs-Token".
-                    </p>
-                </div>
-
-                <div className="space-y-6">
-                    <div className="grid grid-cols-1 gap-6">
-                        <div className="space-y-2">
-                            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] px-1">Instanz URL</label>
-                            <input
-                                type="text"
-                                value={url}
-                                onChange={(e) => setUrl(e.target.value)}
-                                placeholder="http://192.168.1.50:8123"
-                                className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all font-medium"
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] px-1">Langlebiger Zugangs-Token</label>
-                            <textarea
-                                value={token}
-                                onChange={(e) => setToken(e.target.value)}
-                                placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                                className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all h-40 font-mono text-xs leading-relaxed"
-                            />
-                        </div>
+            {/* User Info Card */}
+            <div className="glass-card p-6 rounded-[2.5rem] border border-white/5 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-blue-400 rounded-2xl flex items-center justify-center">
+                        <i className="fa-solid fa-user text-white text-lg"></i>
                     </div>
+                    <div>
+                        <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Angemeldet als</p>
+                        <p className="text-white font-bold">{user?.email}</p>
+                    </div>
+                </div>
+                <button
+                    onClick={handleLogout}
+                    className="px-6 py-3 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/40 rounded-2xl text-red-400 font-black text-sm transition-all flex items-center gap-2"
+                >
+                    <i className="fa-solid fa-right-from-bracket"></i>
+                    Abmelden
+                </button>
+            </div>
 
+            {/* Password Change Section */}
+            <div className="glass-card p-8 rounded-[2.5rem] border border-white/5">
+                <h4 className="font-bold mb-6 flex items-center gap-3 text-blue-400">
+                    <i className="fa-solid fa-key"></i>
+                    Passwort ändern
+                </h4>
+
+                {!showPasswordChange ? (
                     <button
-                        onClick={handleSave}
-                        disabled={status === 'connecting'}
-                        className={`w-full py-5 rounded-2xl font-black text-lg shadow-2xl transition-all flex items-center justify-center gap-3 ${status === 'connecting' ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-blue-600 text-white hover:scale-[1.01] active:scale-[0.99] hover:bg-blue-500 shadow-blue-500/20'
-                            }`}
+                        onClick={() => setShowPasswordChange(true)}
+                        className="px-6 py-3 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-2xl text-blue-400 font-bold text-sm transition-all"
                     >
-                        {status === 'connecting' ? (
-                            <i className="fa-solid fa-circle-notch animate-spin"></i>
-                        ) : (
-                            <i className="fa-solid fa-plug-circle-check"></i>
-                        )}
-                        {status === 'connecting' ? 'PRÜFE VERBINDUNG...' : 'KONFIGURATION SPEICHERN'}
+                        <i className="fa-solid fa-lock mr-2"></i>
+                        Passwort ändern
                     </button>
-
-                    {status === 'error' && (
-                        <p className="text-center text-red-400 text-xs font-bold animate-bounce mt-4">
-                            <i className="fa-solid fa-triangle-exclamation mr-2"></i>
-                            Verbindung fehlgeschlagen. Prüfe URL und Token!
-                        </p>
-                    )}
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="glass-card p-8 rounded-[2.5rem] border border-white/5">
-                    <h4 className="font-bold mb-4 flex items-center gap-3 text-amber-400">
-                        <i className="fa-solid fa-circle-info"></i>
-                        Hilfe benötigt?
-                    </h4>
-                    <ul className="text-xs text-slate-400 space-y-3 leading-relaxed">
-                        <li className="flex gap-3"><span className="text-blue-400 font-bold">1.</span> Die URL muss inkl. Port (meist :8123) angegeben werden.</li>
-                        <li className="flex gap-3"><span className="text-blue-400 font-bold">2.</span> Achte auf http:// oder https:// je nach deiner HA Konfiguration.</li>
-                        <li className="flex gap-3"><span className="text-blue-400 font-bold">3.</span> Den Token findest du in HA ganz unten auf deiner Profil-Seite.</li>
-                    </ul>
-                </div>
-                <div className="glass-card p-8 rounded-[2.5rem] border border-white/5 flex flex-col justify-center items-center text-center">
-                    <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.3em] mb-4">Version 2.0.0</p>
-                    <div className="w-12 h-12 bg-white/5 rounded-2xl flex items-center justify-center text-slate-400">
-                        <i className="fa-solid fa-shield-halved"></i>
+                ) : (
+                    <div className="space-y-4">
+                        <div className="space-y-2">
+                            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] px-1">Neues Passwort</label>
+                            <input
+                                type="password"
+                                value={newPassword}
+                                onChange={(e) => setNewPassword(e.target.value)}
+                                placeholder="Mindestens 8 Zeichen"
+                                className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] px-1">Passwort bestätigen</label>
+                            <input
+                                type="password"
+                                value={confirmPassword}
+                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                placeholder="Passwort wiederholen"
+                                className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
+                            />
+                        </div>
+                        {passwordError && (
+                            <p className="text-red-400 text-sm">
+                                <i className="fa-solid fa-triangle-exclamation mr-2"></i>
+                                {passwordError}
+                            </p>
+                        )}
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => {
+                                    setShowPasswordChange(false);
+                                    setNewPassword('');
+                                    setConfirmPassword('');
+                                    setPasswordError('');
+                                }}
+                                className="flex-1 py-3 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-white font-bold transition-all"
+                            >
+                                Abbrechen
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    setPasswordError('');
+                                    if (newPassword.length < 8) {
+                                        setPasswordError('Passwort muss mindestens 8 Zeichen lang sein');
+                                        return;
+                                    }
+                                    if (newPassword !== confirmPassword) {
+                                        setPasswordError('Passwörter stimmen nicht überein');
+                                        return;
+                                    }
+                                    try {
+                                        await changePassword(newPassword);
+                                        alert('Passwort erfolgreich geändert!');
+                                        setShowPasswordChange(false);
+                                        setNewPassword('');
+                                        setConfirmPassword('');
+                                    } catch (err: any) {
+                                        setPasswordError(err.message);
+                                    }
+                                }}
+                                className="flex-1 py-3 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white font-bold transition-all"
+                            >
+                                Speichern
+                            </button>
+                        </div>
                     </div>
-                    <p className="text-slate-400 text-xs mt-4">Deine Daten werden lokal in deinem Browser gespeichert.</p>
-                </div>
+                )}
             </div>
+
+            {/* Account Deletion Section */}
+            <div className="glass-card p-8 rounded-[2.5rem] border border-red-500/20">
+                <h4 className="font-bold mb-4 flex items-center gap-3 text-red-400">
+                    <i className="fa-solid fa-user-slash"></i>
+                    Account löschen
+                </h4>
+                <p className="text-slate-400 text-sm mb-6">
+                    Wenn du deinen Account löschst, werden alle deine Daten unwiderruflich gelöscht.
+                </p>
+                <button
+                    onClick={() => setShowDeleteConfirm(true)}
+                    className="px-6 py-3 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-2xl text-red-400 font-bold text-sm transition-all"
+                >
+                    <i className="fa-solid fa-trash mr-2"></i>
+                    Account löschen
+                </button>
+            </div>
+
+            {/* Delete Confirmation Modal */}
+            {showDeleteConfirm && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="glass-card p-8 rounded-[3rem] border-2 border-red-500/20 max-w-md w-full">
+                        <i className="fa-solid fa-triangle-exclamation text-red-400 text-5xl mb-4 block text-center"></i>
+                        <h2 className="text-2xl font-black mb-4 text-center">Account löschen?</h2>
+                        <p className="text-slate-400 text-center mb-6">
+                            Diese Aktion kann <span className="text-red-400 font-bold">nicht</span> rückgängig gemacht werden!
+                            Bitte gib zur Bestätigung <span className="text-white font-bold">"LÖSCHEN"</span> ein:
+                        </p>
+                        <input
+                            type="text"
+                            value={deleteConfirmText}
+                            onChange={(e) => setDeleteConfirmText(e.target.value)}
+                            placeholder="LÖSCHEN"
+                            className="w-full bg-white/5 border border-red-500/20 rounded-2xl px-6 py-3 text-white text-center font-bold focus:outline-none focus:ring-2 focus:ring-red-500/50 transition-all mb-6"
+                        />
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => {
+                                    setShowDeleteConfirm(false);
+                                    setDeleteConfirmText('');
+                                }}
+                                className="flex-1 py-3 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-white font-bold transition-all"
+                            >
+                                Abbrechen
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    if (deleteConfirmText !== 'LÖSCHEN') {
+                                        alert('Bitte gib "LÖSCHEN" zur Bestätigung ein');
+                                        return;
+                                    }
+                                    try {
+                                        if (!user) return;
+                                        await deactivateUserAccount(user.id);
+                                        await logout();
+                                        window.location.reload();
+                                    } catch (err: any) {
+                                        alert('Fehler beim Löschen: ' + err.message);
+                                    }
+                                }}
+                                disabled={deleteConfirmText !== 'LÖSCHEN'}
+                                className={`flex-1 py-3 rounded-2xl font-bold transition-all ${deleteConfirmText === 'LÖSCHEN'
+                                    ? 'bg-red-600 hover:bg-red-500 text-white'
+                                    : 'bg-red-600/30 text-red-400/50 cursor-not-allowed'
+                                    }`}
+                            >
+                                Account löschen
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

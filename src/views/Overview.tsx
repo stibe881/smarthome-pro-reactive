@@ -87,12 +87,6 @@ export const Overview: React.FC<OverviewProps> = ({ entities, onToggle }) => {
                 {/* Quick-Action Chips */}
                 <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2">
                     <QuickActionChip
-                        icon="fa-mug-hot"
-                        label="Kaffee"
-                        color="brown"
-                        onClick={() => console.log('Open Kaffee')}
-                    />
-                    <QuickActionChip
                         icon="fa-lightbulb"
                         label="Lichter"
                         active={activeLightsCount > 0}
@@ -148,68 +142,7 @@ export const Overview: React.FC<OverviewProps> = ({ entities, onToggle }) => {
                     {/* Haushaltsgeräte Status */}
                     <AppliancesSection entities={entities} />
 
-                    {/* Szenen & Modi */}
-                    <div className="glass-card p-6 rounded-3xl border border-white/10">
-                        <h3 className="text-sm font-bold uppercase tracking-widest text-gray-400 mb-5">
-                            🎬 Szenen & Modi
-                        </h3>
-                        <div className="grid grid-cols-3 gap-4">
-                            <SceneButton
-                                name="Essen"
-                                icon="fa-utensils"
-                                color="orange"
-                                onClick={() => handleSceneActivate('essen')}
-                            />
-                            <SceneButton
-                                name="Kino"
-                                icon="fa-film"
-                                color="purple"
-                                onClick={() => handleSceneActivate('movie_night')}
-                            />
-                            <SceneButton
-                                name="Schlafen"
-                                icon="fa-bed"
-                                color="gray"
-                                onClick={() => handleSceneActivate('bed_time')}
-                            />
-                        </div>
-                    </div>
-                </div>
-
-                {/* Schnellzugriff Lichter */}
-                <section>
-                    <div className="flex items-center gap-4 mb-6">
-                        <h2 className="text-sm font-bold uppercase tracking-[0.2em] text-gray-500">Schnellzugriff Lichter</h2>
-                        <div className="h-px flex-1 bg-[#262626]"></div>
-                    </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
-                        {lights.map(light => (
-                            <button
-                                key={light.id}
-                                onClick={() => onToggle(light.id)}
-                                className={`p-5 rounded-2xl border transition-all text-left group flex flex-col gap-4 card-interactive ${light.state === 'on'
-                                    ? 'bg-gradient-to-br from-blue-600 to-blue-700 border-blue-500 text-white shadow-xl shadow-blue-500/20'
-                                    : 'glass-card border-white/10 hover:border-gray-600'
-                                    }`}
-                            >
-                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${light.state === 'on' ? 'bg-white/20' : 'bg-white/5 text-gray-400 group-hover:text-white'
-                                    }`}>
-                                    <i className={`fa-solid ${light.icon}`}></i>
-                                </div>
-                                <div>
-                                    <p className="font-bold text-sm truncate">{light.name}</p>
-                                    <p className={`text-[10px] mt-0.5 uppercase tracking-widest font-bold ${light.state === 'on' ? 'text-white/60' : 'text-gray-500'
-                                        }`}>
-                                        {light.state === 'on' ? 'Eingeschaltet' : 'Aus'}
-                                    </p>
-                                </div>
-                            </button>
-                        ))}
-                    </div>
-                </section>
-
-                {/* System Status */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    {/* System Status */}
                     <section className="glass-card rounded-2xl p-6 border border-white/10">
                         <h3 className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-6">System Status</h3>
                         <div className="space-y-4">
@@ -226,6 +159,33 @@ export const Overview: React.FC<OverviewProps> = ({ entities, onToggle }) => {
                             ))}
                         </div>
                     </section>
+                </div>
+
+                {/* Szenen & Modi - full width */}
+                <div className="glass-card p-6 rounded-3xl border border-white/10">
+                    <h3 className="text-sm font-bold uppercase tracking-widest text-gray-400 mb-5">
+                        🎬 Szenen & Modi
+                    </h3>
+                    <div className="grid grid-cols-3 gap-4">
+                        <SceneButton
+                            name="Essen"
+                            icon="fa-utensils"
+                            color="orange"
+                            onClick={() => handleSceneActivate('essen')}
+                        />
+                        <SceneButton
+                            name="Kino"
+                            icon="fa-film"
+                            color="purple"
+                            onClick={() => handleSceneActivate('movie_night')}
+                        />
+                        <SceneButton
+                            name="Schlafen"
+                            icon="fa-bed"
+                            color="gray"
+                            onClick={() => handleSceneActivate('bed_time')}
+                        />
+                    </div>
                 </div>
             </div>
 

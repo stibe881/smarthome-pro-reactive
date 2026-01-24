@@ -4,9 +4,10 @@ import { MediaPlayerCard } from '../components/MediaPlayerCard';
 
 interface MediaProps {
     entities: EntityState[];
+    onMediaControl?: (id: string, action: 'play' | 'pause' | 'play_pause') => void;
 }
 
-export const Media: React.FC<MediaProps> = ({ entities }) => {
+export const Media: React.FC<MediaProps> = ({ entities, onMediaControl }) => {
     // Filter only media_player entities
     const mediaPlayers = useMemo(() => {
         return entities.filter(e => e.type === 'media_player');
@@ -31,9 +32,17 @@ export const Media: React.FC<MediaProps> = ({ entities }) => {
         return mediaPlayers[0]; // Fallback to first player
     }, [mediaPlayers, selectedPlayerId]);
 
+    // Debug: Log all attributes to console
+    if (masterPlayer) {
+        console.log('🎵 Media Player Attributes:', masterPlayer.attributes);
+        console.log('📺 Available keys:', Object.keys(masterPlayer.attributes || {}));
+    }
+
+
     const handlePlayPause = (id: string) => {
-        console.log(`Toggle play/pause for ${id}`);
-        // TODO: Call HA service media_player.media_play_pause
+        if (onMediaControl) {
+            onMediaControl(id, 'play_pause');
+        }
     };
 
     const handleVolumeChange = (id: string, volume: number) => {
@@ -112,13 +121,13 @@ export const Media: React.FC<MediaProps> = ({ entities }) => {
                                                     setShowPlayerDropdown(false);
                                                 }}
                                                 className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all ${player.id === masterPlayer.id
-                                                        ? 'bg-blue-600 text-white'
-                                                        : 'hover:bg-white/5 text-gray-300'
+                                                    ? 'bg-blue-600 text-white'
+                                                    : 'hover:bg-white/5 text-gray-300'
                                                     }`}
                                             >
                                                 <i className={`fa-solid ${player.state === 'playing' ? 'fa-play text-green-400' :
-                                                        player.state === 'paused' ? 'fa-pause text-yellow-400' :
-                                                            'fa-circle text-gray-600'
+                                                    player.state === 'paused' ? 'fa-pause text-yellow-400' :
+                                                        'fa-circle text-gray-600'
                                                     } text-sm`}></i>
                                                 <span className="flex-1 text-left text-sm font-bold truncate">{player.name}</span>
                                                 {player.id === masterPlayer.id && (
@@ -136,19 +145,26 @@ export const Media: React.FC<MediaProps> = ({ entities }) => {
                     <div className="relative z-10 w-full">
                         <div className="flex flex-wrap items-center gap-2 mb-4">
                             <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${masterPlayer.state === 'playing'
-                                    ? 'bg-green-500 text-black'
-                                    : masterPlayer.state === 'paused'
-                                        ? 'bg-yellow-500 text-black'
-                                        : 'bg-gray-500 text-black'
+                                ? 'bg-green-500 text-black'
+                                : masterPlayer.state === 'paused'
+                                    ? 'bg-yellow-500 text-black'
+                                    : 'bg-gray-500 text-black'
                                 }`}>
                                 {masterPlayer.state === 'playing' ? '● Live Playing' :
                                     masterPlayer.state === 'paused' ? '❚❚ Paused' :
                                         '○ Idle'}
                             </span>
+                            <span className="px-3 py-1 bg-blue-500/20 border border-blue-500/30 rounded-full text-[10px] font-bold text-blue-300 uppercase tracking-widest">
+                                <i className="fa-solid fa-tower-broadcast mr-1.5"></i>
+                                {masterPlayer.name}
+                            </span>
                         </div>
 
                         <h2 className="text-3xl md:text-5xl xl:text-6xl font-black tracking-tighter mb-2 md:mb-4">
-                            {masterPlayer.attributes?.media_title || 'Kein Titel'}
+                            {masterPlayer.attributes?.media_title ||
+                                masterPlayer.attributes?.title ||
+                                masterPlayer.attributes?.media_series_title ||
+                                'Kein Titel'}
                         </h2>
 
                         {masterPlayer.attributes?.media_artist && (

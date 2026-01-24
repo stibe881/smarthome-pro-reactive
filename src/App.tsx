@@ -1,23 +1,27 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { ViewType, EntityState } from './types';
-import { INITIAL_ENTITIES } from './mockData';
 import { HomeAssistantService } from './services/homeAssistant';
 import { geminiService } from './services/gemini';
 import { GeminiAssistant } from './components/GeminiAssistant';
 import { BottomNav } from './components/BottomNav';
 import { useDeviceType } from './hooks/useDeviceType';
+import { useAuth } from './contexts/AuthContext';
+import { AuthForm } from './components/AuthForm';
 import { Overview } from './views/Overview';
 import { Rooms } from './views/Rooms';
 import { Media } from './views/Media';
 import { Family } from './views/Family';
 import { Household } from './views/Household';
 import { Settings } from './views/Settings';
+import { AdminPanel } from './views/AdminPanel';
 
 const App: React.FC = () => {
+    const { user, isLoading: authLoading, userRole } = useAuth();
     const deviceInfo = useDeviceType();
     const [activeView, setActiveView] = useState<ViewType>('overview');
-    const [entities, setEntities] = useState<EntityState[]>(INITIAL_ENTITIES);
+    const [entities, setEntities] = useState<EntityState[]>([]);
     const [isConnected, setIsConnected] = useState(false);
+    const [isLoadingHA, setIsLoadingHA] = useState(true);
     const [isAiOpen, setIsAiOpen] = useState(false);
     const [time, setTime] = useState(new Date());
 
@@ -32,15 +36,49 @@ const App: React.FC = () => {
         }));
         setEntities(mapped);
         setIsConnected(true);
+        setIsLoadingHA(false);
     }), []);
 
     useEffect(() => {
         const timer = setInterval(() => setTime(new Date()), 1000);
-        const savedUrl = localStorage.getItem('ha_url');
-        const savedToken = localStorage.getItem('ha_token');
-        if (savedUrl && savedToken) {
-            haService.connect(savedUrl, savedToken).catch(() => setIsConnected(false));
-        }
+
+        // Load settings from Supabase if user is logged in
+        const loadSettings = async () => {
+            if (user) {
+                try {
+                    const { supabase } = await import('./lib/supabase');
+                    const { data, error } = await supabase
+                        .from('user_settings')
+                        .select('*')
+                        .eq('user_id', user.id)
+                        .single();
+
+                    if (error && error.code !== 'PGRST116') {
+                        console.error('Failed to load settings:', error);
+                        setIsLoadingHA(false);
+                        return;
+                    }
+
+                    if (data && data.ha_url && data.ha_token) {
+                        const success = await haService.connect(data.ha_url, data.ha_token);
+                        if (!success) {
+                            setIsConnected(false);
+                            setIsLoadingHA(false);
+                        }
+                    } else {
+                        // No HA settings configured yet
+                        setIsLoadingHA(false);
+                    }
+                } catch (err) {
+                    console.error('Failed to load settings:', err);
+                    setIsLoadingHA(false);
+                }
+            } else {
+                setIsLoadingHA(false);
+            }
+        };
+
+        loadSettings();
 
         // Initialize Gemini if API key is available
         const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
@@ -49,7 +87,7 @@ const App: React.FC = () => {
         }
 
         return () => clearInterval(timer);
-    }, [haService]);
+    }, [haService, user]);
 
     const handleToggle = (id: string) => {
         if (isConnected) {
@@ -59,14 +97,51 @@ const App: React.FC = () => {
         }
     };
 
+    const handleMediaControl = (id: string, action: 'play' | 'pause' | 'play_pause') => {
+        if (isConnected) {
+            const serviceName = action === 'play_pause' ? 'media_play_pause' : action === 'play' ? 'media_play' : 'media_pause';
+            haService.callService('media_player', serviceName, id);
+        } else {
+            // Toggle local state for media players
+            setEntities(prev => prev.map(e =>
+                e.id === id && e.type === 'media_player'
+                    ? { ...e, state: e.state === 'playing' ? 'paused' : 'playing' }
+                    : e
+            ));
+        }
+    };
+
     const menu = [
         { id: 'overview', icon: 'fa-table-cells-large', label: 'Dashboard' },
         { id: 'rooms', icon: 'fa-door-open', label: 'Räume' },
         { id: 'media', icon: 'fa-play-circle', label: 'Medien' },
         { id: 'family', icon: 'fa-user-group', label: 'Familie' },
         { id: 'household', icon: 'fa-broom', label: 'Service' },
+        ...(userRole === 'admin' ? [{ id: 'admin', icon: 'fa-users-gear', label: 'Admin' }] : []),
         { id: 'settings', icon: 'fa-sliders', label: 'Optionen' },
     ];
+
+    // Debug log
+    console.log('[App] User role:', userRole, 'Menu items:', menu.length);
+
+    // Show loading state while checking authentication
+    if (authLoading) {
+        return (
+            <div className="flex h-screen w-full bg-black items-center justify-center">
+                <div className="text-center">
+                    <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-blue-400 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                        <i className="fa-solid fa-house-chimney-window text-white text-2xl"></i>
+                    </div>
+                    <i className="fa-solid fa-circle-notch animate-spin text-blue-500 text-2xl"></i>
+                </div>
+            </div>
+        );
+    }
+
+    // Show login form if not authenticated
+    if (!user) {
+        return <AuthForm />;
+    }
 
     return (
         <div className="flex h-screen w-full bg-black text-white">
@@ -155,12 +230,39 @@ const App: React.FC = () => {
                 </header>
 
                 <div className={`flex-1 overflow-y-auto ${deviceInfo.isMobile ? 'p-4' : 'p-10'} no-scrollbar`}>
+                    {/* No HA Connection Banner */}
+                    {!isConnected && !isLoadingHA && entities.length === 0 && (
+                        <div className="mb-6 p-6 bg-yellow-500/10 border-2 border-yellow-500/30 rounded-3xl">
+                            <div className="flex items-start gap-4">
+                                <div className="w-12 h-12 bg-yellow-500/20 rounded-xl flex items-center justify-center flex-shrink-0">
+                                    <i className="fa-solid fa-plug-circle-xmark text-yellow-500 text-xl"></i>
+                                </div>
+                                <div className="flex-1">
+                                    <h3 className="text-lg font-black text-yellow-400 mb-2">
+                                        Keine Home Assistant Verbindung
+                                    </h3>
+                                    <p className="text-sm text-yellow-300/80 mb-4">
+                                        Konfiguriere deine Home Assistant Instanz in den Optionen, um echte Daten anzuzeigen.
+                                    </p>
+                                    <button
+                                        onClick={() => setActiveView('settings')}
+                                        className="px-4 py-2 bg-yellow-500 hover:bg-yellow-400 text-black font-bold rounded-xl transition-all"
+                                    >
+                                        <i className="fa-solid fa-sliders mr-2"></i>
+                                        Zu den Optionen
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     <div className="max-w-6xl mx-auto">
                         {activeView === 'overview' && <Overview entities={entities} onToggle={handleToggle} haService={haService} />}
                         {activeView === 'rooms' && <Rooms entities={entities} onToggle={handleToggle} />}
-                        {activeView === 'media' && <Media entities={entities} />}
+                        {activeView === 'media' && <Media entities={entities} onMediaControl={handleMediaControl} />}
                         {activeView === 'family' && <Family entities={entities} />}
                         {activeView === 'household' && <Household entities={entities} onToggle={handleToggle} />}
+                        {activeView === 'admin' && <AdminPanel />}
                         {activeView === 'settings' && <Settings isConnected={isConnected} onConnect={haService.connect.bind(haService)} />}
                     </div>
                 </div>

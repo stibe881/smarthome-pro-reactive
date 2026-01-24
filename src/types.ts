@@ -1,4 +1,4 @@
-export type DeviceType = 'light' | 'cover' | 'climate' | 'appliance' | 'media' | 'vacuum';
+export type DeviceType = 'light' | 'cover' | 'climate' | 'appliance' | 'media' | 'vacuum' | 'media_player';
 
 export interface EntityState {
     id: string;
@@ -20,4 +20,4 @@ export interface Room {
     entities: string[];
 }
 
-export type ViewType = 'overview' | 'family' | 'household' | 'rooms' | 'media' | 'settings';
+export type ViewType = 'overview' | 'family' | 'household' | 'rooms' | 'media' | 'admin' | 'settings';
