@@ -35,9 +35,9 @@ export const INITIAL_ENTITIES: EntityState[] = [
     { id: 'light.kuche', name: 'Küche Main', state: 'on', attributes: { brightness: 100 }, icon: 'fa-kitchen-set', type: 'light' },
     { id: 'light.wohnzimmer', name: 'Wohnzimmer Ambient', state: 'on', attributes: { brightness: 60 }, icon: 'fa-couch', type: 'light' },
 
-    // MEDIA
-    { id: 'media_player.fernseher_im_wohnzimmer_2', name: 'Sony TV OLED', state: 'playing', attributes: { source: 'Netflix', content: 'Inception' }, icon: 'fa-tv', type: 'media' },
-    { id: 'media_player.hub_lina', name: 'Lina Speaker', state: 'playing', attributes: { content: 'Disney Radio' }, icon: 'fa-music', type: 'media' },
+    // MEDIA PLAYERS
+    { id: 'media_player.fernseher_im_wohnzimmer_2', name: 'Sony TV OLED', state: 'playing', attributes: { media_title: 'Inception', media_artist: 'Netflix', media_duration: 8880, media_position: 4320 }, icon: 'fa-tv', type: 'media_player' },
+    { id: 'media_player.hub_lina', name: 'Lina Speaker', state: 'playing', attributes: { media_title: 'Disney Radio', media_duration: 0, media_position: 0 }, icon: 'fa-music', type: 'media_player' },
 
     // VACUUM
     { id: 'vacuum.robi', name: 'Röbi Unit', state: 'docked', attributes: { battery: 100, fan_speed: 'Standard' }, icon: 'fa-robot', type: 'vacuum' },
