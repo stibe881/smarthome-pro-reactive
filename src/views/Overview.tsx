@@ -127,12 +127,10 @@ export const Overview: React.FC<OverviewProps> = ({ entities, onToggle }) => {
                 </div>
 
                 {/* Stats Cards */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4">
                     {[
                         { label: 'Aktive Lichter', value: activeLightsCount, icon: 'fa-lightbulb', color: 'text-yellow-500' },
                         { label: 'Temperatur Innen', value: '21.5°', icon: 'fa-temperature-half', color: 'text-orange-500' },
-                        { label: 'Energieverbrauch', value: '342W', icon: 'fa-bolt', color: 'text-emerald-500' },
-                        { label: 'Solar Ertrag', value: '1.2kW', icon: 'fa-sun', color: 'text-amber-500' },
                     ].map((stat, i) => (
                         <div key={i} className="glass-card p-5 rounded-2xl flex items-center gap-4 hover:scale-105 transition-all">
                             <div className={`w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center ${stat.color}`}>
