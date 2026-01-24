@@ -11,6 +11,7 @@ import { Modal } from '../components/Modal';
 interface OverviewProps {
     entities: EntityState[];
     onToggle: (id: string) => void;
+    haService?: any; // Optional for now, will be typed properly when implementing service calls
 }
 
 export const Overview: React.FC<OverviewProps> = ({ entities, onToggle }) => {

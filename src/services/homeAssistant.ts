@@ -3,7 +3,7 @@ export class HomeAssistantService {
     private messageId = 1;
     private handlers: Map<number, (data: any) => void> = new Map();
     private onStateChange: (entities: any[]) => void;
-    private connectionTimeout: NodeJS.Timeout | null = null;
+    private connectionTimeout: ReturnType<typeof setTimeout> | null = null;
 
     constructor(onStateChange: (entities: any[]) => void) {
         this.onStateChange = onStateChange;
