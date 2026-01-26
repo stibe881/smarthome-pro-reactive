@@ -71,7 +71,7 @@ interface AppliancesSectionProps {
 }
 
 export const AppliancesSection: React.FC<AppliancesSectionProps> = ({ entities }) => {
-    // Extract appliance data from HA entities
+    // Extract appliance data using specific logic
     const appliances = useMemo(() => {
         const result: {
             dishwasher?: { state: 'running' | 'finished' | 'standby'; remainingTime?: string; program?: string };
@@ -79,63 +79,67 @@ export const AppliancesSection: React.FC<AppliancesSectionProps> = ({ entities }
             dryer?: { state: 'running' | 'finished' | 'standby'; current?: number };
         } = {};
 
-        // Geschirrspüler (Dishwasher)
-        const dishwasherEntity = entities.find(e =>
-            e.id.includes('dishwasher') ||
-            e.id.includes('geschirrspuler') ||
-            e.name.toLowerCase().includes('geschirrspüler') ||
-            e.name.toLowerCase().includes('dishwasher')
-        );
+        // --- DISHWASHER ---
+        const dwEnde = entities.find(e => e.id === 'sensor.adoradish_v2000_programm_ende');
+        const dwProg = entities.find(e => e.id === 'sensor.adoradish_v2000_programm');
 
-        if (dishwasherEntity) {
-            const isRunning = dishwasherEntity.state === 'on' || dishwasherEntity.state === 'running';
-            const isOff = dishwasherEntity.state === 'off' || dishwasherEntity.state === 'idle';
+        if (dwEnde && dwEnde.state && !['unknown', 'unavailable', 'None', ''].includes(String(dwEnde.state))) {
+            const endDate = new Date(String(dwEnde.state));
+            const now = new Date();
+            const diffMs = endDate.getTime() - now.getTime();
 
+            if (diffMs > 0) {
+                const hours = Math.floor(diffMs / 3600000);
+                const minutes = Math.floor((diffMs % 3600000) / 60000);
+                result.dishwasher = {
+                    state: 'running',
+                    remainingTime: `${hours > 0 ? `${hours} Std ` : ''}${minutes} Min`
+                };
+            } else {
+                result.dishwasher = { state: 'finished' };
+            }
+        } else if (dwProg && String(dwProg.state) !== 'standby') {
             result.dishwasher = {
-                state: isRunning ? 'running' : isOff ? 'standby' : 'finished',
-                remainingTime: dishwasherEntity.attributes?.remaining_time,
-                program: dishwasherEntity.attributes?.program || dishwasherEntity.attributes?.current_program
+                state: 'running',
+                program: String(dwProg.state)
             };
+        } else {
+            // Default check: if not running/known, logic says "Fertig!"
+            result.dishwasher = { state: 'finished' };
         }
 
-        // Waschmaschine (Washing Machine)
-        const washingMachineEntity = entities.find(e =>
-            e.id.includes('washing') ||
-            e.id.includes('waschmaschine') ||
-            e.name.toLowerCase().includes('waschmaschine') ||
-            e.name.toLowerCase().includes('washing machine')
-        );
+        // --- WASHING MACHINE ---
+        const wmEndeRoh = entities.find(e => e.id === 'sensor.adorawash_v4000_program_ende_rohwert');
+        const wmEnde = entities.find(e => e.id === 'sensor.adorawash_v4000_programm_ende');
 
-        if (washingMachineEntity) {
-            const isRunning = washingMachineEntity.state === 'on' || washingMachineEntity.state === 'running';
-            const isOff = washingMachineEntity.state === 'off' || washingMachineEntity.state === 'idle';
-
-            result.washingMachine = {
-                state: isRunning ? 'running' : isOff ? 'standby' : 'finished',
-                remainingTime: washingMachineEntity.attributes?.remaining_time,
-                program: washingMachineEntity.attributes?.program || washingMachineEntity.attributes?.current_program
-            };
+        if (wmEndeRoh && !['unknown', 'unavailable', 'None', '', '0h00'].includes(String(wmEndeRoh.state))) {
+            const raw = String(wmEndeRoh.state); // Expecting "1h30" or similar
+            const parts = raw.split('h');
+            if (parts.length === 2) {
+                const hours = parseInt(parts[0]);
+                const minutes = parseInt(parts[1]);
+                if (hours > 0 || minutes > 0) {
+                    result.washingMachine = {
+                        state: 'running',
+                        remainingTime: `${hours > 0 ? `${hours} Std ` : ''}${minutes} Min`
+                    };
+                }
+            }
+        } else if (wmEnde && (String(wmEnde.state) === 'unknown' || String(wmEnde.state) === 'unavailable')) {
+            result.washingMachine = { state: 'finished' };
         }
 
-        // Tumbler/Trockner (Dryer)
-        const dryerEntity = entities.find(e =>
-            e.id.includes('dryer') ||
-            e.id.includes('tumbler') ||
-            e.id.includes('trockner') ||
-            e.name.toLowerCase().includes('trockner') ||
-            e.name.toLowerCase().includes('tumbler') ||
-            e.name.toLowerCase().includes('dryer')
-        );
-
-        if (dryerEntity) {
-            const current = typeof dryerEntity.state === 'number' ? dryerEntity.state : parseInt(dryerEntity.state);
-            const isRunning = dryerEntity.state === 'on' || dryerEntity.state === 'running' || current >= 12;
-            const isOff = dryerEntity.state === 'off' || dryerEntity.state === 'idle';
-
-            result.dryer = {
-                state: isRunning ? 'running' : isOff ? 'standby' : 'finished',
-                current: !isNaN(current) ? current : undefined
-            };
+        // --- DRYER ---
+        const dryerCurrent = entities.find(e => e.id === 'sensor.001015699ea263_current');
+        if (dryerCurrent) {
+            const current = parseFloat(String(dryerCurrent.state));
+            if (!isNaN(current)) {
+                if (current >= 12) {
+                    result.dryer = { state: 'running' };
+                } else {
+                    result.dryer = { state: 'finished' }; // Or standby, technically logic says "fertig" if else
+                }
+            }
         }
 
         return result;
@@ -196,8 +200,8 @@ export const AppliancesSection: React.FC<AppliancesSectionProps> = ({ entities }
                     <ApplianceStatus
                         name="Tumbler"
                         icon="fa-wind"
-                        state={dryer.current && dryer.current >= 12 ? 'running' : dryer.state}
-                        remainingTime={dryer.current && dryer.current >= 12 ? 'Trocknen...' : undefined}
+                        state={dryer.state === 'running' ? 'running' : dryer.state}
+                        remainingTime={dryer.state === 'running' ? 'Trocknen...' : undefined}
                     />
                 )}
             </div>

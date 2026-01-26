@@ -2,35 +2,23 @@ import { EntityState, Room } from './types';
 
 export const INITIAL_ENTITIES: EntityState[] = [
     // APPLIANCES
-    {
-        id: 'sensor.adoradish_v2000_programm',
-        name: 'Abwaschmaschine',
-        state: 'Eco',
-        attributes: { remaining: '42 min', status: 'cleaning' },
-        icon: 'fa-soap',
-        type: 'appliance'
-    },
-    {
-        id: 'sensor.adorawash_v4000_zustand',
-        name: 'Waschmaschine',
-        state: 'Hauptwäsche',
-        attributes: { remaining: '15 min', status: 'cleaning' },
-        icon: 'fa-shirt',
-        type: 'appliance'
-    },
-    {
-        id: 'sensor.001015699ea263_current',
-        name: 'Tumbler',
-        state: 'Trocknen',
-        attributes: { remaining: '28 min', status: 'cleaning' },
-        icon: 'fa-wind',
-        type: 'appliance'
-    },
+    // APPLIANCES - Real Entities
+    // Dishwasher
+    { id: 'sensor.adoradish_v2000_programm', name: 'Geschirrspüler Status', state: 'Eco', attributes: {}, icon: 'fa-soap', type: 'appliance' },
+    { id: 'sensor.adoradish_v2000_programm_ende', name: 'Geschirrspüler Ende', state: new Date(Date.now() + 45 * 60000).toISOString(), attributes: {}, icon: 'fa-clock', type: 'appliance' },
+
+    // Washing Machine
+    { id: 'sensor.adorawash_v4000_zustand', name: 'Waschmaschine Zustand', state: 'Waschen', attributes: {}, icon: 'fa-shirt', type: 'appliance' },
+    { id: 'sensor.adorawash_v4000_programm_ende', name: 'Waschmaschine Ende', state: '2026-01-26T14:00:00+01:00', attributes: {}, icon: 'fa-clock', type: 'appliance' },
+    { id: 'sensor.adorawash_v4000_program_ende_rohwert', name: 'Waschmaschine Restzeit', state: '1h15', attributes: {}, icon: 'fa-hourglass', type: 'appliance' },
+
+    // Dryer
+    { id: 'sensor.001015699ea263_current', name: 'Tumbler Strom', state: 15.5, attributes: {}, icon: 'fa-plug', type: 'appliance' },
 
     // LIGHTS
-    { id: 'light.levins_zimmer', name: 'Levin', state: 'on', attributes: { brightness: 80 }, icon: 'fa-child', type: 'light' },
+    { id: 'light.devins_zimmer', name: 'Levin', state: 'on', attributes: { brightness: 80 }, icon: 'fa-child', type: 'light' },
     { id: 'light.linas_zimmer', name: 'Lina', state: 'on', attributes: { brightness: 40 }, icon: 'fa-child-rearing', type: 'light' },
-    { id: 'light.buro', name: 'Büro', state: 'off', attributes: { brightness: 0 }, icon: 'fa-briefcase', type: 'light' },
+    { id: 'light.deckenbeleuchtung_buro', name: 'Büro', state: 'off', attributes: { brightness: 0 }, icon: 'fa-briefcase', type: 'light' },
     { id: 'light.terrasse', name: 'Terrasse', state: 'off', attributes: { brightness: 0 }, icon: 'fa-sun-plant-wilt', type: 'light' },
     { id: 'light.kuche', name: 'Küche Main', state: 'on', attributes: { brightness: 100 }, icon: 'fa-kitchen-set', type: 'light' },
     { id: 'light.wohnzimmer', name: 'Wohnzimmer Ambient', state: 'on', attributes: { brightness: 60 }, icon: 'fa-couch', type: 'light' },
@@ -41,6 +29,9 @@ export const INITIAL_ENTITIES: EntityState[] = [
 
     // VACUUM
     { id: 'vacuum.robi', name: 'Röbi Unit', state: 'docked', attributes: { battery: 100, fan_speed: 'Standard' }, icon: 'fa-robot', type: 'vacuum' },
+
+    // WEATHER
+    { id: 'weather.zell_lu', name: 'Zell LU', state: 'partlycloudy', attributes: { temperature: 18, humidity: 45, wind_speed: 12 }, icon: 'fa-cloud-sun', type: 'weather' },
 ];
 
 export const ROOMS: Room[] = [

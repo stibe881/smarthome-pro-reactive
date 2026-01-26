@@ -1,9 +1,6 @@
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-interface ApiResponse<T> {
-    data?: T;
-    error?: string;
-}
+
 
 class ApiClient {
     private token: string | null = null;

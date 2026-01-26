@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { getAllUsers, updateUserRole, deactivateUserAccount, getCurrentUserRole, type UserProfile } from '../services/userManagement';
 import { getAllInvitations, createInvitation, deleteInvitation, type Invitation } from '../services/invitations';
 import { supabase } from '../lib/supabase';
+import { createUserWithPassword } from '../services/userCreation';
 
 export const AdminPanel: React.FC = () => {
     const { user } = useAuth();
@@ -14,10 +15,11 @@ export const AdminPanel: React.FC = () => {
     const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-    // Invitation states
-    const [newInviteEmail, setNewInviteEmail] = useState('');
-    const [showInviteForm, setShowInviteForm] = useState(false);
-    const [inviteError, setInviteError] = useState('');
+    // User Creation states
+    const [newUserEmail, setNewUserEmail] = useState('');
+    const [newUserPassword, setNewUserPassword] = useState('');
+    const [showUserForm, setShowUserForm] = useState(false);
+    const [userFormError, setUserFormError] = useState('');
 
     // HA Configuration states
     const [haUrl, setHaUrl] = useState('');
@@ -84,20 +86,87 @@ export const AdminPanel: React.FC = () => {
         }
     };
 
-    const handleCreateInvite = async () => {
-        setInviteError('');
-        if (!newInviteEmail || !newInviteEmail.includes('@')) {
-            setInviteError('Bitte gültige Email-Adresse eingeben');
+    const handleCreateUser = async () => {
+        setUserFormError('');
+        if (!newUserEmail || !newUserEmail.includes('@')) {
+            setUserFormError('Bitte gültige Email-Adresse eingeben');
             return;
         }
 
         try {
-            await createInvitation(newInviteEmail);
-            setNewInviteEmail('');
-            setShowInviteForm(false);
+            if (newUserPassword) {
+                // Create user directly with password
+                const { user } = await createUserWithPassword(newUserEmail, newUserPassword);
+
+                if (user) {
+                    // Critical: Assign default role so user appears in lists and has access
+                    await updateUserRole(user.id, 'user');
+
+                    // Inherit HA settings from current admin
+                    if (haUrl || haToken) {
+                        await supabase.from('user_settings').upsert({
+                            user_id: user.id,
+                            ha_url: haUrl,
+                            ha_token: haToken,
+                            updated_at: new Date().toISOString()
+                        });
+                    }
+
+                    alert('Benutzer erfolgreich erstellt!');
+                } else {
+                    throw new Error('Benutzer wurde nicht erstellt (keine ID zurückerhalten)');
+                }
+            } else {
+                // Determine logic for invitation-only if regular create is not desired
+                await createInvitation(newUserEmail);
+                alert('Einladung gesendet!');
+            }
+
+            setNewUserEmail('');
+            setNewUserPassword('');
+            setShowUserForm(false);
             await loadData();
         } catch (err: any) {
-            setInviteError(err.message || 'Fehler beim Erstellen der Einladung');
+            setUserFormError(err.message || 'Fehler beim Erstellen des Benutzers');
+        }
+    };
+
+    // Recover User Logic
+    const [showRecoverForm, setShowRecoverForm] = useState(false);
+    const [recoverEmail, setRecoverEmail] = useState('');
+    const [recoverPassword, setRecoverPassword] = useState('');
+
+    const handleRecoverUser = async () => {
+        if (!recoverEmail || !recoverPassword) {
+            alert('Bitte Email und Passwort angeben');
+            return;
+        }
+
+        try {
+            const { recoverUser } = await import('../services/userCreation');
+            const { user } = await recoverUser(recoverEmail, recoverPassword);
+
+            if (user) {
+                await updateUserRole(user.id, 'user');
+
+                // Inherit HA settings from current admin (restore missing config)
+                if (haUrl || haToken) {
+                    await supabase.from('user_settings').upsert({
+                        user_id: user.id,
+                        ha_url: haUrl,
+                        ha_token: haToken,
+                        updated_at: new Date().toISOString()
+                    });
+                }
+
+                alert(`Benutzer ${user.email} erfolgreich repariert! Er sollte jetzt in der Liste erscheinen.`);
+                setRecoverEmail('');
+                setRecoverPassword('');
+                setShowRecoverForm(false);
+                await loadData();
+            }
+        } catch (err: any) {
+            alert('Fehler: ' + (err.message || 'Konnte Benutzer nicht authentifizieren'));
         }
     };
 
@@ -141,6 +210,25 @@ export const AdminPanel: React.FC = () => {
             console.error('Error saving HA config:', err);
             setHaStatus('error');
             setTimeout(() => setHaStatus('idle'), 3000);
+        }
+    };
+
+    const handleSyncHaConfig = async (targetUserId: string) => {
+        if (!haUrl || !haToken) {
+            alert('Bitte zuerst die Home Assistant Konfiguration (URL & Token) oben eingeben und speichern.');
+            return;
+        }
+
+        try {
+            await supabase.from('user_settings').upsert({
+                user_id: targetUserId,
+                ha_url: haUrl,
+                ha_token: haToken,
+                updated_at: new Date().toISOString(),
+            });
+            alert('Konfiguration erfolgreich an Benutzer übertragen!');
+        } catch (err: any) {
+            alert('Fehler beim Übertragen: ' + err.message);
         }
     };
 
@@ -229,15 +317,15 @@ export const AdminPanel: React.FC = () => {
                 </div>
             </div>
 
-            {/* Invitations Section */}
+            {/* Invitations/User Section */}
             <div className="glass-card p-8 rounded-[3rem] border-2 border-white/5">
                 <div className="flex items-center justify-between mb-6">
                     <div>
-                        <h2 className="text-2xl font-black">Einladungen</h2>
+                        <h2 className="text-2xl font-black">Benutzer & Einladungen</h2>
                         <p className="text-slate-400 text-sm">{invitations.filter(i => i.status === 'pending').length} ausstehend</p>
                     </div>
                     <button
-                        onClick={() => setShowInviteForm(!showInviteForm)}
+                        onClick={() => setShowUserForm(!showUserForm)}
                         className="px-6 py-3 bg-purple-600 hover:bg-purple-500 rounded-2xl text-white font-bold transition-all"
                     >
                         <i className="fa-solid fa-user-plus mr-2"></i>
@@ -245,44 +333,121 @@ export const AdminPanel: React.FC = () => {
                     </button>
                 </div>
 
-                {showInviteForm && (
+                {showUserForm && (
                     <div className="mb-6 p-6 bg-white/5 rounded-2xl border border-white/10">
                         <div className="space-y-4">
                             <div>
                                 <label className="block text-slate-400 text-sm mb-2">Email-Adresse</label>
                                 <input
                                     type="email"
-                                    value={newInviteEmail}
-                                    onChange={(e) => setNewInviteEmail(e.target.value)}
+                                    value={newUserEmail}
+                                    onChange={(e) => setNewUserEmail(e.target.value)}
                                     placeholder="name@beispiel.de"
                                     className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
                                 />
                             </div>
-                            {inviteError && (
+                            <div>
+                                <label className="block text-slate-400 text-sm mb-2">Initial-Passwort (Optional)</label>
+                                <input
+                                    type="password"
+                                    value={newUserPassword}
+                                    onChange={(e) => setNewUserPassword(e.target.value)}
+                                    placeholder="Mindestens 6 Zeichen"
+                                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                                />
+                                <p className="text-xs text-slate-500 mt-1">
+                                    Wenn leer, wird eine Einladung per Email gesendet (erfordert Email-Dienst).
+                                    Mit Passwort wird der Benutzer sofort erstellt.
+                                </p>
+                            </div>
+                            {userFormError && (
                                 <p className="text-red-400 text-sm">
                                     <i className="fa-solid fa-triangle-exclamation mr-2"></i>
-                                    {inviteError}
+                                    {userFormError}
                                 </p>
                             )}
                             <div className="flex gap-3">
                                 <button
                                     onClick={() => {
-                                        setShowInviteForm(false);
-                                        setNewInviteEmail('');
-                                        setInviteError('');
+                                        setShowUserForm(false);
+                                        setNewUserEmail('');
+                                        setNewUserPassword('');
+                                        setUserFormError('');
                                     }}
                                     className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-bold transition-all"
                                 >
                                     Abbrechen
                                 </button>
                                 <button
-                                    onClick={handleCreateInvite}
+                                    onClick={handleCreateUser}
                                     className="flex-1 py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold transition-all"
                                 >
-                                    Einladen
+                                    {newUserPassword ? 'Benutzer erstellen' : 'Einladen'}
                                 </button>
                             </div>
                         </div>
+                    </div>
+                )}
+
+                {/* Repair User Modal/Form */}
+                {showRecoverForm && (
+                    <div className="mb-6 p-6 bg-yellow-500/10 rounded-2xl border border-yellow-500/20">
+                        <h3 className="text-yellow-400 font-bold mb-4 flex items-center gap-2">
+                            <i className="fa-solid fa-wrench"></i>
+                            Benutzer reparieren (Unsichtbaren User finden)
+                        </h3>
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-slate-400 text-sm mb-2">Email-Adresse des "unsichtbaren" Benutzers</label>
+                                <input
+                                    type="email"
+                                    value={recoverEmail}
+                                    onChange={(e) => setRecoverEmail(e.target.value)}
+                                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-yellow-500/50"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-slate-400 text-sm mb-2">Passwort</label>
+                                <input
+                                    type="password"
+                                    value={recoverPassword}
+                                    onChange={(e) => setRecoverPassword(e.target.value)}
+                                    placeholder="Das Passwort dieses Benutzers"
+                                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-yellow-500/50"
+                                />
+                            </div>
+
+                            <div className="flex gap-3 mt-4">
+                                <button
+                                    onClick={() => {
+                                        setShowRecoverForm(false);
+                                        setRecoverEmail('');
+                                        setRecoverPassword('');
+                                    }}
+                                    className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-bold transition-all"
+                                >
+                                    Abbrechen
+                                </button>
+                                <button
+                                    onClick={handleRecoverUser}
+                                    className="flex-1 py-3 rounded-xl bg-yellow-600 hover:bg-yellow-500 text-white font-bold transition-all"
+                                >
+                                    Reparieren
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {!showUserForm && !showRecoverForm && (
+                    <div className="flex justify-end mb-4 px-2">
+                        <button
+                            onClick={() => setShowRecoverForm(true)}
+                            className="text-xs text-slate-500 hover:text-slate-300 underline flex items-center gap-1 transition-colors"
+                        >
+                            <i className="fa-solid fa-ghost"></i>
+                            Benutzer erstellt aber nicht sichtbar?
+                        </button>
                     </div>
                 )}
 
@@ -312,7 +477,7 @@ export const AdminPanel: React.FC = () => {
                         </div>
                     ))}
 
-                    {invitations.filter(i => i.status === 'pending').length === 0 && !showInviteForm && (
+                    {invitations.filter(i => i.status === 'pending').length === 0 && !showUserForm && (
                         <div className="text-center py-12">
                             <i className="fa-solid fa-envelope text-slate-600 text-5xl mb-4"></i>
                             <p className="text-slate-400">Keine ausstehenden Einladungen</p>
@@ -371,8 +536,8 @@ export const AdminPanel: React.FC = () => {
                         onClick={handleSaveHaConfig}
                         disabled={haStatus === 'saving'}
                         className={`w-full py-4 rounded-xl font-bold text-lg shadow-xl transition-all flex items-center justify-center gap-3 ${haStatus === 'saving'
-                                ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                                : 'bg-blue-600 text-white hover:scale-[1.01] active:scale-[0.99] hover:bg-blue-500 shadow-blue-500/20'
+                            ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                            : 'bg-blue-600 text-white hover:scale-[1.01] active:scale-[0.99] hover:bg-blue-500 shadow-blue-500/20'
                             }`}
                     >
                         {haStatus === 'saving' ? (
@@ -417,6 +582,13 @@ export const AdminPanel: React.FC = () => {
                             <div className="flex items-center gap-2">
                                 {u.id !== user?.id && (
                                     <>
+                                        <button
+                                            onClick={() => handleSyncHaConfig(u.id)}
+                                            title="HA Konfiguration senden"
+                                            className="px-4 py-2 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-xl text-blue-400 text-sm font-bold transition-all"
+                                        >
+                                            <i className="fa-solid fa-sync"></i>
+                                        </button>
                                         <button
                                             onClick={() => handleRoleChange(u.id, u.role === 'admin' ? 'user' : 'admin')}
                                             className="px-4 py-2 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 rounded-xl text-purple-400 text-sm font-bold transition-all"

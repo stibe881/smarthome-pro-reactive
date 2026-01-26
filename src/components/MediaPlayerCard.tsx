@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { EntityState } from '../types';
 
 interface MediaPlayerCardProps {
@@ -6,16 +6,38 @@ interface MediaPlayerCardProps {
     onPlayPause: (id: string) => void;
     onVolumeChange: (id: string, volume: number) => void;
     onSeek: (id: string, position: number) => void;
+    onBrowse?: (id: string) => void;
 }
 
-export const MediaPlayerCard: React.FC<MediaPlayerCardProps> = ({ player, onPlayPause, onVolumeChange, onSeek }) => {
+export const MediaPlayerCard: React.FC<MediaPlayerCardProps> = ({ player, onPlayPause, onVolumeChange, onSeek, onBrowse }) => {
     const [showVolume, setShowVolume] = useState(false);
+
+    // Volume State Management
+    const serverVolume = player.attributes?.volume_level != null
+        ? Math.round(player.attributes.volume_level * 100)
+        : undefined;
+
+    // Local volume state (optimistic)
+    const [localVolume, setLocalVolume] = useState(serverVolume ?? 0);
+    const [isDragging, setIsDragging] = useState(false);
+
+    // Sync with server only if not dragging and server has value
+    useEffect(() => {
+        if (!isDragging && serverVolume !== undefined) {
+            setLocalVolume(serverVolume);
+        }
+    }, [serverVolume, isDragging]);
+
+    const handleVolumeChange = (newVal: number) => {
+        setLocalVolume(newVal);
+        // Debouncing could be added here if needed, but simple throttle is usually fine
+        onVolumeChange(player.id, newVal / 100);
+    };
 
     const isPlaying = player.state === 'playing';
     const isPaused = player.state === 'paused';
     const isIdle = player.state === 'idle' || player.state === 'off';
 
-    const volume = player.attributes?.volume_level ? Math.round(player.attributes.volume_level * 100) : 50;
     const mediaTitle = player.attributes?.media_title || 'No Media';
     const mediaArtist = player.attributes?.media_artist || '';
     const mediaDuration = player.attributes?.media_duration || 0;
@@ -67,8 +89,8 @@ export const MediaPlayerCard: React.FC<MediaPlayerCardProps> = ({ player, onPlay
                     )}
                     <div className="mt-2">
                         <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-1 rounded-full ${isPlaying ? 'text-green-400 bg-green-400/10' :
-                                isPaused ? 'text-yellow-400 bg-yellow-400/10' :
-                                    'text-gray-500 bg-gray-500/10'
+                            isPaused ? 'text-yellow-400 bg-yellow-400/10' :
+                                'text-gray-500 bg-gray-500/10'
                             }`}>
                             {isPlaying ? '● Spielt' : isPaused ? '❚❚ Pausiert' : '○ Bereit'}
                         </span>
@@ -108,11 +130,11 @@ export const MediaPlayerCard: React.FC<MediaPlayerCardProps> = ({ player, onPlay
                     <button
                         onClick={() => setShowVolume(!showVolume)}
                         className="w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all active:scale-95"
-                        title={`Volume: ${volume}%`}
+                        title={`Volume: ${localVolume}%`}
                     >
-                        <i className={`fa-solid ${volume === 0 ? 'fa-volume-xmark' :
-                                volume < 50 ? 'fa-volume-low' :
-                                    'fa-volume-high'
+                        <i className={`fa-solid ${localVolume === 0 ? 'fa-volume-xmark' :
+                            localVolume < 50 ? 'fa-volume-low' :
+                                'fa-volume-high'
                             } text-sm`}></i>
                     </button>
 
@@ -123,14 +145,18 @@ export const MediaPlayerCard: React.FC<MediaPlayerCardProps> = ({ player, onPlay
                                     type="range"
                                     min="0"
                                     max="100"
-                                    value={volume}
-                                    onChange={(e) => onVolumeChange(player.id, parseInt(e.target.value) / 100)}
+                                    value={localVolume}
+                                    onChange={(e) => handleVolumeChange(parseInt(e.target.value))}
+                                    onMouseDown={() => setIsDragging(true)}
+                                    onMouseUp={() => setIsDragging(false)}
+                                    onTouchStart={() => setIsDragging(true)}
+                                    onTouchEnd={() => setIsDragging(false)}
                                     className="w-24 h-1 bg-white/20 rounded-full appearance-none cursor-pointer"
                                     style={{
-                                        background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${volume}%, rgba(255,255,255,0.2) ${volume}%, rgba(255,255,255,0.2) 100%)`
+                                        background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${localVolume}%, rgba(255,255,255,0.2) ${localVolume}%, rgba(255,255,255,0.2) 100%)`
                                     }}
                                 />
-                                <span className="text-xs font-bold w-8 text-right">{volume}%</span>
+                                <span className="text-xs font-bold w-8 text-right">{localVolume}%</span>
                             </div>
                         </div>
                     )}
@@ -141,8 +167,8 @@ export const MediaPlayerCard: React.FC<MediaPlayerCardProps> = ({ player, onPlay
                     onClick={() => onPlayPause(player.id)}
                     disabled={isIdle}
                     className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all ${isIdle
-                            ? 'bg-white/5 text-gray-600 cursor-not-allowed'
-                            : 'bg-blue-600 hover:bg-blue-500 text-white active:scale-95 shadow-lg shadow-blue-600/20'
+                        ? 'bg-white/5 text-gray-600 cursor-not-allowed'
+                        : 'bg-blue-600 hover:bg-blue-500 text-white active:scale-95 shadow-lg shadow-blue-600/20'
                         }`}
                 >
                     <i className={`fa-solid ${isPlaying ? 'fa-pause' : 'fa-play'} text-lg`}></i>
@@ -150,6 +176,13 @@ export const MediaPlayerCard: React.FC<MediaPlayerCardProps> = ({ player, onPlay
 
                 {/* Additional Controls */}
                 <div className="flex gap-2">
+                    <button
+                        onClick={() => onBrowse?.(player.id)}
+                        className="w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all active:scale-95"
+                        title="Medien durchsuchen"
+                    >
+                        <i className="fa-solid fa-folder-open text-sm text-blue-400"></i>
+                    </button>
                     <button
                         disabled={isIdle}
                         className="w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"

@@ -1,4 +1,4 @@
-export type DeviceType = 'light' | 'cover' | 'climate' | 'appliance' | 'media' | 'vacuum' | 'media_player';
+export type DeviceType = 'light' | 'cover' | 'climate' | 'appliance' | 'media' | 'vacuum' | 'media_player' | 'weather';
 
 export interface EntityState {
     id: string;

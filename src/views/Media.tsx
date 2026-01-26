@@ -1,16 +1,135 @@
 import React, { useState, useMemo } from 'react';
 import { EntityState } from '../types';
 import { MediaPlayerCard } from '../components/MediaPlayerCard';
+import { MediaBrowserModal } from '../components/MediaBrowserModal';
+import { HomeAssistantService } from '../services/homeAssistant';
 
 interface MediaProps {
     entities: EntityState[];
     onMediaControl?: (id: string, action: 'play' | 'pause' | 'play_pause') => void;
+    haService: HomeAssistantService;
 }
 
-export const Media: React.FC<MediaProps> = ({ entities, onMediaControl }) => {
+interface MediaGroupProps {
+    title: string;
+    icon: string;
+    players: EntityState[];
+    onPlayPause: (id: string) => void;
+    onVolumeChange: (id: string, volume: number) => void;
+    onSeek: (id: string, position: number) => void;
+    onBrowse?: (id: string) => void;
+    defaultOpen?: boolean;
+}
+
+const MediaGroup: React.FC<MediaGroupProps> = ({
+    title,
+    icon,
+    players,
+    onPlayPause,
+    onVolumeChange,
+    onSeek,
+    onBrowse,
+    defaultOpen = true
+}) => {
+    const [isOpen, setIsOpen] = useState(defaultOpen);
+
+    if (players.length === 0) return null;
+
+    return (
+        <div className="glass-card rounded-3xl overflow-hidden border border-white/10">
+            <button
+                onClick={() => setIsOpen(!isOpen)}
+                className="w-full px-6 py-4 flex items-center justify-between hover:bg-white/5 transition-colors"
+            >
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center">
+                        <i className={`fa-solid ${icon} text-blue-400`}></i>
+                    </div>
+                    <span className="font-bold text-lg">{title}</span>
+                    <span className="px-2 py-0.5 rounded-md bg-white/5 text-xs font-bold text-gray-400">
+                        {players.length}
+                    </span>
+                </div>
+                <i className={`fa-solid fa-chevron-down text-gray-500 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}></i>
+            </button>
+
+            <div className={`transition-[max-height] duration-500 ease-in-out overflow-hidden ${isOpen ? 'max-h-[2000px]' : 'max-h-0'}`}>
+                <div className="p-6 pt-0 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                    {players.map(player => (
+                        <MediaPlayerCard
+                            key={player.id}
+                            player={player}
+                            onPlayPause={onPlayPause}
+                            onVolumeChange={onVolumeChange}
+                            onSeek={onSeek}
+                            onBrowse={onBrowse}
+                        />
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export const Media: React.FC<MediaProps> = ({ entities, onMediaControl, haService }) => {
+    const [browserState, setBrowserState] = useState<{ isOpen: boolean; entityId: string }>({
+        isOpen: false,
+        entityId: ''
+    });
+    // Configuration: Map Entity IDs to Display Names and Categories
+    const PLAYER_CONFIG: Record<string, { name: string; type: 'speaker' | 'group' | 'tv' }> = {
+        // Speakers
+        'media_player.nest_badezimmer': { name: 'Badezimmer', type: 'speaker' },
+        'media_player.nest_buro': { name: 'Büro', type: 'speaker' },
+        'media_player.nest_gaste_wc': { name: 'Gäste WC', type: 'speaker' },
+        'media_player.kuche': { name: 'Küche', type: 'speaker' },
+        'media_player.hub_levin': { name: 'Levins Zimmer', type: 'speaker' },
+        'media_player.hub_lina': { name: 'Linas Zimmer', type: 'speaker' },
+        'media_player.nest_schlafzimmer': { name: 'Schlafzimmer', type: 'speaker' },
+        'media_player.nest_terrasse': { name: 'Terrasse', type: 'speaker' },
+
+        // Groups
+        'media_player.wohnung': { name: 'Wohnung', type: 'group' },
+        'media_player.haus': { name: 'Haus', type: 'group' },
+
+        // TVs
+        'media_player.fernseher_im_wohnzimmer_2': { name: 'Fernseher Wohnzimmer', type: 'tv' },
+        'media_player.shield_schlafzimmer': { name: 'Fernseher Schlafzimmer', type: 'tv' }
+    };
+
     // Filter only media_player entities
-    const mediaPlayers = useMemo(() => {
-        return entities.filter(e => e.type === 'media_player');
+    const { speakers, groups, tvs, allPlayers } = useMemo(() => {
+        const speakers: EntityState[] = [];
+        const groups: EntityState[] = [];
+        const tvs: EntityState[] = [];
+        const all: EntityState[] = [];
+
+        entities.forEach(e => {
+            if (e.type !== 'media_player') return;
+
+            const config = PLAYER_CONFIG[e.id];
+            if (!config) return;
+
+            // Create a new entity object with the mapped display name
+            const mappedEntity = { ...e, name: config.name };
+
+            if (config.type === 'speaker') {
+                speakers.push(mappedEntity);
+            } else if (config.type === 'group') {
+                groups.push(mappedEntity);
+            } else if (config.type === 'tv') {
+                tvs.push(mappedEntity);
+            }
+            all.push(mappedEntity);
+        });
+
+        // Sort by name for consistent display
+        speakers.sort((a, b) => a.name.localeCompare(b.name));
+        groups.sort((a, b) => a.name.localeCompare(b.name));
+        tvs.sort((a, b) => a.name.localeCompare(b.name));
+        all.sort((a, b) => a.name.localeCompare(b.name));
+
+        return { speakers, groups, tvs, allPlayers: all };
     }, [entities]);
 
     // State for selected player in master player
@@ -20,17 +139,17 @@ export const Media: React.FC<MediaProps> = ({ entities, onMediaControl }) => {
     // Get the selected player or default to first playing/paused player
     const masterPlayer = useMemo(() => {
         if (selectedPlayerId) {
-            return mediaPlayers.find(p => p.id === selectedPlayerId);
+            return allPlayers.find(p => p.id === selectedPlayerId);
         }
         // Auto-select first playing or paused player
-        const playing = mediaPlayers.find(p => p.state === 'playing');
+        const playing = allPlayers.find(p => p.state === 'playing');
         if (playing) return playing;
 
-        const paused = mediaPlayers.find(p => p.state === 'paused');
+        const paused = allPlayers.find(p => p.state === 'paused');
         if (paused) return paused;
 
-        return mediaPlayers[0]; // Fallback to first player
-    }, [mediaPlayers, selectedPlayerId]);
+        return allPlayers[0]; // Fallback to first player
+    }, [allPlayers, selectedPlayerId]);
 
     // Debug: Log all attributes to console
     if (masterPlayer) {
@@ -46,16 +165,18 @@ export const Media: React.FC<MediaProps> = ({ entities, onMediaControl }) => {
     };
 
     const handleVolumeChange = (id: string, volume: number) => {
-        console.log(`Set volume for ${id} to ${volume}`);
-        // TODO: Call HA service media_player.volume_set with volume_level
+        haService.callService('media_player', 'volume_set', id, { volume_level: volume });
     };
 
     const handleSeek = (id: string, position: number) => {
-        console.log(`Seek ${id} to position ${position}`);
-        // TODO: Call HA service media_player.media_seek with seek_position
+        haService.callService('media_player', 'media_seek', id, { seek_position: position });
     };
 
-    if (mediaPlayers.length === 0) {
+    const handleBrowse = (id: string) => {
+        setBrowserState({ isOpen: true, entityId: id });
+    };
+
+    if (allPlayers.length === 0) {
         return (
             <div className="flex items-center justify-center min-h-[400px]">
                 <div className="text-center">
@@ -111,9 +232,9 @@ export const Media: React.FC<MediaProps> = ({ entities, onMediaControl }) => {
                                 <div className="absolute top-full right-0 mt-2 w-80 max-h-96 overflow-y-auto bg-black/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl">
                                     <div className="p-2">
                                         <div className="px-3 py-2 text-xs font-bold text-gray-500 uppercase tracking-wider">
-                                            Player auswählen ({mediaPlayers.length})
+                                            Player auswählen ({allPlayers.length})
                                         </div>
-                                        {mediaPlayers.map(player => (
+                                        {allPlayers.map(player => (
                                             <button
                                                 key={player.id}
                                                 onClick={() => {
@@ -210,29 +331,63 @@ export const Media: React.FC<MediaProps> = ({ entities, onMediaControl }) => {
                                 </button>
                             </div>
                         )}
+
+                        {/* Browse Button for Master Player */}
+                        <div className="mt-6 flex justify-center md:justify-start">
+                            <button
+                                onClick={() => handleBrowse(masterPlayer.id)}
+                                className="flex items-center gap-2 px-6 py-3 bg-white/10 hover:bg-white/20 rounded-xl transition-all font-bold text-sm"
+                            >
+                                <i className="fa-solid fa-folder-open text-blue-400"></i>
+                                Medien durchsuchen
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
 
-            {/* All Media Player Cards Grid */}
-            <div>
-                <h3 className="text-2xl font-bold mb-6 flex items-center gap-3">
-                    <i className="fa-solid fa-music text-blue-500"></i>
-                    Alle Medienplayer
-                    <span className="text-sm font-normal text-gray-500">({mediaPlayers.length})</span>
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                    {mediaPlayers.map(player => (
-                        <MediaPlayerCard
-                            key={player.id}
-                            player={player}
-                            onPlayPause={handlePlayPause}
-                            onVolumeChange={handleVolumeChange}
-                            onSeek={handleSeek}
-                        />
-                    ))}
-                </div>
+            {/* Media Groups */}
+            <div className="space-y-6">
+                <MediaGroup
+                    title="Lautsprecher"
+                    icon="fa-speaker-deck"
+                    players={speakers}
+                    onPlayPause={handlePlayPause}
+                    onVolumeChange={handleVolumeChange}
+                    onSeek={handleSeek}
+                    onBrowse={handleBrowse}
+                    defaultOpen={false}
+                />
+
+                <MediaGroup
+                    title="Gruppen"
+                    icon="fa-layer-group"
+                    players={groups}
+                    onPlayPause={handlePlayPause}
+                    onVolumeChange={handleVolumeChange}
+                    onSeek={handleSeek}
+                    onBrowse={handleBrowse}
+                    defaultOpen={false}
+                />
+
+                <MediaGroup
+                    title="Fernseher"
+                    icon="fa-tv"
+                    players={tvs}
+                    onPlayPause={handlePlayPause}
+                    onVolumeChange={handleVolumeChange}
+                    onSeek={handleSeek}
+                    onBrowse={handleBrowse}
+                    defaultOpen={false}
+                />
             </div>
+
+            <MediaBrowserModal
+                isOpen={browserState.isOpen}
+                onClose={() => setBrowserState({ ...browserState, isOpen: false })}
+                entityId={browserState.entityId}
+                haService={haService}
+            />
         </div>
     );
 };

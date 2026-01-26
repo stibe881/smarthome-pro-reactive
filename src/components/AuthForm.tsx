@@ -46,7 +46,7 @@ export const AuthForm: React.FC = () => {
                     password,
                 });
                 if (loginError) throw loginError;
-                await login();
+                await login(email, password);
             } else {
                 // Registration requires invitation
                 if (!inviteToken) {
@@ -63,7 +63,7 @@ export const AuthForm: React.FC = () => {
                 await acceptInvitation(inviteToken);
 
                 // Auto-login
-                await login();
+                await login(email, password);
 
                 // Clear URL parameter
                 window.history.replaceState({}, '', window.location.pathname);
@@ -153,8 +153,8 @@ export const AuthForm: React.FC = () => {
                             type="submit"
                             disabled={loading}
                             className={`w-full py-5 rounded-2xl font-black text-lg shadow-2xl transition-all flex items-center justify-center gap-3 ${loading
-                                    ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                                    : 'bg-blue-600 text-white hover:scale-[1.01] active:scale-[0.99] hover:bg-blue-500 shadow-blue-500/20'
+                                ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                                : 'bg-blue-600 text-white hover:scale-[1.01] active:scale-[0.99] hover:bg-blue-500 shadow-blue-500/20'
                                 }`}
                         >
                             {loading ? (
@@ -166,23 +166,23 @@ export const AuthForm: React.FC = () => {
                         </button>
                     </form>
 
-                    {/* Toggle Login/Register - only show Register if invite token present */}
-                    <div className="mt-6 flex gap-4">
-                        <button
-                            type="button"
-                            onClick={() => {
-                                setIsLogin(true);
-                                setError('');
-                            }}
-                            className={`flex-1 py-3 rounded-xl font-bold transition-all ${isLogin
+                    {/* Toggle Login/Register - only show if invite token present */}
+                    {inviteToken && (
+                        <div className="mt-6 flex gap-4">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setIsLogin(true);
+                                    setError('');
+                                }}
+                                className={`flex-1 py-3 rounded-xl font-bold transition-all ${isLogin
                                     ? 'bg-blue-600 text-white'
                                     : 'bg-white/5 text-slate-400 hover:bg-white/10'
-                                }`}
-                        >
-                            Anmelden
-                        </button>
+                                    }`}
+                            >
+                                Anmelden
+                            </button>
 
-                        {inviteToken && (
                             <button
                                 type="button"
                                 onClick={() => {
@@ -190,14 +190,14 @@ export const AuthForm: React.FC = () => {
                                     setError('');
                                 }}
                                 className={`flex-1 py-3 rounded-xl font-bold transition-all ${!isLogin
-                                        ? 'bg-blue-600 text-white'
-                                        : 'bg-white/5 text-slate-400 hover:bg-white/10'
+                                    ? 'bg-blue-600 text-white'
+                                    : 'bg-white/5 text-slate-400 hover:bg-white/10'
                                     }`}
                             >
                                 Registrieren
                             </button>
-                        )}
-                    </div>
+                        </div>
+                    )}
                 </div>
 
                 {!isLogin && inviteToken && (

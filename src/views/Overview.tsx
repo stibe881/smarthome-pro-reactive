@@ -11,13 +11,38 @@ import { Modal } from '../components/Modal';
 interface OverviewProps {
     entities: EntityState[];
     onToggle: (id: string) => void;
-    haService?: any; // Optional for now, will be typed properly when implementing service calls
+    onBrightnessChange: (id: string, brightness: number) => void;
+    onColorChange: (id: string, color: string) => void;
+    onTempChange: (id: string, temp: number) => void;
 }
 
-export const Overview: React.FC<OverviewProps> = ({ entities, onToggle }) => {
+export const Overview: React.FC<OverviewProps> = ({
+    entities,
+    onToggle,
+    onBrightnessChange,
+    onColorChange,
+    onTempChange
+}) => {
     const lights = entities.filter(e => e.type === 'light');
     const covers = entities.filter(e => e.type === 'cover');
-    const activeLightsCount = lights.filter(l => l.state === 'on').length;
+
+    // Strict whitelist for active lights count
+    const COUNT_WHITELIST = [
+        'light.wohnzimmer',
+        'light.essbereich',
+        'light.kuche',
+        'light.linas_zimmer',
+        'light.levins_zimmer',
+        'light.schlafzimmer',
+        'light.badezimmer',
+        'light.licht_garage',
+        'light.deckenbeleuchtung_buro'
+    ];
+
+    const activeLightsCount = lights
+        .filter(l => COUNT_WHITELIST.includes(l.id))
+        .filter(l => l.state === 'on')
+        .length;
 
     // Modal states
     const [showVacuumModal, setShowVacuumModal] = useState(false);
@@ -32,22 +57,7 @@ export const Overview: React.FC<OverviewProps> = ({ entities, onToggle }) => {
         { id: '3', text: 'Käse', completed: true },
     ]);
 
-    // Mock appliances data - will be replaced with real HA entities
-    const dishwasher = {
-        state: 'running' as const,
-        remainingTime: '42 min',
-        program: 'Eco'
-    };
 
-    const washingMachine = {
-        state: 'finished' as const,
-        remainingTime: undefined,
-    };
-
-    const dryer = {
-        state: 'finished' as const,
-        current: 8
-    };
 
     const handleSceneActivate = (sceneName: string) => {
         console.log('Activating scene:', sceneName);
@@ -146,8 +156,12 @@ export const Overview: React.FC<OverviewProps> = ({ entities, onToggle }) => {
                     <section className="glass-card rounded-2xl p-6 border border-white/10">
                         <h3 className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-6">System Status</h3>
                         <div className="space-y-4">
-                            {entities.filter(e => e.type === 'appliance' || e.type === 'vacuum').map(app => (
-                                <div key={app.id} className="flex items-center justify-between p-4 glass-panel rounded-xl border border-white/5">
+                            {entities.filter(e => e.id === 'vacuum.robi').map(app => (
+                                <button
+                                    key={app.id}
+                                    onClick={() => setShowVacuumModal(true)}
+                                    className="w-full flex items-center justify-between p-4 glass-panel rounded-xl border border-white/5 hover:bg-white/5 transition-colors text-left"
+                                >
                                     <div className="flex items-center gap-4">
                                         <i className={`fa-solid ${app.icon} text-gray-400`}></i>
                                         <span className="text-sm font-medium">{app.name}</span>
@@ -155,7 +169,7 @@ export const Overview: React.FC<OverviewProps> = ({ entities, onToggle }) => {
                                     <span className="text-[10px] font-bold text-blue-500 bg-blue-500/10 px-2 py-1 rounded tracking-widest uppercase">
                                         {app.state}
                                     </span>
-                                </div>
+                                </button>
                             ))}
                         </div>
                     </section>
@@ -191,15 +205,23 @@ export const Overview: React.FC<OverviewProps> = ({ entities, onToggle }) => {
 
             {/* Modals */}
             <Modal isOpen={showVacuumModal} onClose={() => setShowVacuumModal(false)} title="🤖 Röbi Staubsauger">
-                <VacuumControl
+                {(() => {
+                    const vacuum = entities.find(e => e.id === 'vacuum.robi') || entities.find(e => e.type === 'vacuum');
+                    // Fallback state if no entity found
+                    const state = (vacuum?.state as any) || 'docked';
+                    const battery = vacuum?.attributes?.battery || 0;
 
-                    state="docked"
-                    battery={85}
-                    onCleanRoom={handleCleanRoom}
-                    onStartCleaning={() => console.log('Start cleaning')}
-                    onPause={() => console.log('Pause')}
-                    onReturn={() => console.log('Return to dock')}
-                />
+                    return (
+                        <VacuumControl
+                            state={state}
+                            battery={battery}
+                            onCleanRoom={handleCleanRoom}
+                            onStartCleaning={() => console.log('Start cleaning')}
+                            onPause={() => console.log('Pause')}
+                            onReturn={() => console.log('Return to dock')}
+                        />
+                    );
+                })()}
             </Modal>
 
             <Modal isOpen={showShoppingModal} onClose={() => setShowShoppingModal(false)} title="🛒 Einkaufsliste">
@@ -215,10 +237,9 @@ export const Overview: React.FC<OverviewProps> = ({ entities, onToggle }) => {
                 <LightsControl
                     lights={lights}
                     onToggle={onToggle}
-                    onBrightnessChange={(id, brightness) => {
-                        console.log(`Set brightness for ${id} to ${brightness}`);
-                        // TODO: Call HA service to set brightness
-                    }}
+                    onBrightnessChange={onBrightnessChange}
+                    onColorChange={onColorChange}
+                    onTempChange={onTempChange}
                 />
             </Modal>
 

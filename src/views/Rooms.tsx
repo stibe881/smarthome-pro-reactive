@@ -1,10 +1,14 @@
 import React, { useMemo, useState } from 'react';
 import { EntityState } from '../types';
 import { EntityWidget } from '../components/EntityWidget';
+import { LightControlItem } from '../components/LightsControl';
 
 interface RoomsProps {
     entities: EntityState[];
     onToggle: (id: string) => void;
+    onBrightnessChange?: (id: string, brightness: number) => void;
+    onColorChange?: (id: string, color: string) => void;
+    onTempChange?: (id: string, temp: number) => void;
 }
 
 interface Room {
@@ -14,84 +18,91 @@ interface Room {
     entities: string[];
 }
 
-// Helper function to get room-specific icons
-const getRoomIcon = (roomName: string): string => {
-    const name = roomName.toLowerCase();
-    if (name.includes('bad') || name.includes('wc')) return 'fa-shower';
-    if (name.includes('küche')) return 'fa-utensils';
-    if (name.includes('wohnzimmer')) return 'fa-couch';
-    if (name.includes('schlafzimmer')) return 'fa-bed';
-    if (name.includes('büro')) return 'fa-briefcase';
-    if (name.includes('kinderzimmer') || name.includes('levin') || name.includes('lina')) return 'fa-child';
-    if (name.includes('gästezimmer') || name.includes('gast')) return 'fa-user';
-    if (name.includes('flur') || name.includes('gang')) return 'fa-arrows-left-right';
-    if (name.includes('keller')) return 'fa-stairs';
-    if (name.includes('dachboden')) return 'fa-house-chimney';
-    if (name.includes('garage')) return 'fa-car';
-    if (name.includes('terrasse') || name.includes('balkon')) return 'fa-umbrella-beach';
-    if (name.includes('garten')) return 'fa-tree';
-    if (name.includes('waschküche') || name.includes('hauswirtschaft')) return 'fa-soap';
-    if (name.includes('esszimmer')) return 'fa-plate-utensils';
-    return 'fa-door-open';
-};
-
-export const Rooms: React.FC<RoomsProps> = ({ entities, onToggle }) => {
+export const Rooms: React.FC<RoomsProps> = ({
+    entities,
+    onToggle,
+    onBrightnessChange,
+    onColorChange,
+    onTempChange
+}) => {
     const [selectedRoom, setSelectedRoom] = useState<string>('all');
+
+    // Strict whitelist configuration from user
+    const ROOM_CONFIG: Record<string, { id: string; name: string; icon: string; entityIcon: string }> = {
+        'light.wohnzimmer': { id: 'wohnzimmer', name: 'Wohnzimmer', icon: 'fa-couch', entityIcon: 'fa-lightbulb' },
+        'light.essbereich': { id: 'essbereich', name: 'Essbereich', icon: 'fa-plate-utensils', entityIcon: 'fa-lightbulb' },
+        'light.kuche': { id: 'kueche', name: 'Küche', icon: 'fa-utensils', entityIcon: 'fa-lightbulb' },
+        'light.linas_zimmer': { id: 'linas_zimmer', name: 'Linas Zimmer', icon: 'fa-child', entityIcon: 'fa-lightbulb' },
+        'light.levins_zimmer': { id: 'levins_zimmer', name: 'Levins Zimmer', icon: 'fa-child', entityIcon: 'fa-lightbulb' },
+        'light.schlafzimmer': { id: 'schlafzimmer', name: 'Schlafzimmer', icon: 'fa-bed', entityIcon: 'fa-lightbulb' },
+        'light.badezimmer': { id: 'badezimmer', name: 'Badezimmer', icon: 'fa-shower', entityIcon: 'fa-lightbulb' },
+        'light.licht_garage': { id: 'gaeste_wc', name: 'Gäste WC', icon: 'fa-user', entityIcon: 'fa-lightbulb' },
+        'light.deckenbeleuchtung_buro': { id: 'buero', name: 'Büro', icon: 'fa-briefcase', entityIcon: 'fa-lightbulb' }
+    };
+
+    const SCENE_CONFIG: Record<string, { name: string; icon: string; entityId: string }[]> = {
+        'wohnzimmer': [
+            { name: 'Kino', icon: 'fa-film', entityId: 'script.movie_night' },
+            { name: 'Romantisch', icon: 'fa-heart', entityId: 'script.sex_wohnzimmer' }
+        ],
+        'essbereich': [
+            { name: 'Essen', icon: 'fa-utensils', entityId: 'scene.essbereich_essen' },
+            { name: 'Frühstück', icon: 'fa-mug-hot', entityId: 'script.essbereich_alles_aus' }
+        ],
+        'kueche': [
+            { name: 'Kochen', icon: 'fa-fire-burner', entityId: 'script.kochen' }
+        ],
+        'schlafzimmer': [
+            { name: 'Schlafen', icon: 'fa-bed', entityId: 'script.bed_time' },
+            { name: 'Romantisch', icon: 'fa-heart', entityId: 'script.sex_schlafzimmer' }
+        ],
+        'levins_zimmer': [
+            { name: 'Spielen', icon: 'fa-gamepad', entityId: 'scene.levins_zimmer_konzentrieren' },
+            { name: 'Schlafen', icon: 'fa-bed', entityId: 'script.bed_time_levin' },
+            { name: 'Aufwachen', icon: 'fa-sun', entityId: 'scene.levins_zimmer_herbsternte' },
+            { name: 'Party', icon: 'fa-music', entityId: 'script.levin_party' }
+        ],
+        'buero': [
+            { name: 'Arbeiten', icon: 'fa-briefcase', entityId: 'script.arbeiten_mit_musik' },
+            { name: 'Konzentrieren', icon: 'fa-brain', entityId: 'scene.buro_konzentration' },
+            { name: 'Zocken', icon: 'fa-gamepad', entityId: 'scene.turn_on' },
+            { name: 'Abend', icon: 'fa-moon', entityId: 'scene.buro_abend' },
+            { name: 'Kino', icon: 'fa-film', entityId: 'script.kino_buro' }
+        ]
+    };
 
     // Dynamically extract rooms from entities
     const rooms = useMemo(() => {
-        const roomMap = new Map<string, Set<string>>();
+        const roomMap = new Map<string, { name: string; icon: string; entities: string[] }>();
 
         entities.forEach(entity => {
-            // Try to extract room from entity attributes
-            let roomName = entity.room || entity.attributes?.area_id || entity.attributes?.room;
+            // Only process lights that are in our config
+            const config = ROOM_CONFIG[entity.id];
+            if (!config) return;
 
-            // If no explicit room, try to extract from friendly_name
-            if (!roomName && entity.attributes?.friendly_name) {
-                const name = entity.attributes.friendly_name;
-                // Common room names in German
-                const roomPatterns = [
-                    /bad/i, /wc/i, /küche/i, /wohnzimmer/i, /schlafzimmer/i,
-                    /büro/i, /kinderzimmer/i, /gästezimmer/i, /flur/i, /keller/i,
-                    /dachboden/i, /garage/i, /terrasse/i, /balkon/i, /garten/i,
-                    /waschküche/i, /hauswirtschaftsraum/i, /esszimmer/i, /zimmer/i,
-                    /levin/i, /lina/i, /gast/i, /spielzimmer/i, /hobbyraum/i
-                ];
-
-                for (const pattern of roomPatterns) {
-                    const match = name.match(pattern);
-                    if (match) {
-                        roomName = match[0].charAt(0).toUpperCase() + match[0].slice(1).toLowerCase();
-                        break;
-                    }
-                }
+            if (!roomMap.has(config.id)) {
+                roomMap.set(config.id, {
+                    name: config.name,
+                    icon: config.icon,
+                    entities: []
+                });
             }
-
-            // Default to "Unassigned" if no room found
-            if (!roomName) {
-                roomName = 'Nicht zugeordnet';
-            }
-
-            if (!roomMap.has(roomName)) {
-                roomMap.set(roomName, new Set());
-            }
-            roomMap.get(roomName)!.add(entity.id);
+            roomMap.get(config.id)!.entities.push(entity.id);
         });
 
-        // Convert to array and sort
-        const roomsArray: Room[] = Array.from(roomMap.entries())
-            .map(([name, entityIds]) => ({
-                id: name.toLowerCase().replace(/\s+/g, '_'),
-                name: name,
-                icon: getRoomIcon(name),
-                entities: Array.from(entityIds)
-            }))
-            .sort((a, b) => {
-                // Sort "Nicht zugeordnet" to the end
-                if (a.name === 'Nicht zugeordnet') return 1;
-                if (b.name === 'Nicht zugeordnet') return -1;
-                return a.name.localeCompare(b.name);
+        // Convert to array preserving the defined order
+        const roomsArray: Room[] = [];
+
+        roomMap.forEach((data, id) => {
+            roomsArray.push({
+                id: id,
+                name: data.name,
+                icon: data.icon,
+                entities: data.entities
             });
+        });
+
+        roomsArray.sort((a, b) => a.name.localeCompare(b.name));
 
         return roomsArray;
     }, [entities]);
@@ -152,16 +163,59 @@ export const Rooms: React.FC<RoomsProps> = ({ entities, onToggle }) => {
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                             {room.entities.map(entityId => {
                                 const entity = entities.find(e => e.id === entityId);
                                 if (!entity) return null;
-                                return <EntityWidget key={entityId} entity={entity} onToggle={onToggle} />;
+
+                                // Override with custom icon from config
+                                const config = ROOM_CONFIG[entityId];
+                                const entityWithIcon = {
+                                    ...entity,
+                                    icon: config?.entityIcon || 'fa-lightbulb',
+                                    name: config?.name || entity.name // Ensure name is passed correctly
+                                };
+
+                                if (entity.id.startsWith('light.')) {
+                                    return (
+                                        <LightControlItem
+                                            key={entityId}
+                                            light={{ ...entityWithIcon, name: entityWithIcon.name }}
+                                            onToggle={onToggle}
+                                            onBrightnessChange={onBrightnessChange}
+                                            onColorChange={onColorChange}
+                                            onTempChange={onTempChange}
+                                        />
+                                    );
+                                }
+
+                                return <EntityWidget key={entityId} entity={entityWithIcon} onToggle={onToggle} />;
                             })}
                         </div>
+
+                        {/* Scenes Section */}
+                        {SCENE_CONFIG[room.id] && (
+                            <div className="mt-8">
+                                <h3 className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-4">Szenen & Aktionen</h3>
+                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                                    {SCENE_CONFIG[room.id].map(scene => (
+                                        <button
+                                            key={scene.entityId}
+                                            onClick={() => onToggle(scene.entityId)}
+                                            className="glass-card p-4 rounded-xl flex items-center gap-3 hover:bg-white/10 transition-colors group text-left"
+                                        >
+                                            <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 group-hover:scale-110 transition-transform">
+                                                <i className={`fa-solid ${scene.icon}`}></i>
+                                            </div>
+                                            <span className="font-medium text-sm">{scene.name}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </section>
                 ))}
             </div>
-        </div>
+        </div >
     );
 };

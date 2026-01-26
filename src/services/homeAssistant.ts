@@ -206,4 +206,189 @@ export class HomeAssistantService {
             params: [parseInt(roomId)]
         });
     }
+
+    async fetchCalendarEvents(entityId: string, start: string, end: string): Promise<any[]> {
+        console.log(`fetching calendar events for ${entityId} from ${start} to ${end}`);
+        return new Promise((resolve) => {
+            if (!this.isConnected()) {
+                console.warn('Cannot fetch events - not connected');
+                resolve([]);
+                return;
+            }
+
+            this.send({
+                type: 'call_service',
+                domain: 'calendar',
+                service: 'get_events',
+                service_data: {
+                    entity_id: entityId,
+                    start_date_time: start,
+                    end_date_time: end
+                },
+                return_response: true
+            }, (response) => {
+                console.log('Calendar Raw Response:', JSON.stringify(response));
+
+                if (response.success && response.result) {
+                    let targetData = response.result;
+
+                    // Handle nested response object (common in service calls with return_response: true)
+                    if (targetData.response) {
+                        targetData = targetData.response;
+                    }
+
+                    // Try exact match in target data
+                    if (targetData[entityId] && targetData[entityId].events) {
+                        const events = targetData[entityId].events;
+                        console.log(`Found ${events.length} events (exact match)`);
+                        resolve(events);
+                        return;
+                    }
+
+                    // Try loose match (check any key in target data)
+                    const keys = Object.keys(targetData);
+                    if (keys.length > 0) {
+                        const firstKey = keys[0];
+                        if (targetData[firstKey] && targetData[firstKey].events) {
+                            console.log(`Found events under key: ${firstKey}`);
+                            resolve(targetData[firstKey].events);
+                            return;
+                        }
+
+                        // Debug: Keys found but no events property
+                        const emptyArr: any[] = [];
+                        (emptyArr as any)._debug = `Keys: ${keys.join(', ')} | FirstVal: ${JSON.stringify(targetData[firstKey]).substring(0, 50)}`;
+                        resolve(emptyArr);
+                        return;
+                    }
+
+                    console.warn('Structure mismatch. Keys found:', keys);
+                    const emptyArr: any[] = [];
+                    (emptyArr as any)._debug = `No keys in result. Raw: ${JSON.stringify(response).substring(0, 50)}`;
+                    resolve(emptyArr);
+                } else {
+                    console.warn('Call failed or no result', response);
+                    const emptyArr: any[] = [];
+                    (emptyArr as any)._debug = `Success: ${response.success} | Result: ${JSON.stringify(response.result)}`;
+                    resolve(emptyArr);
+                }
+            });
+        });
+    }
+    async browseMedia(entityId: string, mediaContentId?: string, mediaContentType?: string): Promise<any> {
+        if (!this.isConnected()) return null;
+
+        console.log(`🔍 Browsing Media for ${entityId}`, { mediaContentId, mediaContentType });
+
+        return new Promise((resolve) => {
+            this.send({
+                type: 'call_service',
+                domain: 'media_player',
+                service: 'browse_media',
+                service_data: {
+                    entity_id: entityId,
+                    media_content_id: mediaContentId,
+                    media_content_type: mediaContentType
+                },
+                return_response: true
+            }, (response) => {
+                console.log('📦 Browse Response:', JSON.stringify(response, null, 2));
+
+                if (response.success && response.result) {
+                    let result = response.result;
+                    // Handle nested response format (service call with return_response: true)
+                    if (result.response) {
+                        // Check for exact entity match
+                        if (result.response[entityId]) {
+                            result = result.response[entityId];
+                        }
+                        // Fallback: If returned structure has keys, take the first one 
+                        else if (typeof result.response === 'object') {
+                            const keys = Object.keys(result.response);
+                            if (keys.length > 0) {
+                                result = result.response[keys[0]];
+                            }
+                        }
+                    }
+
+                    console.log(`✅ Found ${result.children?.length || 0} items for ${result.title}`);
+                    resolve(result);
+                } else {
+                    console.warn('❌ Browse media failed or empty', response);
+                    resolve(null);
+                }
+            });
+        });
+    }
+
+    async playMedia(entityId: string, mediaContentId: string, mediaContentType: string) {
+        console.log('📺 playMedia called:', { entityId, mediaContentId, mediaContentType });
+
+        return new Promise<void>((resolve, reject) => {
+            const id = this.messageId++;
+
+            const payload = {
+                id,
+                type: 'call_service',
+                domain: 'media_player',
+                service: 'play_media',
+                service_data: {
+                    entity_id: entityId,
+                    media_content_id: mediaContentId,
+                    media_content_type: mediaContentType
+                }
+            };
+
+            console.log('📤 Sending play_media command:', JSON.stringify(payload, null, 2));
+
+            this.handlers.set(id, (response: any) => {
+                console.log('📥 play_media response:', response);
+                if (response.success) {
+                    console.log('✅ Play command accepted by HA');
+                    resolve();
+                } else {
+                    console.error('❌ Play command rejected:', response.error);
+                    reject(new Error(response.error?.message || 'Unknown error'));
+                }
+            });
+
+            this.socket!.send(JSON.stringify(payload));
+        });
+    }
+
+    async spotcastStart(spotifyUri: string, deviceName: string) {
+        console.log('🎵 spotcastStart called:', { spotifyUri, deviceName });
+
+        return new Promise<void>((resolve, reject) => {
+            const id = this.messageId++;
+
+            const payload = {
+                id,
+                type: 'call_service',
+                domain: 'spotcast',
+                service: 'start',
+                service_data: {
+                    uri: spotifyUri,
+                    device_name: deviceName,
+                    random_song: false,
+                    shuffle: false
+                }
+            };
+
+            console.log('📤 Sending spotcast.start command:', JSON.stringify(payload, null, 2));
+
+            this.handlers.set(id, (response: any) => {
+                console.log('📥 spotcast.start response:', response);
+                if (response.success) {
+                    console.log('✅ Spotcast command accepted by HA');
+                    resolve();
+                } else {
+                    console.error('❌ Spotcast command rejected:', response.error);
+                    reject(new Error(response.error?.message || 'Unknown error'));
+                }
+            });
+
+            this.socket!.send(JSON.stringify(payload));
+        });
+    }
 }

@@ -14,6 +14,9 @@ import { Family } from './views/Family';
 import { Household } from './views/Household';
 import { Settings } from './views/Settings';
 import { AdminPanel } from './views/AdminPanel';
+import SpotifyCallback from './views/SpotifyCallback';
+
+import { CalendarModal } from './components/CalendarModal';
 
 const App: React.FC = () => {
     const { user, isLoading: authLoading, userRole } = useAuth();
@@ -24,6 +27,25 @@ const App: React.FC = () => {
     const [isLoadingHA, setIsLoadingHA] = useState(true);
     const [isAiOpen, setIsAiOpen] = useState(false);
     const [time, setTime] = useState(new Date());
+
+    // Spotify callback detection
+    const [isSpotifyCallback, setIsSpotifyCallback] = useState(
+        window.location.pathname.includes('spotify-callback') ||
+        window.location.search.includes('code=')
+    );
+
+    // Calendar Modal State
+    const [calendarModal, setCalendarModal] = useState<{
+        isOpen: boolean;
+        title: string;
+        entityId: string;
+        daysToFetch?: number;
+        maxEvents?: number;
+    }>({
+        isOpen: false,
+        title: '',
+        entityId: ''
+    });
 
     const haService = useMemo(() => new HomeAssistantService((raw) => {
         const mapped: EntityState[] = raw.map((ent: any) => ({
@@ -111,13 +133,51 @@ const App: React.FC = () => {
         }
     };
 
+    const handleLightBrightness = (id: string, brightness: number) => {
+        if (isConnected) {
+            haService.callService('light', 'turn_on', id, { brightness_pct: brightness });
+        }
+        // Update local state universally (optimistic update)
+        setEntities(prev => prev.map(e => e.id === id ? {
+            ...e,
+            attributes: { ...e.attributes, brightness }
+        } : e));
+    };
+
+    const handleLightColor = (id: string, color: string) => {
+        // Convert hex to rgb
+        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(color);
+        const rgb_color = result ? [
+            parseInt(result[1], 16),
+            parseInt(result[2], 16),
+            parseInt(result[3], 16)
+        ] : [255, 255, 255];
+
+        if (isConnected) {
+            haService.callService('light', 'turn_on', id, { rgb_color });
+        }
+        setEntities(prev => prev.map(e => e.id === id ? {
+            ...e,
+            attributes: { ...e.attributes, rgb_color }
+        } : e));
+    };
+
+    const handleLightTemp = (id: string, temp: number) => {
+        if (isConnected) {
+            haService.callService('light', 'turn_on', id, { color_temp: temp });
+        }
+        setEntities(prev => prev.map(e => e.id === id ? {
+            ...e,
+            attributes: { ...e.attributes, color_temp: temp }
+        } : e));
+    };
+
     const menu = [
         { id: 'overview', icon: 'fa-table-cells-large', label: 'Dashboard' },
         { id: 'rooms', icon: 'fa-door-open', label: 'Räume' },
         { id: 'media', icon: 'fa-play-circle', label: 'Medien' },
         { id: 'family', icon: 'fa-user-group', label: 'Familie' },
-        { id: 'household', icon: 'fa-broom', label: 'Service' },
-        ...(userRole === 'admin' ? [{ id: 'admin', icon: 'fa-users-gear', label: 'Admin' }] : []),
+        { id: 'household', icon: 'fa-broom', label: 'Haushalt' },
         { id: 'settings', icon: 'fa-sliders', label: 'Optionen' },
     ];
 
@@ -141,6 +201,19 @@ const App: React.FC = () => {
     // Show login form if not authenticated
     if (!user) {
         return <AuthForm />;
+    }
+
+    // Handle Spotify OAuth callback
+    if (isSpotifyCallback) {
+        return (
+            <SpotifyCallback
+                onComplete={() => {
+                    setIsSpotifyCallback(false);
+                    window.history.replaceState({}, '', '/');
+                    setActiveView('media');
+                }}
+            />
+        );
     }
 
     return (
@@ -212,12 +285,128 @@ const App: React.FC = () => {
                         </span>
                     </div>
 
+                    {/* Next Birthday Widget */}
+                    {(() => {
+                        const nextBday = entities.find(e => e.id === 'sensor.nachster_geburtstag');
+                        const daysToBday = entities.find(e => e.id === 'sensor.tage_bis_geburtstag');
+                        if (!nextBday || !daysToBday) return null;
+
+                        return (
+                            <div
+                                onClick={() => {
+                                    console.log('Birthday clicked');
+                                    setCalendarModal({
+                                        isOpen: true,
+                                        title: 'Geburtstage',
+                                        entityId: 'calendar.geburtstage_2',
+                                        daysToFetch: 365, // Fetch full year to find birthdays
+                                        maxEvents: 7 // Show next 7 birthdays
+                                    });
+                                }}
+                                className="hidden lg:flex flex-col items-center mx-6 cursor-pointer hover:bg-white/5 px-4 py-2 rounded-xl transition-colors z-50 pointer-events-auto"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <i className="fa-solid fa-cake-candles text-pink-500 text-lg"></i>
+                                    <span className="text-sm font-bold">{nextBday.state}</span>
+                                </div>
+                                <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">
+                                    Noch {daysToBday.state} Tage
+                                </span>
+                            </div>
+                        );
+                    })()}
+
+                    {/* Next Appointment Widget */}
+                    {(() => {
+                        const calendar = entities.find(e => e.id === 'calendar.stefan_gross_stibe_me');
+                        if (!calendar) return null;
+
+                        const message = calendar.attributes.message;
+                        const startTimeStr = calendar.attributes.start_time;
+
+                        if (!message || !startTimeStr) return null;
+
+                        // Format: dd.mm. HH:mm
+                        const startDate = new Date(startTimeStr);
+                        const formattedDate = startDate.toLocaleString('de-DE', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        }).replace(',', '.'); // Ensure dot format if locale differs
+
+                        return (
+                            <div
+                                onClick={() => {
+                                    console.log('Appointment clicked');
+                                    setCalendarModal({
+                                        isOpen: true,
+                                        title: 'Termine',
+                                        entityId: 'calendar.stefan_gross_stibe_me',
+                                        daysToFetch: 14 // Show next 14 days
+                                    });
+                                }}
+                                className="hidden md:flex flex-col items-start mx-6 max-w-[200px] cursor-pointer hover:bg-white/5 px-4 py-2 rounded-xl transition-colors z-50 pointer-events-auto"
+                            >
+                                <div className="flex items-center gap-3 w-full">
+                                    <i className="fa-solid fa-calendar-day text-blue-500 text-lg flex-shrink-0"></i>
+                                    <span className="text-sm font-bold truncate">{message}</span>
+                                </div>
+                                <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider pl-8">
+                                    {formattedDate}
+                                </span>
+                            </div>
+                        );
+                    })()}
+
+                    {/* Spacer to push Weather to right if needed, or let justify-between handle it */}
+                    <div className="flex-1"></div>
+
+                    {/* Weather Display */}
+                    {(() => {
+                        const weatherEntity = entities.find(e => e.id === 'weather.forecast_familie_gross');
+                        const tempEntity = entities.find(e => e.id === 'sensor.wetterstation_actual_temperature');
+
+                        // Debug logs
+                        if (!weatherEntity) console.log('Missing weather entity: weather.forecast_familie_gross');
+                        if (!tempEntity) console.log('Missing temp entity: sensor.wetterstation_actual_temperature');
+
+                        if (!weatherEntity && !tempEntity) return null;
+
+                        // Use specific temp sensor if available, otherwise fallback to weather attribute
+                        const temp = tempEntity ? tempEntity.state : weatherEntity?.attributes.temperature;
+
+                        // Determine icon from weather entity state
+                        const state = weatherEntity?.state || 'sunny';
+                        const icon = state === 'sunny' ? 'fa-sun' :
+                            state === 'cloudy' ? 'fa-cloud' :
+                                state === 'partlycloudy' ? 'fa-cloud-sun' :
+                                    state === 'rainy' ? 'fa-cloud-rain' :
+                                        'fa-cloud';
+
+                        const label = 'Zell LU';
+
+                        return (
+                            <div className="hidden md:flex flex-col items-end mr-8">
+                                <div className="flex items-center gap-3">
+                                    <i className={`fa-solid ${icon} text-yellow-500 text-xl`}></i>
+                                    <span className="text-2xl font-black">{temp}°C</span>
+                                </div>
+                                <span className="text-[10px] text-gray-600 font-bold uppercase tracking-[0.2em]">
+                                    {label}
+                                </span>
+                            </div>
+                        );
+                    })()}
+
                     <div className="flex items-center gap-4">
-                        <div className={`${deviceInfo.isMobile ? 'px-2' : 'px-4'} py-1.5 rounded-full border ${deviceInfo.isMobile ? 'text-[8px]' : 'text-[9px]'} font-black tracking-widest flex items-center gap-2 ${isConnected ? 'bg-blue-500/5 border-blue-500/20 text-blue-500' : 'bg-red-500/5 border-red-500/20 text-red-500'
-                            }`}>
-                            <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-blue-500 animate-pulse' : 'bg-red-500'}`}></div>
-                            {deviceInfo.isMobile ? (isConnected ? 'ON' : 'OFF') : (isConnected ? 'NODE CONNECTED' : 'OFFLINE')}
-                        </div>
+                        {userRole === 'admin' && (
+                            <div className={`${deviceInfo.isMobile ? 'px-2' : 'px-4'} py-1.5 rounded-full border ${deviceInfo.isMobile ? 'text-[8px]' : 'text-[9px]'} font-black tracking-widest flex items-center gap-2 ${isConnected ? 'bg-blue-500/5 border-blue-500/20 text-blue-500' : 'bg-red-500/5 border-red-500/20 text-red-500'
+                                }`}>
+                                <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-blue-500 animate-pulse' : 'bg-red-500'}`}></div>
+                                {deviceInfo.isMobile ? (isConnected ? 'ON' : 'OFF') : (isConnected ? 'NODE CONNECTED' : 'OFFLINE')}
+                            </div>
+                        )}
                         {deviceInfo.isMobile && (
                             <button
                                 onClick={() => setIsAiOpen(true)}
@@ -257,29 +446,58 @@ const App: React.FC = () => {
                     )}
 
                     <div className="max-w-6xl mx-auto">
-                        {activeView === 'overview' && <Overview entities={entities} onToggle={handleToggle} haService={haService} />}
-                        {activeView === 'rooms' && <Rooms entities={entities} onToggle={handleToggle} />}
-                        {activeView === 'media' && <Media entities={entities} onMediaControl={handleMediaControl} />}
+                        {activeView === 'overview' && (
+                            <Overview
+                                entities={entities}
+                                onToggle={handleToggle}
+                                onBrightnessChange={handleLightBrightness}
+                                onColorChange={handleLightColor}
+                                onTempChange={handleLightTemp}
+                            />
+                        )}
+                        {activeView === 'rooms' && (
+                            <Rooms
+                                entities={entities}
+                                onToggle={handleToggle}
+                                onBrightnessChange={handleLightBrightness}
+                                onColorChange={handleLightColor}
+                                onTempChange={handleLightTemp}
+                            />
+                        )}
+                        {activeView === 'media' && <Media entities={entities} onMediaControl={handleMediaControl} haService={haService} />}
                         {activeView === 'family' && <Family entities={entities} />}
                         {activeView === 'household' && <Household entities={entities} onToggle={handleToggle} />}
                         {activeView === 'admin' && <AdminPanel />}
-                        {activeView === 'settings' && <Settings isConnected={isConnected} onConnect={haService.connect.bind(haService)} />}
+                        {activeView === 'settings' && <Settings />}
                     </div>
                 </div>
             </main>
 
             {/* Bottom Navigation for Mobile */}
-            {deviceInfo.isMobile && (
-                <BottomNav
-                    activeView={activeView}
-                    onNavigate={(view) => setActiveView(view as ViewType)}
-                    menu={menu}
-                />
-            )}
+            {
+                deviceInfo.isMobile && (
+                    <BottomNav
+                        activeView={activeView}
+                        onNavigate={(view) => setActiveView(view as ViewType)}
+                        menu={menu}
+                    />
+                )
+            }
 
             <GeminiAssistant isOpen={isAiOpen} onClose={() => setIsAiOpen(false)} entities={entities} />
-        </div>
+            <CalendarModal
+                isOpen={calendarModal.isOpen}
+                onClose={() => setCalendarModal(prev => ({ ...prev, isOpen: false }))}
+                title={calendarModal.title}
+                entityId={calendarModal.entityId}
+                haService={haService}
+                currentEntity={entities.find(e => e.id === calendarModal.entityId)}
+                daysToFetch={calendarModal.daysToFetch}
+                maxEvents={calendarModal.maxEvents}
+            />
+        </div >
     );
 };
 
 export default App;
+

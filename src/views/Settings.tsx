@@ -3,17 +3,13 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { changePassword, deactivateUserAccount } from '../services/userManagement';
 
-interface SettingsProps {
-    onConnect?: (url: string, token: string) => Promise<boolean>;
-    isConnected?: boolean;
-}
+import { AdminPanel } from './AdminPanel';
 
-export const Settings: React.FC<SettingsProps> = ({ onConnect, isConnected }) => {
-    const { user, logout } = useAuth();
-    const [url, setUrl] = useState('');
-    const [token, setToken] = useState('');
-    const [status, setStatus] = useState<'idle' | 'connecting' | 'success' | 'error'>('idle');
+export const Settings: React.FC = () => {
+    const { user, logout, userRole } = useAuth();
+
     const [isLoadingSettings, setIsLoadingSettings] = useState(true);
+    const [showAdminPanel, setShowAdminPanel] = useState(false);
 
     // Password change states
     const [showPasswordChange, setShowPasswordChange] = useState(false);
@@ -43,8 +39,7 @@ export const Settings: React.FC<SettingsProps> = ({ onConnect, isConnected }) =>
                 }
 
                 if (data) {
-                    if (data.ha_url) setUrl(data.ha_url);
-                    if (data.ha_token) setToken(data.ha_token);
+                    // URL and Token loading logic removed as state variables are gone
                 }
             } catch (err) {
                 console.error('Failed to load settings:', err);
@@ -55,47 +50,9 @@ export const Settings: React.FC<SettingsProps> = ({ onConnect, isConnected }) =>
         loadSettings();
     }, [user]);
 
-    useEffect(() => {
-        if (isConnected) setStatus('success');
-    }, [isConnected]);
 
-    const handleSave = async () => {
-        if (!url || !token) {
-            alert('Bitte URL und Token eingeben');
-            return;
-        }
 
-        if (!user) return;
 
-        setStatus('connecting');
-
-        try {
-            // Save to Supabase (upsert)
-            const { error } = await supabase
-                .from('user_settings')
-                .upsert({
-                    user_id: user.id,
-                    ha_url: url,
-                    ha_token: token,
-                    updated_at: new Date().toISOString(),
-                }, {
-                    onConflict: 'user_id'
-                });
-
-            if (error) throw error;
-
-            // Connect to HA
-            const success = await onConnect?.(url, token);
-            if (success) {
-                setStatus('success');
-            } else {
-                setStatus('error');
-            }
-        } catch (err) {
-            console.error('Save error:', err);
-            setStatus('error');
-        }
-    };
 
     const handleLogout = async () => {
         try {
@@ -135,6 +92,26 @@ export const Settings: React.FC<SettingsProps> = ({ onConnect, isConnected }) =>
                     Abmelden
                 </button>
             </div>
+
+            {/* Admin Section - Only for Admins */}
+            {userRole === 'admin' && (
+                <div className="glass-card p-8 rounded-[2.5rem] border border-blue-500/20">
+                    <button
+                        onClick={() => setShowAdminPanel(!showAdminPanel)}
+                        className="w-full flex items-center justify-between group"
+                    >
+                        <h4 className="font-bold flex items-center gap-3 text-blue-400 group-hover:text-blue-300 transition-colors">
+                            <i className="fa-solid fa-users-gear"></i>
+                            Administration
+                        </h4>
+                        <i className={`fa-solid fa-chevron-down text-gray-500 transition-transform duration-300 ${showAdminPanel ? 'rotate-180' : ''}`}></i>
+                    </button>
+
+                    <div className={`transition-[max-height] duration-500 ease-in-out overflow-hidden ${showAdminPanel ? 'max-h-[2000px] mt-6' : 'max-h-0'}`}>
+                        <AdminPanel />
+                    </div>
+                </div>
+            )}
 
             {/* Password Change Section */}
             <div className="glass-card p-8 rounded-[2.5rem] border border-white/5">
