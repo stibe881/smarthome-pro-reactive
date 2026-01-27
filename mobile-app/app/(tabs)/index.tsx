@@ -1,10 +1,763 @@
-import { View, Text } from 'react-native';
+import React, { useMemo, useState, useCallback, memo, useEffect } from 'react';
+import { View, Text, ScrollView, Pressable, useWindowDimensions, Modal, StyleSheet, Image, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useHomeAssistant } from '../../contexts/HomeAssistantContext';
+import {
+    Wifi, WifiOff, Lightbulb, Blinds, Bot, RefreshCw,
+    Play, Moon, Tv, X, ChevronRight, Power, Sun, Thermometer,
+    Home, Zap, Wind, LucideIcon, Map, PlayCircle, Lock, Unlock,
+    Calendar, Clock, Shirt, UtensilsCrossed, Droplets, PartyPopper,
+    DoorOpen, BedDouble
+} from 'lucide-react-native';
+// LinearGradient removed to fix compatibility issue
+
+// =====================================================
+// CHILD COMPONENTS
+// =====================================================
+
+interface HeroStatCardProps {
+    icon: LucideIcon;
+    iconColor: string;
+    value: number;
+    total: number;
+    label: string;
+    gradient: [string, string];
+    isActive: boolean;
+    cardWidth: number;
+    onPress?: () => void;
+    onLongPress?: () => void;
+}
+
+const HeroStatCard = memo(({
+    icon: Icon,
+    iconColor,
+    value,
+    total,
+    label,
+    gradient,
+    isActive,
+    cardWidth,
+    onPress,
+    onLongPress
+}: HeroStatCardProps) => (
+    <Pressable
+        onPress={onPress}
+        onLongPress={onLongPress}
+        style={[styles.heroCard, { width: cardWidth }]}
+    >
+        <View style={[styles.heroCardGradient, { backgroundColor: isActive ? gradient[0] : '#1E293B' }]}>
+            <View style={[styles.decorativeCircle, { backgroundColor: isActive ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.03)' }]} />
+
+            <View style={styles.heroCardHeader}>
+                <View style={[styles.iconBubble, { backgroundColor: isActive ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.05)' }]}>
+                    <Icon size={22} color={isActive ? '#fff' : iconColor} />
+                </View>
+                <ChevronRight size={16} color="rgba(255,255,255,0.3)" />
+            </View>
+
+            <View style={styles.heroCardContent}>
+                <View style={styles.valueRow}>
+                    <Text style={styles.heroValue}>{value}</Text>
+                    <Text style={styles.heroTotal}>/{total}</Text>
+                </View>
+                <Text style={[styles.heroLabel, { color: isActive ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.5)' }]}>
+                    {label}
+                </Text>
+            </View>
+
+            <View style={styles.progressContainer}>
+                <View style={[styles.progressBar, {
+                    width: `${total > 0 ? (value / total) * 100 : 0}%`,
+                    backgroundColor: isActive ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.1)'
+                }]} />
+            </View>
+        </View>
+    </Pressable>
+));
+
+interface QuickActionProps {
+    icon: LucideIcon;
+    iconColor: string;
+    label: string;
+    onPress: () => void;
+    gradient: [string, string];
+}
+
+const QuickAction = memo(({
+    icon: Icon,
+    iconColor,
+    label,
+    onPress,
+    gradient
+}: QuickActionProps) => (
+    <Pressable onPress={onPress} style={styles.quickAction}>
+        <View style={[styles.quickActionGradient, { backgroundColor: gradient[0] }]}>
+            <Icon size={20} color={iconColor} />
+        </View>
+        <Text style={styles.quickActionLabel}>{label}</Text>
+    </Pressable>
+));
+
+const Tile = ({ label, subtext, icon: Icon, iconColor, activeColor, isActive, onPress, children, activeStyle }: any) => (
+    <Pressable
+        onPress={onPress}
+        style={[
+            styles.tile,
+            isActive && { backgroundColor: activeColor + '15', borderColor: activeColor + '50' },
+            activeStyle
+        ]}
+    >
+        <View style={styles.tileHeader}>
+            <View style={[styles.tileIcon, isActive && { backgroundColor: activeColor }]}>
+                <Icon size={20} color={isActive ? '#FFF' : iconColor} />
+            </View>
+            <Text style={[styles.tileState, isActive && { color: activeColor }]}>
+                {subtext}
+            </Text>
+        </View>
+        <Text numberOfLines={1} style={[styles.tileName, isActive && { color: '#FFF' }]}>{label}</Text>
+        {children}
+    </Pressable>
+);
+
+const ApplianceStatusTile = ({ entity }: { entity: any }) => {
+    // Determine active status
+    const isRunning = entity.state === 'on' || entity.state === 'running' || entity.state === 'cleaning' || (entity.attributes.power && entity.attributes.power > 5);
+    const isFinished = entity.state === 'finished' || entity.state === 'program_finished' || entity.state === 'fertig';
+
+    // Safety check: if not running/finished, don't show (user requested removal)
+    if (!isRunning && !isFinished) return null;
+
+    const friendlyName = entity.attributes.friendly_name || entity.entity_id;
+
+    // Determine Icon
+    let Icon = RefreshCw;
+    if (friendlyName.toLowerCase().includes('geschirr') || friendlyName.toLowerCase().includes('spül')) Icon = UtensilsCrossed;
+    else if (friendlyName.toLowerCase().includes('trock') || friendlyName.toLowerCase().includes('tumb')) Icon = Wind;
+    else if (friendlyName.toLowerCase().includes('wasch')) Icon = Shirt;
+
+    // Remaining Time logic
+    let statusText = entity.state;
+    const remaining = entity.attributes.remaining_time || entity.attributes.remain_time || entity.attributes.completion_time || entity.attributes.finish_at;
+
+    if (remaining) {
+        // If it's a timestamp
+        if (remaining.includes && (remaining.includes('T') || remaining.includes(':'))) {
+            // Try to parse if it's a timestamp like 2026-01-27T... or duration
+            if (remaining.length < 10 && remaining.includes(':')) {
+                statusText = `Noch ${remaining}`;
+            } else {
+                const finishTime = new Date(remaining);
+                if (!isNaN(finishTime.getTime())) {
+                    statusText = `Fertig um ${finishTime.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}`;
+                } else {
+                    statusText = remaining;
+                }
+            }
+        } else {
+            statusText = `Noch ${remaining} Min`;
+        }
+    } else if (isFinished) {
+        statusText = 'Fertig';
+    } else if (isRunning) {
+        statusText = 'Läuft';
+    }
+
+    return (
+        <View style={[styles.applianceStatusCard, isRunning ? styles.applianceRunning : styles.applianceFinished]}>
+            <View style={[styles.applianceStatusIcon, isRunning ? { backgroundColor: '#3B82F6' } : { backgroundColor: '#10B981' }]}>
+                <Icon size={20} color="#fff" />
+            </View>
+            <View style={styles.applianceInfo}>
+                <Text style={styles.applianceName} numberOfLines={1}>{friendlyName}</Text>
+                <Text style={styles.applianceTime}>{statusText}</Text>
+            </View>
+            {isRunning && <ActivityIndicator size="small" color="#3B82F6" style={{ marginLeft: 8 }} />}
+            {isFinished && <View style={styles.finishedBadge}><Text style={styles.finishedText}>✓</Text></View>}
+        </View>
+    );
+};
+
+const LockTile = ({ lock, callService }: { lock: any, callService: any }) => {
+    const isLocked = lock.state === 'locked';
+    const isUnlocked = lock.state === 'unlocked';
+    const isJammed = lock.state === 'jammed';
+
+    const friendlyName = lock.attributes.friendly_name || 'Haustür';
+
+    const toggleLock = () => {
+        if (isLocked) {
+            Alert.alert('Tür aufschliessen', `Möchtest du ${friendlyName} aufschliessen?`, [
+                { text: 'Abbrechen', style: 'cancel' },
+                { text: 'Aufschliessen', onPress: () => callService('lock', 'unlock', lock.entity_id) }
+            ]);
+        } else {
+            callService('lock', 'lock', lock.entity_id);
+        }
+    };
+
+    const openDoor = () => {
+        Alert.alert('Tür öffnen', `Möchtest du die Falle von ${friendlyName} ziehen (Tür öffnen)?`, [
+            { text: 'Abbrechen', style: 'cancel' },
+            { text: 'ÖFFNEN', style: 'destructive', onPress: () => callService('lock', 'open', lock.entity_id) }
+        ]);
+    };
+
+    return (
+        <View style={[styles.lockCard, isUnlocked && styles.lockCardOpen]}>
+            <Pressable onPress={toggleLock} style={styles.lockMainAction}>
+                <View style={[styles.lockIcon, isUnlocked ? { backgroundColor: '#EF4444' } : { backgroundColor: '#10B981' }]}>
+                    {isUnlocked ? <Unlock size={24} color="#fff" /> : <Lock size={24} color="#fff" />}
+                </View>
+                <View style={styles.lockInfo}>
+                    <Text style={[styles.lockTitle, isUnlocked && { color: '#EF4444' }]}>
+                        {friendlyName}
+                    </Text>
+                    <Text style={styles.lockState}>
+                        {isJammed ? 'KLEMMT' : isUnlocked ? 'OFFEN' : 'GESCHLOSSEN'}
+                    </Text>
+                </View>
+            </Pressable>
+
+            {/* Separate OPEN Button */}
+            <Pressable onPress={openDoor} style={styles.openDoorBtn}>
+                <DoorOpen size={20} color="#3B82F6" />
+                <Text style={styles.openDoorText}>Öffnen</Text>
+            </Pressable>
+        </View>
+    )
+};
+
+const EventTile = ({ calendar }: { calendar: any }) => {
+    if (!calendar.attributes.message && !calendar.attributes.all_day) return null;
+
+    const isBirthday = calendar.entity_id.includes('birth') || calendar.entity_id.includes('geburt') || calendar.attributes.message?.toLowerCase().includes('geburtstag');
+    const startTime = new Date(calendar.attributes.start_time);
+    const isToday = new Date().toDateString() === startTime.toDateString();
+
+    return (
+        <View style={styles.eventCard}>
+            <View style={[styles.eventIcon, isBirthday ? { backgroundColor: '#EC4899' } : { backgroundColor: '#8B5CF6' }]}>
+                {isBirthday ? <PartyPopper size={20} color="#fff" /> : <Calendar size={20} color="#fff" />}
+            </View>
+            <View style={styles.eventInfo}>
+                <Text style={styles.eventTitle} numberOfLines={1}>{calendar.attributes.message || 'Termin'}</Text>
+                <Text style={styles.eventTime}>
+                    {isToday ? 'Heute' : startTime.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })} • {calendar.attributes.all_day ? 'Ganztägig' : startTime.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+                </Text>
+            </View>
+        </View>
+    );
+};
+
+// =====================================================
+// MAIN DASHBOARD COMPONENT
+// =====================================================
 
 export default function Dashboard() {
+    const { width } = useWindowDimensions();
+    const isTablet = width >= 768;
+    const cardWidth = isTablet ? (width - 72) / 4 : (width - 48) / 2;
+    const tileWidth = isTablet ? (width - 64 - 24) / 3 : (width - 32 - 12) / 2;
+
+    const {
+        entities,
+        isConnected,
+        isConnecting,
+        connect,
+        toggleLight,
+        activateScene,
+        openCover,
+        closeCover,
+        startVacuum,
+        returnVacuum,
+        callService,
+        getEntityPictureUrl
+    } = useHomeAssistant();
+
+    // Modal states
+    const [activeModal, setActiveModal] = useState<'lights' | 'covers' | 'robi' | null>(null);
+
+    // Filter entities
+    const lights = useMemo(() => entities.filter(e => e.entity_id.startsWith('light.')), [entities]);
+    const covers = useMemo(() => entities.filter(e => e.entity_id.startsWith('cover.')), [entities]);
+    const vacuums = useMemo(() => entities.filter(e => e.entity_id.startsWith('vacuum.')), [entities]);
+    const mediaPlayers = useMemo(() => entities.filter(e => e.entity_id.startsWith('media_player.')), [entities]);
+    const climate = useMemo(() => entities.filter(e => e.entity_id.startsWith('climate.')), [entities]);
+    const locks = useMemo(() => entities.filter(e => e.entity_id.startsWith('lock.')), [entities]);
+    const calendars = useMemo(() => entities.filter(e => e.entity_id.startsWith('calendar.')).filter(c => c.state === 'on' || c.attributes.message), [entities]);
+
+    // Fuzzy search for appliances
+    const appliances = useMemo(() => entities.filter(e => {
+        const id = e.entity_id.toLowerCase();
+        const name = (e.attributes.friendly_name || '').toLowerCase();
+        const isDevice = id.includes('wasch') || id.includes('tumb') || id.includes('trock') || id.includes('geschirr') || id.includes('spül') || id.includes('spuel') ||
+            name.includes('wasch') || name.includes('tumbler') || name.includes('trockner') || name.includes('geschirr') || name.includes('spülmaschine');
+        const isMeaningful = e.entity_id.startsWith('sensor.') || e.entity_id.startsWith('switch.') || e.entity_id.startsWith('binary_sensor.') || e.entity_id.startsWith('input_boolean.');
+        return isDevice && isMeaningful;
+    }), [entities]);
+
+    // Filter out power sensors if we have status sensors (simple heuristic: prefer 'status' or 'state' in name)
+    const displayAppliances = useMemo(() => {
+        // Sort: Running/Finished first
+        const relevant = appliances.filter(a => !a.entity_id.includes('power') && !a.entity_id.includes('energy') && !a.entity_id.includes('meter'));
+        return relevant.sort((a, b) => {
+            const aRunning = a.state === 'running' || a.state === 'on';
+            const bRunning = b.state === 'running' || b.state === 'on';
+            return (aRunning === bRunning) ? 0 : aRunning ? -1 : 1;
+        });
+    }, [appliances]);
+
+    // Find Röbi and Cameras
+    const robi = useMemo(() => vacuums.find(v => v.entity_id.includes('robi') || v.attributes.friendly_name?.includes('Röbi')) || vacuums[0], [vacuums]);
+    const mapCamera = useMemo(() => entities.find(e => e.entity_id.startsWith('camera.') && (e.entity_id.includes('map') || e.entity_id.includes('robi'))), [entities]);
+
+    // Scripts
+    const cleanScripts = useMemo(() => entities.filter(e => e.entity_id.startsWith('script.') && (e.entity_id.includes('clean') || e.entity_id.includes('reinigen'))), [entities]);
+    // Try to find the Sleep/Bedtime script
+    const bedTimeScript = useMemo(() => entities.find(e => e.entity_id === 'script.bed_time' || e.entity_id.includes('bed_time') || e.entity_id.includes('gute_nacht') || e.entity_id.includes('schlafen')), [entities]);
+
+    const lightsOn = useMemo(() => lights.filter(l => l.state === 'on').length, [lights]);
+    const coversOpen = useMemo(() => covers.filter(c => c.state === 'open' || (c.attributes.current_position && c.attributes.current_position > 0)).length, [covers]);
+    const activeVacuums = useMemo(() => vacuums.filter(v => v.state === 'cleaning').length, [vacuums]);
+    const playingMedia = useMemo(() => mediaPlayers.filter(m => m.state === 'playing').length, [mediaPlayers]);
+
+    const currentTemp = climate[0]?.attributes.current_temperature;
+
+    // Callbacks
+    const openLightsModal = useCallback(() => setActiveModal('lights'), []);
+    const openCoversModal = useCallback(() => setActiveModal('covers'), []);
+    const openRobiModal = useCallback(() => setActiveModal('robi'), []);
+    const closeModal = useCallback(() => setActiveModal(null), []);
+
+    const handleAllLightsOff = useCallback(() => {
+        lights.filter(l => l.state === 'on').forEach(l => callService('light', 'turn_off', l.entity_id));
+    }, [lights, callService]);
+
+    const handleAllLightsOn = useCallback(() => {
+        lights.forEach(l => callService('light', 'turn_on', l.entity_id));
+    }, [lights, callService]);
+
+    const handleAllCoversClose = useCallback(() => covers.forEach(c => closeCover(c.entity_id)), [covers, closeCover]);
+    const handleAllCoversOpen = useCallback(() => covers.forEach(c => openCover(c.entity_id)), [covers, openCover]);
+    const handleAllVacuumsHome = useCallback(() => vacuums.forEach(v => returnVacuum(v.entity_id)), [vacuums, returnVacuum]);
+    const handleRobiStart = useCallback(() => robi && startVacuum(robi.entity_id), [robi, startVacuum]);
+    const handleRobiHome = useCallback(() => robi && returnVacuum(robi.entity_id), [robi, returnVacuum]);
+
+    const handleRunScript = useCallback((entityId: string) => {
+        callService('script', 'turn_on', entityId);
+    }, [callService]);
+
+    const handleSleep = useCallback(() => {
+        if (bedTimeScript) {
+            handleRunScript(bedTimeScript.entity_id);
+            Alert.alert('Gute Nacht', 'Schlafmodus aktiviert.');
+        } else {
+            Alert.alert('Fehler', 'Kein "Bed Time" Script gefunden (script.bed_time)');
+        }
+    }, [bedTimeScript, handleRunScript]);
+
+    const getGreeting = () => {
+        const hour = new Date().getHours();
+        if (hour < 12) return 'Guten Morgen';
+        if (hour < 18) return 'Guten Tag';
+        return 'Guten Abend';
+    };
+
+    if (!isConnected && !isConnecting) {
+        return (
+            <SafeAreaView style={styles.container}>
+                <View style={styles.emptyState}>
+                    <View style={[styles.emptyStateCard, { backgroundColor: '#1E293B' }]}>
+                        <View style={styles.emptyStateIcon}>
+                            <WifiOff size={48} color="#64748B" />
+                        </View>
+                        <Text style={styles.emptyStateTitle}>Smart Home nicht verbunden</Text>
+                        <Pressable onPress={connect} style={styles.connectButton}>
+                            <Text style={styles.connectButtonText}>Verbinden</Text>
+                        </Pressable>
+                    </View>
+                </View>
+            </SafeAreaView>
+        );
+    }
+
     return (
-        <SafeAreaView className="flex-1 bg-black p-6">
-            <Text className="text-white text-2xl font-bold">Dashboard</Text>
+        <SafeAreaView style={styles.container}>
+            <ScrollView
+                style={styles.scrollView}
+                contentContainerStyle={[styles.scrollContent, { paddingHorizontal: isTablet ? 24 : 16 }]}
+                showsVerticalScrollIndicator={false}
+            >
+                {/* Header */}
+                <View style={styles.header}>
+                    <View>
+                        <Text style={styles.greeting}>{getGreeting()}</Text>
+                        <Text style={styles.dateText}>
+                            {new Date().toLocaleDateString('de-DE', {
+                                weekday: 'long',
+                                day: 'numeric',
+                                month: 'long'
+                            })}
+                        </Text>
+                    </View>
+                    <View style={styles.headerRight}>
+                        {currentTemp && (
+                            <View style={styles.tempBadge}>
+                                <Thermometer size={14} color="#F59E0B" />
+                                <Text style={styles.tempText}>{currentTemp}°</Text>
+                            </View>
+                        )}
+                        <View style={[styles.statusDot, { backgroundColor: isConnected ? '#22C55E' : '#EF4444' }]} />
+                    </View>
+                </View>
+
+                {/* --- APPLIANCE STATUS ROW (Dynamic) --- */}
+                {/* Only shows if something is running or finished */}
+                {displayAppliances.length > 0 && (
+                    <View style={[styles.applianceRow, { marginBottom: 16 }]}>
+                        {displayAppliances.map(app => (
+                            <ApplianceStatusTile key={app.entity_id} entity={app} />
+                        ))}
+                    </View>
+                )}
+
+
+                {/* --- EXTRA INFOS (Locks, Calendar) --- */}
+                {(locks.length > 0 || calendars.length > 0) && (
+                    <View style={styles.infoRow}>
+                        {/* Security Section if locks exist */}
+                        {locks.length > 0 && (
+                            <View style={{ flex: 1 }}>
+                                {locks.map(lock => (
+                                    <LockTile key={lock.entity_id} lock={lock} callService={callService} />
+                                ))}
+                            </View>
+                        )}
+                    </View>
+                )}
+
+                {calendars.length > 0 && (
+                    <View style={styles.section}>
+                        <Text style={styles.sectionTitleSmall}>Nächste Termine</Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
+                            {calendars.map(calendar => (
+                                <EventTile key={calendar.entity_id} calendar={calendar} />
+                            ))}
+                        </ScrollView>
+                    </View>
+                )}
+
+
+                {/* Hero Stats */}
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Übersicht</Text>
+                    <View style={styles.heroGrid}>
+                        <HeroStatCard
+                            icon={Lightbulb}
+                            iconColor="#FCD34D"
+                            value={lightsOn}
+                            total={lights.length}
+                            label="Lichter aktiv"
+                            gradient={['#F59E0B', '#D97706']}
+                            isActive={lightsOn > 0}
+                            cardWidth={cardWidth}
+                            onPress={openLightsModal}
+                            onLongPress={handleAllLightsOff}
+                        />
+                        <HeroStatCard
+                            icon={Blinds}
+                            iconColor="#60A5FA"
+                            value={coversOpen}
+                            total={covers.length}
+                            label="Rollläden offen"
+                            gradient={['#3B82F6', '#1D4ED8']}
+                            isActive={coversOpen > 0}
+                            cardWidth={cardWidth}
+                            onPress={openCoversModal}
+                            onLongPress={handleAllCoversClose}
+                        />
+                        <HeroStatCard
+                            icon={Bot}
+                            iconColor="#34D399"
+                            value={activeVacuums}
+                            total={vacuums.length}
+                            label="Röbi"
+                            gradient={['#10B981', '#059669']}
+                            isActive={activeVacuums > 0}
+                            cardWidth={cardWidth}
+                            onPress={openRobiModal}
+                            onLongPress={handleAllVacuumsHome}
+                        />
+                        <HeroStatCard
+                            icon={Tv}
+                            iconColor="#A78BFA"
+                            value={playingMedia}
+                            total={mediaPlayers.length}
+                            label="Wiedergabe"
+                            gradient={['#8B5CF6', '#6D28D9']}
+                            isActive={playingMedia > 0}
+                            cardWidth={cardWidth}
+                        />
+                    </View>
+                </View>
+
+                {/* Quick Actions */}
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Schnellaktionen</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickActionsRow}>
+                        <QuickAction icon={Moon} iconColor="#FBBF24" label="Alles aus" onPress={handleAllLightsOff} gradient={['rgba(251,191,36,0.15)', 'rgba(251,191,36,0.05)']} />
+                        <QuickAction icon={Blinds} iconColor="#60A5FA" label="Rollläden auf" onPress={handleAllCoversOpen} gradient={['rgba(96, 165, 250,0.15)', 'rgba(96, 165, 250,0.05)']} />
+                        <QuickAction icon={Blinds} iconColor="#3B82F6" label="Rollläden zu" onPress={handleAllCoversClose} gradient={['rgba(59,130,246,0.15)', 'rgba(59,130,246,0.05)']} />
+                        <QuickAction icon={Bot} iconColor="#22C55E" label="Röbi Start" onPress={handleRobiStart} gradient={['rgba(34,197,94,0.15)', 'rgba(34,197,94,0.05)']} />
+                        <QuickAction icon={BedDouble} iconColor="#8B5CF6" label="Schlafen" onPress={handleSleep} gradient={['rgba(139, 92, 246,0.15)', 'rgba(139, 92, 246,0.05)']} />
+                    </ScrollView>
+                </View>
+
+            </ScrollView>
+
+            {/* LIGHTS MODAL */}
+            <Modal visible={activeModal === 'lights'} animationType="slide" transparent>
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={[styles.modalHeader, { backgroundColor: '#F59E0B' }]}>
+                            <Text style={styles.modalTitle}>Lichter ({lightsOn} an)</Text>
+                            <Pressable onPress={closeModal} style={styles.closeBtn}><X size={24} color="#fff" /></Pressable>
+                        </View>
+                        <ScrollView style={styles.modalBody}>
+                            <View style={styles.modalGrid}>
+                                {lights.map(l => (
+                                    <View key={l.entity_id} style={{ width: tileWidth }}>
+                                        <Tile
+                                            label={l.attributes.friendly_name?.replace(' Licht', '').replace(' Lampen', '') || l.entity_id}
+                                            subtext={l.state === 'on' ? 'An' : 'Aus'}
+                                            icon={Lightbulb}
+                                            iconColor="#64748B"
+                                            activeColor="#FBBF24"
+                                            isActive={l.state === 'on'}
+                                            onPress={() => toggleLight(l.entity_id)}
+                                        />
+                                    </View>
+                                ))}
+                            </View>
+                        </ScrollView>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* COVERS MODAL */}
+            <Modal visible={activeModal === 'covers'} animationType="slide" transparent>
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={[styles.modalHeader, { backgroundColor: '#3B82F6' }]}>
+                            <Text style={styles.modalTitle}>Rollläden ({coversOpen} offen)</Text>
+                            <Pressable onPress={closeModal} style={styles.closeBtn}><X size={24} color="#fff" /></Pressable>
+                        </View>
+                        <ScrollView style={styles.modalBody}>
+                            <View style={styles.modalGrid}>
+                                {covers.map(c => (
+                                    <View key={c.entity_id} style={{ width: tileWidth }}>
+                                        <Tile
+                                            label={c.attributes.friendly_name || c.entity_id}
+                                            subtext={c.attributes.current_position ? `${c.attributes.current_position}%` : c.state}
+                                            icon={Blinds}
+                                            iconColor="#64748B"
+                                            activeColor="#3B82F6"
+                                            isActive={c.state === 'open' || c.attributes.current_position > 0}
+                                            activeStyle={styles.tileActiveCover}
+                                        >
+                                            <View style={{ flexDirection: 'row', gap: 4, marginTop: 8 }}>
+                                                <Pressable onPress={() => openCover(c.entity_id)} style={styles.miniBtn}><Text style={styles.miniBtnText}>↑</Text></Pressable>
+                                                <Pressable onPress={() => closeCover(c.entity_id)} style={styles.miniBtn}><Text style={styles.miniBtnText}>↓</Text></Pressable>
+                                            </View>
+                                        </Tile>
+                                    </View>
+                                ))}
+                            </View>
+                        </ScrollView>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* RÖBI MODAL */}
+            <Modal visible={activeModal === 'robi'} animationType="slide" transparent>
+                <View style={styles.modalOverlay}>
+                    <View style={[styles.modalContent, styles.robiContent]}>
+                        <View style={[styles.modalHeader, { backgroundColor: '#10B981' }]}>
+                            <Text style={styles.modalTitle}>Röbi ({robi?.state || 'Offline'})</Text>
+                            <Pressable onPress={closeModal} style={styles.closeBtn}><X size={24} color="#fff" /></Pressable>
+                        </View>
+                        <ScrollView style={styles.modalBody}>
+                            {robi && (
+                                <>
+                                    {/* Actions */}
+                                    <View style={styles.robiActions}>
+                                        <Pressable onPress={handleRobiStart} style={styles.robiBigBtn}>
+                                            <PlayCircle size={32} color="#fff" />
+                                            <Text style={styles.robiBtnText}>Alles saugen</Text>
+                                        </Pressable>
+                                        <Pressable onPress={handleRobiHome} style={[styles.robiBigBtn, styles.robiHomeBtn]}>
+                                            <Home size={32} color="#fff" />
+                                            <Text style={styles.robiBtnText}>Zurück zur Station</Text>
+                                        </Pressable>
+                                    </View>
+
+                                    {/* Map */}
+                                    {mapCamera && mapCamera.attributes.entity_picture ? (
+                                        <View style={styles.mapContainer}>
+                                            <Image
+                                                source={{ uri: getEntityPictureUrl(mapCamera.attributes.entity_picture) }}
+                                                style={styles.mapImage}
+                                                resizeMode="contain"
+                                            />
+                                            <View style={styles.liveBadge}>
+                                                <View style={styles.pulseDot} />
+                                                <Text style={styles.liveText}>LIVE KARTE</Text>
+                                            </View>
+                                        </View>
+                                    ) : (
+                                        <View style={[styles.mapContainer, styles.mapPlaceholder]}>
+                                            <Map size={48} color="rgba(255,255,255,0.2)" />
+                                            <Text style={styles.mapPlaceholderText}>Keine Karte verfügbar</Text>
+                                        </View>
+                                    )}
+
+                                    {/* Room Cleaning Scripts */}
+                                    {cleanScripts.length > 0 && (
+                                        <View style={styles.scriptSection}>
+                                            <Text style={styles.scriptTitle}>Räume saugen</Text>
+                                            <View style={styles.scriptGrid}>
+                                                {cleanScripts.map(script => (
+                                                    <Pressable
+                                                        key={script.entity_id}
+                                                        onPress={() => handleRunScript(script.entity_id)}
+                                                        style={styles.scriptBtn}
+                                                    >
+                                                        <Bot size={18} color="#10B981" />
+                                                        <Text style={styles.scriptText}>
+                                                            {script.attributes.friendly_name?.replace('Saugen ', '').replace('Reinigen ', '') || script.entity_id}
+                                                        </Text>
+                                                    </Pressable>
+                                                ))}
+                                            </View>
+                                        </View>
+                                    )}
+                                </>
+                            )}
+                            {!robi && (
+                                <Text style={styles.errorText}>Röbi konnte nicht gefunden werden.</Text>
+                            )}
+                        </ScrollView>
+                    </View>
+                </View>
+            </Modal>
         </SafeAreaView>
     );
 }
+
+const styles = StyleSheet.create({
+    container: { flex: 1, backgroundColor: '#020617' },
+    scrollView: { flex: 1 },
+    scrollContent: { paddingTop: 12, paddingBottom: 32 },
+    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 },
+    greeting: { fontSize: 32, fontWeight: 'bold', color: '#fff' },
+    dateText: { fontSize: 14, color: '#94A3B8', marginTop: 4 },
+    headerRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    tempBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(245,158,11,0.15)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, gap: 4 },
+    tempText: { color: '#F59E0B', fontWeight: '600', fontSize: 14 },
+    statusDot: { width: 10, height: 10, borderRadius: 5 },
+    emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+    emptyStateCard: { width: '100%', maxWidth: 320, borderRadius: 28, padding: 32, alignItems: 'center' },
+    emptyStateIcon: { width: 96, height: 96, borderRadius: 48, backgroundColor: 'rgba(255,255,255,0.05)', alignItems: 'center', justifyContent: 'center', marginBottom: 24 },
+    emptyStateTitle: { color: '#fff', fontSize: 20, fontWeight: '600', textAlign: 'center' },
+    connectButton: { backgroundColor: '#3B82F6', paddingHorizontal: 24, paddingVertical: 14, borderRadius: 14, marginTop: 24 },
+    connectButtonText: { color: '#fff', fontWeight: '600' },
+    section: { marginBottom: 28 },
+    sectionTitle: { fontSize: 13, fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 16 },
+    sectionTitleSmall: { fontSize: 12, fontWeight: '700', color: '#64748B', textTransform: 'uppercase', marginBottom: 12 },
+    heroGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+    heroCard: { borderRadius: 24, overflow: 'hidden', height: 140 },
+    heroCardGradient: { padding: 16, height: '100%', justifyContent: 'space-between' },
+    decorativeCircle: { position: 'absolute', width: 120, height: 120, borderRadius: 60, top: -40, right: -40 },
+    heroCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    iconBubble: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+    heroCardContent: { marginTop: 'auto' },
+    valueRow: { flexDirection: 'row', alignItems: 'baseline' },
+    heroValue: { fontSize: 36, fontWeight: 'bold', color: '#fff' },
+    heroTotal: { fontSize: 18, color: 'rgba(255,255,255,0.5)', marginLeft: 2 },
+    heroLabel: { fontSize: 12, marginTop: 2 },
+    progressContainer: { height: 3, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 2, marginTop: 12, overflow: 'hidden' },
+    progressBar: { height: '100%', borderRadius: 2 },
+    quickActionsRow: { paddingRight: 16, gap: 12 },
+    quickAction: { alignItems: 'center', width: 72 },
+    quickActionGradient: { width: 56, height: 56, borderRadius: 18, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
+    quickActionLabel: { color: '#94A3B8', fontSize: 11, marginTop: 8, textAlign: 'center' },
+
+    // Appliances (Dynamic Row)
+    applianceRow: { gap: 8 },
+    applianceStatusCard: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 16, backgroundColor: '#1E293B', borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
+    applianceRunning: { backgroundColor: 'rgba(59,130,246,0.1)', borderColor: '#3B82F6' },
+    applianceFinished: { backgroundColor: 'rgba(16, 185, 129, 0.1)', borderColor: '#10B981' },
+    applianceStatusIcon: { width: 32, height: 32, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.05)', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+    applianceInfo: { flex: 1 },
+    applianceName: { color: '#fff', fontSize: 14, fontWeight: '600' },
+    applianceTime: { color: 'rgba(255,255,255,0.7)', fontSize: 13 },
+    finishedBadge: { backgroundColor: '#10B981', width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+    finishedText: { color: '#fff', fontSize: 10, fontWeight: 'bold' },
+
+    // Info Row (Locks & Events)
+    infoRow: { marginBottom: 28 },
+    lockCard: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 20, backgroundColor: '#1E293B', marginBottom: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
+    lockCardOpen: { backgroundColor: 'rgba(239, 68, 68, 0.1)', borderColor: 'rgba(239, 68, 68, 0.4)' },
+    lockMainAction: { flex: 1, flexDirection: 'row', alignItems: 'center' },
+    lockIcon: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+    lockInfo: { flex: 1 },
+    lockTitle: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+    lockState: { color: '#94A3B8', fontSize: 12, marginTop: 2, fontWeight: '600', letterSpacing: 1 },
+    // Open Button specific
+    openDoorBtn: { padding: 8, alignItems: 'center', justifyContent: 'center', borderLeftWidth: 1, borderLeftColor: 'rgba(255,255,255,0.1)', paddingLeft: 16, marginLeft: 8 },
+    openDoorText: { color: '#3B82F6', fontSize: 10, fontWeight: '600', marginTop: 4 },
+
+    eventCard: { backgroundColor: '#1E293B', borderRadius: 16, padding: 12, flexDirection: 'row', alignItems: 'center', width: 260, marginRight: 12 },
+    eventIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+    eventInfo: { flex: 1 },
+    eventTitle: { color: '#fff', fontWeight: '600', fontSize: 14, marginBottom: 4 },
+    eventTime: { color: '#94A3B8', fontSize: 12 },
+
+    // Modal
+    modalOverlay: { flex: 1, backgroundColor: '#000' },
+    modalContent: { flex: 1, backgroundColor: '#020617' },
+    modalHeader: { paddingVertical: 24, paddingHorizontal: 20, paddingTop: 60, borderBottomLeftRadius: 32, borderBottomRightRadius: 32, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    modalTitle: { fontSize: 24, fontWeight: 'bold', color: '#fff' },
+    closeBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.2)', alignItems: 'center', justifyContent: 'center' },
+    modalBody: { flex: 1, padding: 16 },
+    modalGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+    tile: { backgroundColor: '#1E293B', borderRadius: 20, padding: 16, minHeight: 110, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)', justifyContent: 'space-between' },
+    tileHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+    tileIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.05)', alignItems: 'center', justifyContent: 'center' },
+    tileState: { fontSize: 13, color: '#94A3B8', fontWeight: '600', marginTop: 4 },
+    tileName: { fontSize: 15, fontWeight: '600', color: '#CBD5E1', marginTop: 12 },
+    tileActiveCover: { backgroundColor: 'rgba(59, 130, 246, 0.15)', borderColor: 'rgba(59, 130, 246, 0.5)' },
+    miniBtn: { flex: 1, height: 32, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' },
+    miniBtnText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+
+    // Röbi
+    robiContent: {},
+    robiActions: { flexDirection: 'row', gap: 12, marginBottom: 24 },
+    robiBigBtn: { flex: 1, backgroundColor: '#10B981', borderRadius: 16, padding: 20, alignItems: 'center', gap: 8 },
+    robiHomeBtn: { backgroundColor: '#334155' },
+    robiBtnText: { color: '#fff', fontWeight: 'bold', textAlign: 'center' },
+    mapContainer: { width: '100%', aspectRatio: 16 / 9, backgroundColor: '#000', borderRadius: 16, overflow: 'hidden', marginBottom: 24 },
+    mapImage: { width: '100%', height: '100%' },
+    mapPlaceholder: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#1E293B' },
+    mapPlaceholderText: { color: '#64748B', marginTop: 12 },
+    liveBadge: { position: 'absolute', top: 12, left: 12, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, flexDirection: 'row', alignItems: 'center', gap: 6 },
+    pulseDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#EF4444' },
+    liveText: { color: '#fff', fontSize: 10, fontWeight: 'bold' },
+    scriptSection: {},
+    scriptTitle: { color: '#94A3B8', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: 12 },
+    scriptGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+    scriptBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(16, 185, 129, 0.15)', paddingHorizontal: 14, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(16, 185, 129, 0.3)' },
+    scriptText: { color: '#10B981', fontWeight: '600' },
+    errorText: { color: '#EF4444', textAlign: 'center', marginTop: 24 },
+});

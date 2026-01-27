@@ -25,29 +25,29 @@ export default function LoginScreen() {
     };
 
     return (
-        <SafeAreaView className="flex-1 bg-black justify-center p-6">
+        <SafeAreaView style={styles.container}>
             <Stack.Screen options={{ headerShown: false }} />
-            <View className="w-full max-w-sm mx-auto">
+            <View style={styles.content}>
                 {/* Logo */}
-                <View className="items-center mb-12">
-                    <View className="w-20 h-20 bg-blue-500 rounded-3xl items-center justify-center mb-6">
+                <View style={styles.logoContainer}>
+                    <View style={styles.logoCircle}>
                         <House stroke="white" size={32} />
                     </View>
-                    <Text className="text-4xl font-black text-white tracking-tight mb-2">
-                        SMARTHOME <Text className="text-blue-500">PRO</Text>
+                    <Text style={styles.title}>
+                        SMARTHOME <Text style={styles.titleHighlight}>PRO</Text>
                     </Text>
-                    <Text className="text-gray-500 text-xs font-bold uppercase tracking-widest">Powered by HA</Text>
+                    <Text style={styles.subtitle}>Powered by HA</Text>
                 </View>
 
                 {/* Form */}
-                <View className="bg-white/5 p-8 rounded-[3rem] border border-white/10">
-                    <Text className="text-3xl font-black text-white text-center mb-2">Willkommen</Text>
-                    <Text className="text-slate-400 text-center mb-8">Melde dich an</Text>
+                <View style={styles.formCard}>
+                    <Text style={styles.cardTitle}>Willkommen</Text>
+                    <Text style={styles.cardSubtitle}>Melde dich an</Text>
 
-                    <View className="space-y-6">
-                        <View className="space-y-2">
-                            <Text className="text-xs font-bold text-slate-400 px-1">EMAIL</Text>
-                            <View className="bg-white/5 border border-white/10 rounded-xl flex-row items-center px-4">
+                    <View style={styles.formGroup}>
+                        <View style={styles.inputContainer}>
+                            <Text style={styles.label}>EMAIL</Text>
+                            <View style={styles.inputWrapper}>
                                 <Mail stroke="#94a3b8" size={20} />
                                 <TextInput
                                     value={email}
@@ -56,14 +56,14 @@ export default function LoginScreen() {
                                     placeholderTextColor="#64748b"
                                     autoCapitalize="none"
                                     keyboardType="email-address"
-                                    className="flex-1 py-4 px-3 text-white"
+                                    style={styles.input}
                                 />
                             </View>
                         </View>
 
-                        <View className="space-y-2">
-                            <Text className="text-xs font-bold text-slate-400 px-1">PASSWORT</Text>
-                            <View className="bg-white/5 border border-white/10 rounded-xl flex-row items-center px-4">
+                        <View style={styles.inputContainer}>
+                            <Text style={styles.label}>PASSWORT</Text>
+                            <View style={styles.inputWrapper}>
                                 <Lock stroke="#94a3b8" size={20} />
                                 <TextInput
                                     value={password}
@@ -71,30 +71,32 @@ export default function LoginScreen() {
                                     placeholder="••••••••"
                                     placeholderTextColor="#64748b"
                                     secureTextEntry
-                                    className="flex-1 py-4 px-3 text-white"
+                                    style={styles.input}
                                 />
                             </View>
                         </View>
 
                         {error ? (
-                            <View className="bg-red-500/10 border border-red-500/20 rounded-2xl px-4 py-3 flex-row items-center gap-3">
+                            <View style={styles.errorBox}>
                                 <AlertTriangle stroke="#f87171" size={20} />
-                                <Text className="text-red-400 text-sm flex-1">{error}</Text>
+                                <Text style={styles.errorText}>{error}</Text>
                             </View>
                         ) : null}
 
                         <Pressable
                             onPress={handleSubmit}
                             disabled={loading}
-                            className={`w-full py-5 rounded-2xl flex-row items-center justify-center gap-3 shadow-lg ${loading ? 'bg-slate-800' : 'bg-blue-600 shadow-blue-500/20'
-                                }`}
+                            style={[
+                                styles.button,
+                                loading ? styles.buttonDisabled : styles.buttonActive
+                            ]}
                         >
                             {loading ? (
                                 <ActivityIndicator color="white" />
                             ) : (
                                 <LogIn stroke="white" size={24} />
                             )}
-                            <Text className={`font-black text-lg ${loading ? 'text-slate-500' : 'text-white'}`}>
+                            <Text style={[styles.buttonText, loading && styles.buttonTextDisabled]}>
                                 {loading ? 'BITTE WARTEN...' : 'ANMELDEN'}
                             </Text>
                         </Pressable>
@@ -104,3 +106,141 @@ export default function LoginScreen() {
         </SafeAreaView>
     );
 }
+
+import { StyleSheet } from 'react-native';
+
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: '#000',
+        justifyContent: 'center',
+        padding: 24,
+    },
+    content: {
+        width: '100%',
+        maxWidth: 384, // max-w-sm
+        alignSelf: 'center',
+    },
+    logoContainer: {
+        alignItems: 'center',
+        marginBottom: 48,
+    },
+    logoCircle: {
+        width: 80,
+        height: 80,
+        backgroundColor: '#3B82F6',
+        borderRadius: 24,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 24,
+    },
+    title: {
+        fontSize: 36,
+        fontWeight: '900',
+        color: '#fff',
+        letterSpacing: -1,
+        marginBottom: 8,
+    },
+    titleHighlight: {
+        color: '#3B82F6',
+    },
+    subtitle: {
+        color: '#6B7280',
+        fontSize: 10,
+        fontWeight: 'bold',
+        textTransform: 'uppercase',
+        letterSpacing: 3,
+    },
+    formCard: {
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        padding: 32,
+        borderRadius: 48,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.1)',
+    },
+    cardTitle: {
+        fontSize: 30,
+        fontWeight: '900',
+        color: '#fff',
+        textAlign: 'center',
+        marginBottom: 8,
+    },
+    cardSubtitle: {
+        color: '#94A3B8',
+        textAlign: 'center',
+        marginBottom: 32,
+    },
+    formGroup: {
+        gap: 24,
+    },
+    inputContainer: {
+        gap: 8,
+    },
+    label: {
+        fontSize: 10,
+        fontWeight: 'bold',
+        color: '#94A3B8',
+        paddingHorizontal: 4,
+    },
+    inputWrapper: {
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.1)',
+        borderRadius: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+    },
+    input: {
+        flex: 1,
+        paddingVertical: 16,
+        paddingHorizontal: 12,
+        color: 'white',
+    },
+    errorBox: {
+        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+        borderWidth: 1,
+        borderColor: 'rgba(239, 68, 68, 0.2)',
+        borderRadius: 16,
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    errorText: {
+        color: '#F87171',
+        fontSize: 14,
+        flex: 1,
+    },
+    button: {
+        width: '100%',
+        paddingVertical: 20,
+        borderRadius: 16,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 12,
+        shadowColor: '#3B82F6',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+        elevation: 4,
+    },
+    buttonActive: {
+        backgroundColor: '#2563EB',
+    },
+    buttonDisabled: {
+        backgroundColor: '#1E293B',
+        shadowOpacity: 0,
+        elevation: 0,
+    },
+    buttonText: {
+        fontWeight: '900',
+        fontSize: 18,
+        color: '#fff',
+    },
+    buttonTextDisabled: {
+        color: '#64748B',
+    },
+});

@@ -1,6 +1,7 @@
-import "../global.css";
+
 import { Slot, useRouter, useSegments } from "expo-router";
 import { AuthProvider, useAuth } from "../contexts/AuthContext";
+import { HomeAssistantProvider } from "../contexts/HomeAssistantContext";
 import { useEffect } from "react";
 import { View, ActivityIndicator } from "react-native";
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -26,7 +27,7 @@ function RootLayoutNav() {
 
     if (isLoading) {
         return (
-            <View className="flex-1 items-center justify-center bg-black">
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#000' }}>
                 <ActivityIndicator size="large" color="#3B82F6" />
             </View>
         );
@@ -39,7 +40,9 @@ export default function Layout() {
     return (
         <SafeAreaProvider>
             <AuthProvider>
-                <RootLayoutNav />
+                <HomeAssistantProvider>
+                    <RootLayoutNav />
+                </HomeAssistantProvider>
             </AuthProvider>
         </SafeAreaProvider>
     );
