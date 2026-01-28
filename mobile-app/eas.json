@@ -10,9 +10,7 @@
         "preview": {
             "distribution": "internal"
         },
-        "production": {
-            "autoSubmit": true
-        }
+        "production": {}
     },
     "submit": {
         "production": {}
