@@ -1,10 +1,135 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, Pressable, Alert, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform, useWindowDimensions, StyleSheet, Switch } from 'react-native';
+import { View, Text, TextInput, Pressable, Alert, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform, useWindowDimensions, StyleSheet, Switch, Linking, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { useHomeAssistant } from '../../contexts/HomeAssistantContext';
-import { Wifi, WifiOff, Save, LogOut, User, Server, Key, CheckCircle, XCircle, Shield, Bell, Palette, ChevronRight, LucideIcon } from 'lucide-react-native';
+import { Wifi, WifiOff, Save, LogOut, User, Server, Key, CheckCircle, XCircle, Shield, Bell, Palette, ChevronRight, LucideIcon, X } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onClose: () => void }) => {
+    const [settings, setSettings] = useState({
+        enabled: true,
+        security: true,
+        appliances: true,
+        updates: false
+    });
+
+    useEffect(() => {
+        loadSettings();
+    }, []);
+
+    const loadSettings = async () => {
+        try {
+            const saved = await AsyncStorage.getItem('notification_settings');
+            if (saved) {
+                setSettings(JSON.parse(saved));
+            }
+        } catch (e) {
+            console.error("Failed to load generic notification settings", e);
+        }
+    };
+
+    const toggleSetting = async (key: keyof typeof settings) => {
+        const newSettings = { ...settings, [key]: !settings[key] };
+        setSettings(newSettings);
+        try {
+            await AsyncStorage.setItem('notification_settings', JSON.stringify(newSettings));
+        } catch (e) {
+            console.error("Failed to save notification settings", e);
+        }
+    };
+
+    return (
+        <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+            <View style={styles.modalContainer}>
+                <View style={styles.modalHeader}>
+                    <Text style={styles.modalTitle}>Benachrichtigungen</Text>
+                    <Pressable onPress={onClose} style={styles.closeButton}>
+                        <X size={24} color="#94A3B8" />
+                    </Pressable>
+                </View>
+
+                <ScrollView style={styles.modalContent}>
+                    <View style={styles.settingGroup}>
+                        <View style={styles.settingRow}>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.settingLabel}>Benachrichtigungen erlauben</Text>
+                                <Text style={styles.settingDescription}>Generelle Erlaubnis für Push-Nachrichten</Text>
+                            </View>
+                            <Switch
+                                value={settings.enabled}
+                                onValueChange={() => toggleSetting('enabled')}
+                                trackColor={{ false: '#334155', true: '#3B82F6' }}
+                                thumbColor={'#fff'}
+                            />
+                        </View>
+                    </View>
+
+                    {settings.enabled && (
+                        <View style={styles.settingGroup}>
+                            <Text style={styles.groupTitle}>KATEGORIEN</Text>
+
+                            <View style={styles.settingRow}>
+                                <View style={styles.iconBadge}>
+                                    <Shield size={20} color="#EF4444" />
+                                </View>
+                                <View style={{ flex: 1, marginLeft: 12 }}>
+                                    <Text style={styles.settingLabel}>Sicherheit</Text>
+                                    <Text style={styles.settingDescription}>Haustüre, Alarme, Schlösser</Text>
+                                </View>
+                                <Switch
+                                    value={settings.security}
+                                    onValueChange={() => toggleSetting('security')}
+                                    trackColor={{ false: '#334155', true: '#3B82F6' }}
+                                    thumbColor={'#fff'}
+                                />
+                            </View>
+
+                            <View style={styles.settingRow}>
+                                <View style={[styles.iconBadge, { backgroundColor: 'rgba(59, 130, 246, 0.15)' }]}>
+                                    <Bell size={20} color="#3B82F6" />
+                                </View>
+                                <View style={{ flex: 1, marginLeft: 12 }}>
+                                    <Text style={styles.settingLabel}>Haushaltsgeräte</Text>
+                                    <Text style={styles.settingDescription}>Waschmaschine, Tumbler, Geschirrspüler</Text>
+                                </View>
+                                <Switch
+                                    value={settings.appliances}
+                                    onValueChange={() => toggleSetting('appliances')}
+                                    trackColor={{ false: '#334155', true: '#3B82F6' }}
+                                    thumbColor={'#fff'}
+                                />
+                            </View>
+
+                            <View style={styles.settingRow}>
+                                <View style={[styles.iconBadge, { backgroundColor: 'rgba(16, 185, 129, 0.15)' }]}>
+                                    <CheckCircle size={20} color="#10B981" />
+                                </View>
+                                <View style={{ flex: 1, marginLeft: 12 }}>
+                                    <Text style={styles.settingLabel}>Updates & Infos</Text>
+                                    <Text style={styles.settingDescription}>App Updates, Server Status</Text>
+                                </View>
+                                <Switch
+                                    value={settings.updates}
+                                    onValueChange={() => toggleSetting('updates')}
+                                    trackColor={{ false: '#334155', true: '#3B82F6' }}
+                                    thumbColor={'#fff'}
+                                />
+                            </View>
+                        </View>
+                    )}
+
+                    <View style={styles.infoBox}>
+                        <Text style={styles.infoText}>
+                            Hinweis: Einige kritische Warnungen können möglicherweise nicht deaktiviert werden.
+                        </Text>
+                    </View>
+                </ScrollView>
+            </View>
+        </Modal>
+    );
+};
 
 // =====================================================
 // CHILD COMPONENTS - Defined OUTSIDE of Settings
@@ -83,6 +208,7 @@ export default function Settings() {
     const [haToken, setHaToken] = useState('');
     const [isSaving, setIsSaving] = useState(false);
     const [testResult, setTestResult] = useState<'success' | 'error' | null>(null);
+    const [notificationModalVisible, setNotificationModalVisible] = useState(false);
 
     // Load saved credentials on mount
     useEffect(() => {
@@ -296,8 +422,9 @@ export default function Settings() {
                             icon={<Bell size={20} color="#F59E0B" />}
                             iconColor="#F59E0B"
                             label="Benachrichtigungen"
-                            value="Aktiviert"
+                            value="Verwalten"
                             showChevron
+                            onPress={() => setNotificationModalVisible(true)}
                         />
                         <SettingsRow
                             icon={<Palette size={20} color="#8B5CF6" />}
@@ -330,6 +457,10 @@ export default function Settings() {
                     </Text>
                 </ScrollView>
             </KeyboardAvoidingView>
+            <NotificationSettingsModal
+                visible={notificationModalVisible}
+                onClose={() => setNotificationModalVisible(false)}
+            />
         </SafeAreaView>
     );
 }
@@ -434,65 +565,65 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         alignItems: 'center',
         justifyContent: 'center',
+        marginRight: 12,
     },
     rowContent: {
         flex: 1,
-        marginLeft: 12,
     },
     rowLabel: {
-        color: '#fff',
-        fontWeight: '500',
         fontSize: 16,
+        color: '#fff',
+        fontWeight: '600',
     },
     rowValue: {
-        color: '#64748B',
         fontSize: 14,
+        color: '#94A3B8',
         marginTop: 2,
     },
 
-    // Status Row
+    // Status
     statusRow: {
-        padding: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: '#1E293B',
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
+        padding: 16,
+        backgroundColor: '#0F172A',
+        borderBottomWidth: 1,
+        borderBottomColor: '#1E293B',
     },
     statusInfo: {
         flexDirection: 'row',
         alignItems: 'center',
     },
     statusIcon: {
-        width: 40,
-        height: 40,
+        width: 36,
+        height: 36,
         borderRadius: 12,
         alignItems: 'center',
         justifyContent: 'center',
+        marginRight: 12,
     },
     statusIconSuccess: {
-        backgroundColor: 'rgba(34,197,94,0.15)',
+        backgroundColor: 'rgba(34, 197, 94, 0.1)',
     },
     statusIconError: {
-        backgroundColor: 'rgba(239,68,68,0.15)',
+        backgroundColor: 'rgba(239, 68, 68, 0.1)',
     },
-    statusTextContainer: {
-        marginLeft: 12,
-    },
+    statusTextContainer: {},
     statusTitle: {
-        color: '#fff',
-        fontWeight: '500',
         fontSize: 16,
+        fontWeight: '600',
+        color: '#fff',
     },
     statusSubtitle: {
-        color: '#64748B',
-        fontSize: 14,
+        fontSize: 12,
+        color: '#94A3B8',
         marginTop: 2,
     },
     statusDot: {
-        width: 10,
-        height: 10,
-        borderRadius: 5,
+        width: 8,
+        height: 8,
+        borderRadius: 4,
     },
     bgSuccess: {
         backgroundColor: '#22C55E',
@@ -511,63 +642,67 @@ const styles = StyleSheet.create({
         borderBottomWidth: 0,
     },
     inputLabel: {
-        color: '#94A3B8',
-        fontSize: 14,
+        fontSize: 12,
+        fontWeight: '600',
+        color: '#64748B',
         marginBottom: 8,
+        textTransform: 'uppercase',
     },
     inputWrapper: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#1E293B',
+        backgroundColor: '#020617',
         borderRadius: 12,
         borderWidth: 1,
-        borderColor: '#334155',
-        overflow: 'hidden',
+        borderColor: '#1E293B',
+        paddingHorizontal: 12,
     },
     inputIcon: {
-        padding: 12,
+        marginRight: 12,
     },
     input: {
         flex: 1,
+        height: 44,
         color: '#fff',
-        paddingVertical: 12,
-        paddingRight: 12,
-        paddingLeft: 0,
-        fontSize: 16,
+        fontSize: 15,
     },
     helperText: {
-        color: '#64748B',
         fontSize: 12,
+        color: '#64748B',
         marginTop: 8,
+        marginLeft: 4,
     },
 
-    // Result
+    // Test Result
     resultContainer: {
-        margin: 16,
         flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'center',
         padding: 12,
+        marginHorizontal: 16,
+        marginBottom: 16,
         borderRadius: 12,
+        gap: 8,
     },
     resultSuccess: {
-        backgroundColor: 'rgba(34,197,94,0.1)',
+        backgroundColor: 'rgba(34, 197, 94, 0.1)',
         borderWidth: 1,
-        borderColor: 'rgba(34,197,94,0.2)',
+        borderColor: 'rgba(34, 197, 94, 0.3)',
     },
     resultError: {
-        backgroundColor: 'rgba(239,68,68,0.1)',
+        backgroundColor: 'rgba(239, 68, 68, 0.1)',
         borderWidth: 1,
-        borderColor: 'rgba(239,68,68,0.2)',
+        borderColor: 'rgba(239, 68, 68, 0.3)',
     },
     resultText: {
-        marginLeft: 8,
-        fontWeight: '500',
+        fontSize: 14,
+        fontWeight: '600',
     },
     textSuccess: {
-        color: '#4ADE80',
+        color: '#22C55E',
     },
     textError: {
-        color: '#F87171',
+        color: '#EF4444',
     },
 
     // Save Button
@@ -576,10 +711,10 @@ const styles = StyleSheet.create({
         paddingTop: 0,
     },
     saveButton: {
+        backgroundColor: '#3B82F6',
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#3B82F6',
         padding: 16,
         borderRadius: 14,
         gap: 8,
@@ -589,8 +724,8 @@ const styles = StyleSheet.create({
     },
     saveButtonText: {
         color: '#fff',
-        fontWeight: 'bold',
         fontSize: 16,
+        fontWeight: '600',
     },
 
     // Logout
@@ -598,24 +733,39 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: 'rgba(239,68,68,0.1)',
-        borderWidth: 1,
-        borderColor: 'rgba(239,68,68,0.2)',
         padding: 16,
+        backgroundColor: 'rgba(239, 68, 68, 0.1)',
         borderRadius: 16,
+        borderWidth: 1,
+        borderColor: 'rgba(239, 68, 68, 0.3)',
+        marginBottom: 32,
         gap: 8,
     },
     logoutText: {
-        color: '#F87171',
-        fontWeight: 'bold',
+        color: '#EF4444',
         fontSize: 16,
+        fontWeight: '600',
     },
 
-    // Version
+    // Footer
     versionText: {
-        color: '#475569',
         textAlign: 'center',
-        fontSize: 12,
-        marginTop: 24,
+        color: '#475569',
+        fontSize: 13,
     },
+
+    // New Modal Styles
+    modalContainer: { flex: 1, backgroundColor: '#020617' },
+    modalHeader: { padding: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#1E293B', paddingTop: 20 },
+    modalTitle: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
+    closeButton: { padding: 8, backgroundColor: '#1E293B', borderRadius: 12 },
+    modalContent: { flex: 1, padding: 20 },
+    settingGroup: { marginBottom: 32, backgroundColor: '#0F172A', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#1E293B' },
+    groupTitle: { color: '#64748B', fontSize: 12, fontWeight: '700', marginBottom: 16, textTransform: 'uppercase', letterSpacing: 1 },
+    settingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
+    settingLabel: { color: '#fff', fontSize: 16, fontWeight: '600', marginBottom: 4 },
+    settingDescription: { color: '#94A3B8', fontSize: 13, paddingRight: 16 },
+    iconBadge: { width: 40, height: 40, borderRadius: 12, backgroundColor: 'rgba(239, 68, 68, 0.15)', alignItems: 'center', justifyContent: 'center' },
+    infoBox: { padding: 16, backgroundColor: 'rgba(59, 130, 246, 0.1)', borderRadius: 12, marginBottom: 40 },
+    infoText: { color: '#60A5FA', fontSize: 13, textAlign: 'center' }
 });

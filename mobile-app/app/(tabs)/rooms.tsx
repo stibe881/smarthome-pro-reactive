@@ -364,27 +364,67 @@ export default function Rooms() {
 
     const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
 
+    // Allowed Rooms Configuration
+    const ALLOWED_ROOMS = [
+        'Wohnzimmer',
+        'Essbereich',
+        'Küche',
+        'Schlafzimmer',
+        'Levins Zimmer',
+        'Linas Zimmer',
+        'Büro',
+        'Bad',
+        'Gäste WC',
+        'Terrasse',
+        'Grillplatz',
+        'Balkon',
+        'Reduit',
+        'Waschküche',
+        'Highlight'
+    ];
+
     // Prepare rooms data
     const rooms = useMemo(() => {
-        const areaMap = new Map();
+        // Initialize with allowed rooms to preserve order
+        const areaMap = new Map<string, any>();
+        ALLOWED_ROOMS.forEach(room => {
+            areaMap.set(room, { lights: [], covers: [], sensors: [], climates: [], mediaPlayers: [] });
+        });
+
+        // Helper to find room for entity
+        const getRoomForEntity = (entity: any): string | null => {
+            const id = entity.entity_id.toLowerCase();
+            const name = (entity.attributes.friendly_name || '').toLowerCase();
+            const area = (entity.attributes.area_id || '').toLowerCase();
+
+            // Specific Mappings
+            if (name.includes('licht garage') || id.includes('garage') || name.includes('gäste wc')) return 'Gäste WC';
+            if (name.includes('badezimmer') || area.includes('badezimmer')) return 'Bad';
+            if (name.includes('büro') || area.includes('buro') || id.includes('buro')) return 'Büro';
+            if (name.includes('levin')) return 'Levins Zimmer';
+            if (name.includes('lina')) return 'Linas Zimmer';
+            if (name.includes('schlaf')) return 'Schlafzimmer';
+            if (name.includes('wohn') || name.includes('living')) return 'Wohnzimmer';
+            if (name.includes('ess') || name.includes('dining')) return 'Essbereich';
+            if (name.includes('küche') || name.includes('kueche') || name.includes('kitchen')) return 'Küche';
+            if (name.includes('reduit')) return 'Reduit';
+            if (name.includes('wasch') || name.includes('laundry')) return 'Waschküche';
+            if (name.includes('terrasse')) return 'Terrasse';
+            if (name.includes('grill')) return 'Grillplatz';
+            if (name.includes('balkon')) return 'Balkon';
+            if (name.includes('highlight')) return 'Highlight';
+
+            return null;
+        };
 
         entities.forEach(entity => {
-            const area = entity.attributes.area_id || entity.attributes.device_class;
-            if (!area) return;
-
-            // Try to get area from friendly_name pattern (e.g., "Wohnzimmer Licht 1")
-            const nameParts = (entity.attributes.friendly_name || entity.entity_id.split('.')[1] || '').split(' ');
-            let roomName = nameParts[0];
-
-            // Cleanup common prefixes/suffixes if needed or just use first word
-            if (roomName.includes('Röbi') || roomName.includes('Vacuum') || roomName.includes('Roborock') || roomName.includes('Dock') || roomName.includes('Station')) return;
-            if (roomName.length < 3 || /^\d+$/.test(roomName)) return;
-
-            if (!areaMap.has(roomName)) {
-                areaMap.set(roomName, { lights: [], covers: [], sensors: [], climates: [], mediaPlayers: [] });
-            }
+            const roomName = getRoomForEntity(entity);
+            if (!roomName || !areaMap.has(roomName)) return;
 
             const room = areaMap.get(roomName)!;
+
+            // Allow lights, covers, climates, media players
+            // Filter specific undesired entities if needed
             if (entity.entity_id.startsWith('light.')) room.lights.push(entity);
             else if (entity.entity_id.startsWith('cover.')) room.covers.push(entity);
             else if (entity.entity_id.startsWith('sensor.') && entity.attributes.unit_of_measurement === '°C') room.sensors.push(entity);
@@ -392,19 +432,23 @@ export default function Rooms() {
             else if (entity.entity_id.startsWith('media_player.')) room.mediaPlayers.push(entity);
         });
 
-        return Array.from(areaMap.entries())
-            .filter(([_, data]) =>
-                data.lights.length > 0 ||
-                data.covers.length > 0 ||
-                data.climates.length > 0 ||
-                data.mediaPlayers.length > 0
-            )
-            .map(([name, data], idx) => ({
-                name,
-                ...data,
-                gradient: ROOM_GRADIENTS[idx % ROOM_GRADIENTS.length],
-                icon: getRoomIcon(name)
-            }));
+        // Return only rooms that have at least one device, in the order of ALLOWED_ROOMS
+        return ALLOWED_ROOMS
+            .map(name => {
+                const data = areaMap.get(name);
+                return {
+                    name,
+                    ...data,
+                    gradient: ROOM_GRADIENTS[ALLOWED_ROOMS.indexOf(name) % ROOM_GRADIENTS.length],
+                    icon: getRoomIcon(name)
+                };
+            })
+            .filter(room =>
+                room.lights.length > 0 ||
+                room.covers.length > 0 ||
+                room.climates.length > 0 ||
+                room.mediaPlayers.length > 0
+            );
     }, [entities]);
 
     const activeRoomData = useMemo(() => rooms.find(r => r.name === selectedRoom), [rooms, selectedRoom]);

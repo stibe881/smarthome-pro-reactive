@@ -52,6 +52,7 @@ interface HomeAssistantContextType {
     getEntityPictureUrl: (entityPicture: string | undefined) => string | undefined;
     notificationSettings: NotificationSettings;
     updateNotificationSettings: (settings: NotificationSettings) => Promise<void>;
+    fetchCalendarEvents: (entityId: string, start: string, end: string) => Promise<any[]>;
 }
 
 const HomeAssistantContext = createContext<HomeAssistantContextType | undefined>(undefined);
@@ -322,33 +323,43 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
         return entityPicture;
     };
 
+    const fetchCalendarEvents = useCallback(async (entityId: string, start: string, end: string) => {
+        if (!serviceRef.current) return [];
+        return await serviceRef.current.fetchCalendarEvents(entityId, start, end);
+    }, []);
+
+    const value = {
+        entities,
+        isConnected,
+        isConnecting,
+        error,
+        haBaseUrl,
+        connect,
+        disconnect,
+        toggleLight,
+        setLightBrightness,
+        openCover,
+        closeCover,
+        setCoverPosition,
+        startVacuum,
+        pauseVacuum,
+        returnVacuum,
+        activateScene,
+        setClimateTemperature,
+        setClimateHvacMode,
+        playMedia,
+        browseMedia,
+        callService,
+        saveCredentials,
+        getCredentials,
+        getEntityPictureUrl,
+        notificationSettings,
+        updateNotificationSettings,
+        fetchCalendarEvents
+    };
+
     return (
-        <HomeAssistantContext.Provider value={{
-            entities,
-            isConnected,
-            isConnecting,
-            error,
-            haBaseUrl,
-            connect,
-            disconnect,
-            toggleLight,
-            setLightBrightness,
-            openCover,
-            closeCover,
-            setCoverPosition,
-            startVacuum,
-            pauseVacuum,
-            returnVacuum,
-            activateScene,
-            setClimateTemperature,
-            setClimateHvacMode,
-            playMedia,
-            browseMedia,
-            callService,
-            saveCredentials,
-            getCredentials,
-            getEntityPictureUrl
-        }}>
+        <HomeAssistantContext.Provider value={value}>
             {children}
         </HomeAssistantContext.Provider>
     );
@@ -357,8 +368,8 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
 
 export function useHomeAssistant() {
     const context = useContext(HomeAssistantContext);
-    if (!context) {
-        throw new Error('useHomeAssistant must be used within HomeAssistantProvider');
+    if (context === undefined) {
+        throw new Error('useHomeAssistant must be used within a HomeAssistantProvider');
     }
     return context;
 }

@@ -1,13 +1,17 @@
 import React, { useMemo, useState, useCallback, memo, useEffect } from 'react';
 import { View, Text, ScrollView, Pressable, useWindowDimensions, Modal, StyleSheet, Image, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Notifications from 'expo-notifications';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useHomeAssistant } from '../../contexts/HomeAssistantContext';
 import {
-    Wifi, WifiOff, Lightbulb, Blinds, Bot, RefreshCw,
-    Play, Moon, Tv, X, ChevronRight, Power, Sun, Thermometer,
-    Home, Zap, Wind, LucideIcon, Map, PlayCircle, Lock, Unlock,
-    Calendar, Clock, Shirt, UtensilsCrossed, Droplets, PartyPopper,
-    DoorOpen, BedDouble
+    Wifi, WifiOff, Bot, RefreshCw,
+    Play, Moon, Tv, ChevronRight, Power, Zap,
+    LucideIcon,
+    BedDouble,
+    Thermometer, Sun, CloudRain, Lock, Unlock, Loader2, X, Fan,
+    Lightbulb, Blinds, Music, Battery, Shirt, Wind, UtensilsCrossed,
+    Calendar, PlayCircle, Home, Map, PartyPopper, DoorOpen, Clock, MapPin
 } from 'lucide-react-native';
 // LinearGradient removed to fix compatibility issue
 
@@ -120,47 +124,42 @@ const Tile = ({ label, subtext, icon: Icon, iconColor, activeColor, isActive, on
     </Pressable>
 );
 
-const ApplianceStatusTile = ({ entity }: { entity: any }) => {
-    // Determine active status
-    const isRunning = entity.state === 'on' || entity.state === 'running' || entity.state === 'cleaning' || (entity.attributes.power && entity.attributes.power > 5);
-    const isFinished = entity.state === 'finished' || entity.state === 'program_finished' || entity.state === 'fertig';
+const SpecificApplianceTile = ({
+    label,
+    icon: Icon,
+    statusText,
+    isRunning,
+    isFinished,
+    compact = false
+}: {
+    label: string,
+    icon: LucideIcon,
+    statusText: string,
+    isRunning: boolean,
+    isFinished: boolean,
+    compact?: boolean
+}) => {
+    // Only show if running or finished
+    if (!statusText) return null;
 
-    // Safety check: if not running/finished, don't show (user requested removal)
-    if (!isRunning && !isFinished) return null;
-
-    const friendlyName = entity.attributes.friendly_name || entity.entity_id;
-
-    // Determine Icon
-    let Icon = RefreshCw;
-    if (friendlyName.toLowerCase().includes('geschirr') || friendlyName.toLowerCase().includes('spül')) Icon = UtensilsCrossed;
-    else if (friendlyName.toLowerCase().includes('trock') || friendlyName.toLowerCase().includes('tumb')) Icon = Wind;
-    else if (friendlyName.toLowerCase().includes('wasch')) Icon = Shirt;
-
-    // Remaining Time logic
-    let statusText = entity.state;
-    const remaining = entity.attributes.remaining_time || entity.attributes.remain_time || entity.attributes.completion_time || entity.attributes.finish_at;
-
-    if (remaining) {
-        // If it's a timestamp
-        if (remaining.includes && (remaining.includes('T') || remaining.includes(':'))) {
-            // Try to parse if it's a timestamp like 2026-01-27T... or duration
-            if (remaining.length < 10 && remaining.includes(':')) {
-                statusText = `Noch ${remaining}`;
-            } else {
-                const finishTime = new Date(remaining);
-                if (!isNaN(finishTime.getTime())) {
-                    statusText = `Fertig um ${finishTime.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}`;
-                } else {
-                    statusText = remaining;
-                }
-            }
-        } else {
-            statusText = `Noch ${remaining} Min`;
-        }
-    } else if (isFinished) {
-        statusText = 'Fertig';
-    } else if (isRunning) {
-        statusText = 'Läuft';
+    if (compact) {
+        return (
+            <View style={[styles.applianceStatusCard, styles.applianceStatusCardCompact, isRunning ? styles.applianceRunning : styles.applianceFinished]}>
+                <View style={[styles.applianceStatusIcon, { marginBottom: 8, marginRight: 0 }, isRunning ? { backgroundColor: '#3B82F6' } : { backgroundColor: '#10B981' }]}>
+                    <Icon size={20} color="#fff" />
+                    {isRunning && <ActivityIndicator size="small" color="#fff" style={{ position: 'absolute', top: -4, right: -4, transform: [{ scale: 0.7 }] }} />}
+                    {isFinished && (
+                        <View style={[styles.finishedBadge, { position: 'absolute', top: -4, right: -4, width: 16, height: 16 }]}>
+                            <Text style={[styles.finishedText, { fontSize: 8 }]}>✓</Text>
+                        </View>
+                    )}
+                </View>
+                <View style={{ alignItems: 'center' }}>
+                    <Text style={[styles.applianceTime, { textAlign: 'center', fontSize: 12, marginBottom: 2, fontWeight: 'bold', color: isRunning ? '#fff' : '#10B981' }]}>{statusText}</Text>
+                    <Text style={[styles.applianceName, { textAlign: 'center', fontSize: 10, opacity: 0.7 }]} numberOfLines={1}>{label}</Text>
+                </View>
+            </View>
+        );
     }
 
     return (
@@ -169,7 +168,7 @@ const ApplianceStatusTile = ({ entity }: { entity: any }) => {
                 <Icon size={20} color="#fff" />
             </View>
             <View style={styles.applianceInfo}>
-                <Text style={styles.applianceName} numberOfLines={1}>{friendlyName}</Text>
+                <Text style={styles.applianceName} numberOfLines={1}>{label}</Text>
                 <Text style={styles.applianceTime}>{statusText}</Text>
             </View>
             {isRunning && <ActivityIndicator size="small" color="#3B82F6" style={{ marginLeft: 8 }} />}
@@ -183,7 +182,10 @@ const LockTile = ({ lock, callService }: { lock: any, callService: any }) => {
     const isUnlocked = lock.state === 'unlocked';
     const isJammed = lock.state === 'jammed';
 
-    const friendlyName = lock.attributes.friendly_name || 'Haustür';
+    let friendlyName = lock.attributes.friendly_name || 'Haustür';
+    if (friendlyName.toLowerCase().includes('smart lock') || friendlyName.toLowerCase().includes('nuki')) {
+        friendlyName = 'Wohnungstüre';
+    }
 
     const toggleLock = () => {
         if (isLocked) {
@@ -197,10 +199,20 @@ const LockTile = ({ lock, callService }: { lock: any, callService: any }) => {
     };
 
     const openDoor = () => {
-        Alert.alert('Tür öffnen', `Möchtest du die Falle von ${friendlyName} ziehen (Tür öffnen)?`, [
-            { text: 'Abbrechen', style: 'cancel' },
-            { text: 'ÖFFNEN', style: 'destructive', onPress: () => callService('lock', 'open', lock.entity_id) }
-        ]);
+        // Check if this is the front door (Haustür)
+        const isHaustuer = lock.entity_id.includes('haustuer') || lock.entity_id.includes('haustür') || (lock.attributes.friendly_name && lock.attributes.friendly_name.toLowerCase().includes('haustür'));
+
+        if (isHaustuer) {
+            Alert.alert('Tür öffnen', `Möchtest du die Haustür öffnen?`, [
+                { text: 'Abbrechen', style: 'cancel' },
+                { text: 'ÖFFNEN', style: 'destructive', onPress: () => callService('button', 'press', 'button.hausture_tur_offnen') }
+            ]);
+        } else {
+            Alert.alert('Tür öffnen', `Möchtest du die Falle von ${friendlyName} ziehen (Tür öffnen)?`, [
+                { text: 'Abbrechen', style: 'cancel' },
+                { text: 'ÖFFNEN', style: 'destructive', onPress: () => callService('lock', 'open', lock.entity_id) }
+            ]);
+        }
     };
 
     return (
@@ -228,7 +240,198 @@ const LockTile = ({ lock, callService }: { lock: any, callService: any }) => {
     )
 };
 
-const EventTile = ({ calendar }: { calendar: any }) => {
+const DoorOpenerTile = ({ entity, callService }: { entity: any, callService: any }) => {
+    const friendlyName = "Haustüre"; // Hardcoded specific name for this specific button
+
+    const pressOpener = () => {
+        Alert.alert('Tür öffnen', `Möchtest du die ${friendlyName} öffnen?`, [
+            { text: 'Abbrechen', style: 'cancel' },
+            {
+                text: 'ÖFFNEN',
+                style: 'destructive',
+                onPress: async () => {
+                    callService('button', 'press', entity.entity_id);
+
+                    // Local notification confirmation
+                    try {
+                        const settingsJson = await AsyncStorage.getItem('notification_settings');
+                        const settings = settingsJson ? JSON.parse(settingsJson) : { enabled: true, security: true };
+
+                        if (settings.enabled && settings.security) {
+                            await Notifications.scheduleNotificationAsync({
+                                content: {
+                                    title: "Security Center",
+                                    body: "Die Haustüre wurde geöffnet",
+                                    sound: 'default',
+                                },
+                                trigger: null, // immediate
+                            });
+                        }
+                    } catch (e) {
+                        console.error("Failed to send notification", e);
+                    }
+                }
+            }
+        ]);
+    };
+
+    return (
+        <View style={styles.lockCard}>
+            <View style={styles.lockMainAction}>
+                <View style={[styles.lockIcon, { backgroundColor: '#3B82F6' }]}>
+                    <DoorOpen size={24} color="#fff" />
+                </View>
+                <View style={styles.lockInfo}>
+                    <Text style={styles.lockTitle}>
+                        {friendlyName}
+                    </Text>
+                    {/* <Text style={styles.lockState}>
+                        TÜRÖFFNER
+                    </Text> */}
+                </View>
+            </View>
+
+            {/* OPEN Button */}
+            <Pressable onPress={pressOpener} style={styles.openDoorBtn}>
+                <DoorOpen size={20} color="#3B82F6" />
+                <Text style={styles.openDoorText}>Öffnen</Text>
+            </Pressable>
+        </View>
+    );
+};
+
+// --- Calendar Modal Component ---
+const CalendarModal = ({
+    visible,
+    onClose,
+    entityId,
+    title,
+    accentColor = '#3B82F6'
+}: {
+    visible: boolean;
+    onClose: () => void;
+    entityId: string;
+    title: string;
+    accentColor?: string;
+}) => {
+    const { fetchCalendarEvents } = useHomeAssistant();
+    const [events, setEvents] = useState<any[]>([]);
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        if (visible && entityId) {
+            loadEvents();
+        }
+    }, [visible, entityId]);
+
+    const loadEvents = async () => {
+        setLoading(true);
+        const now = new Date();
+        const endDate = new Date();
+        endDate.setDate(now.getDate() + 21); // 21 days preview
+
+        try {
+            const result = await fetchCalendarEvents(entityId, now.toISOString(), endDate.toISOString());
+            setEvents(result || []);
+        } catch (e) {
+            console.error("Failed to load events", e);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const groupEventsByDay = (events: any[]) => {
+        const groups: { [key: string]: any[] } = {};
+        events.forEach(event => {
+            const dateStr = event.start.dateTime || event.start.date || '';
+            const date = new Date(dateStr).toDateString();
+            if (!groups[date]) groups[date] = [];
+            groups[date].push(event);
+        });
+        return groups;
+    };
+
+    const groupedEvents = groupEventsByDay(events);
+    const sortedDates = Object.keys(groupedEvents).sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+
+    return (
+        <Modal visible={visible} animationType="slide" transparent={true} onRequestClose={onClose}>
+            <View style={styles.modalOverlay}>
+                <View style={[styles.modalContent, { backgroundColor: '#0F172A' }]}>
+                    <View style={[styles.modalHeader, { backgroundColor: 'transparent', paddingTop: 60, paddingBottom: 20 }]}>
+                        <View>
+                            <Text style={{ fontSize: 13, color: accentColor, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 }}>KALENDER</Text>
+                            <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#fff' }}>{title}</Text>
+                        </View>
+                        <Pressable onPress={onClose} style={styles.closeBtn}>
+                            <X size={24} color="#fff" />
+                        </Pressable>
+                    </View>
+
+                    <ScrollView style={{ flex: 1, paddingHorizontal: 20 }}>
+                        {loading ? (
+                            <View style={{ padding: 40, alignItems: 'center' }}>
+                                <ActivityIndicator size="large" color={accentColor} />
+                            </View>
+                        ) : (
+                            <View style={{ paddingBottom: 40 }}>
+                                {sortedDates.length === 0 ? (
+                                    <Text style={{ color: '#64748B', textAlign: 'center', marginTop: 40 }}>Keine Termine in den nächsten 21 Tagen</Text>
+                                ) : (
+                                    sortedDates.map(date => {
+                                        const eventDate = new Date(date);
+                                        const isToday = eventDate.toDateString() === new Date().toDateString();
+                                        const isTomorrow = new Date(new Date().setDate(new Date().getDate() + 1)).toDateString() === eventDate.toDateString();
+
+                                        const dayLabel = isToday ? 'Heute' : isTomorrow ? 'Morgen' : eventDate.toLocaleDateString('de-DE', { weekday: 'long' });
+                                        const dateLabel = eventDate.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
+
+                                        return (
+                                            <View key={date} style={{ marginBottom: 24 }}>
+                                                <View style={{ flexDirection: 'row', alignItems: 'baseline', marginBottom: 12 }}>
+                                                    <Text style={{ color: isToday ? accentColor : '#94A3B8', fontWeight: 'bold', fontSize: 16 }}>{dayLabel}</Text>
+                                                    <Text style={{ color: '#64748B', fontSize: 13, marginLeft: 8 }}>{dateLabel}</Text>
+                                                </View>
+
+                                                {groupedEvents[date].map((event, idx) => {
+                                                    const hasTime = !!event.start.dateTime;
+                                                    const timeStr = hasTime ? new Date(event.start.dateTime!).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : 'Ganztägig';
+
+                                                    return (
+                                                        <View key={idx} style={{ flexDirection: 'row', marginBottom: 12, backgroundColor: '#1E293B', borderRadius: 12, overflow: 'hidden' }}>
+                                                            <View style={{ width: 4, backgroundColor: accentColor }} />
+                                                            <View style={{ padding: 12, flex: 1 }}>
+                                                                <Text style={{ color: '#fff', fontSize: 15, fontWeight: '600', marginBottom: 4 }}>{event.summary}</Text>
+                                                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                                                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                                                        <Clock size={12} color="#94A3B8" />
+                                                                        <Text style={{ color: '#94A3B8', fontSize: 12 }}>{timeStr}</Text>
+                                                                    </View>
+                                                                    {event.location && (
+                                                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1 }}>
+                                                                            <MapPin size={12} color="#94A3B8" />
+                                                                            <Text style={{ color: '#94A3B8', fontSize: 12 }} numberOfLines={1}>{event.location}</Text>
+                                                                        </View>
+                                                                    )}
+                                                                </View>
+                                                            </View>
+                                                        </View>
+                                                    );
+                                                })}
+                                            </View>
+                                        );
+                                    })
+                                )}
+                            </View>
+                        )}
+                    </ScrollView>
+                </View>
+            </View>
+        </Modal>
+    );
+};
+
+const EventTile = ({ calendar, onPress }: { calendar: any, onPress?: () => void }) => {
     if (!calendar.attributes.message && !calendar.attributes.all_day) return null;
 
     const isBirthday = calendar.entity_id.includes('birth') || calendar.entity_id.includes('geburt') || calendar.attributes.message?.toLowerCase().includes('geburtstag');
@@ -236,17 +439,19 @@ const EventTile = ({ calendar }: { calendar: any }) => {
     const isToday = new Date().toDateString() === startTime.toDateString();
 
     return (
-        <View style={styles.eventCard}>
-            <View style={[styles.eventIcon, isBirthday ? { backgroundColor: '#EC4899' } : { backgroundColor: '#8B5CF6' }]}>
-                {isBirthday ? <PartyPopper size={20} color="#fff" /> : <Calendar size={20} color="#fff" />}
+        <Pressable onPress={onPress}>
+            <View style={styles.eventCard}>
+                <View style={[styles.eventIcon, isBirthday ? { backgroundColor: '#EC4899' } : { backgroundColor: '#8B5CF6' }]}>
+                    {isBirthday ? <PartyPopper size={20} color="#fff" /> : <Calendar size={20} color="#fff" />}
+                </View>
+                <View style={styles.eventInfo}>
+                    <Text style={styles.eventTitle} numberOfLines={1}>{calendar.attributes.message || 'Termin'}</Text>
+                    <Text style={styles.eventTime}>
+                        {isToday ? 'Heute' : startTime.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })} • {calendar.attributes.all_day ? 'Ganztägig' : startTime.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+                    </Text>
+                </View>
             </View>
-            <View style={styles.eventInfo}>
-                <Text style={styles.eventTitle} numberOfLines={1}>{calendar.attributes.message || 'Termin'}</Text>
-                <Text style={styles.eventTime}>
-                    {isToday ? 'Heute' : startTime.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })} • {calendar.attributes.all_day ? 'Ganztägig' : startTime.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
-                </Text>
-            </View>
-        </View>
+        </Pressable>
     );
 };
 
@@ -255,6 +460,20 @@ const EventTile = ({ calendar }: { calendar: any }) => {
 // =====================================================
 
 export default function Dashboard() {
+    // --- Calendar Modal Logic ---
+    const [calendarModal, setCalendarModal] = useState<{ visible: boolean, entityId: string, title: string, color: string }>({ visible: false, entityId: '', title: '', color: '' });
+
+    const handleCalendarPress = (calendar: any) => {
+        // Map to specific requested entities
+        // Logic: if birthday (geburtstage_2), else default (stefan_gross_stibe_me)
+        const isBirthday = calendar.entity_id.includes('birth') || calendar.entity_id.includes('geburt');
+        const entityId = isBirthday ? 'calendar.geburtstage_2' : 'calendar.stefan_gross_stibe_me';
+        const title = isBirthday ? 'Geburtstage' : 'Familien Kalender';
+        const color = isBirthday ? '#EC4899' : '#00BFFF';
+
+        setCalendarModal({ visible: true, entityId, title, color });
+    };
+
     const { width } = useWindowDimensions();
     const isTablet = width >= 768;
     const cardWidth = isTablet ? (width - 72) / 4 : (width - 48) / 2;
@@ -279,34 +498,147 @@ export default function Dashboard() {
     const [activeModal, setActiveModal] = useState<'lights' | 'covers' | 'robi' | null>(null);
 
     // Filter entities
-    const lights = useMemo(() => entities.filter(e => e.entity_id.startsWith('light.')), [entities]);
-    const covers = useMemo(() => entities.filter(e => e.entity_id.startsWith('cover.')), [entities]);
+    const lights = useMemo(() => {
+        const allowedLights = [
+            { id: 'light.wohnzimmer', name: '🛋️ Wohnzimmer' },
+            { id: 'light.essbereich', name: '🍽️ Essbereich' },
+            { id: 'light.kuche', name: '🍳 Küche' },
+            { id: 'light.linas_zimmer', name: "👧 Lina's Zimmer" },
+            { id: 'light.levins_zimmer', name: "👦 Levin's Zimmer" },
+            { id: 'light.schlafzimmer', name: '🛏️ Schlafzimmer' },
+            { id: 'light.badezimmer', name: '🚿 Badezimmer' },
+            { id: 'light.deckenbeleuchtung_buro', name: '🏢 Büro' },
+            { id: 'light.licht_garage', name: '🚽 Gäste WC' },
+        ];
+
+        return allowedLights.map(def => {
+            const entity = entities.find(e => e.entity_id === def.id);
+            if (!entity) return null;
+            // Override friendly name for display
+            return {
+                ...entity,
+                attributes: {
+                    ...entity.attributes,
+                    friendly_name: def.name
+                }
+            };
+        }).filter(Boolean) as any[];
+    }, [entities]);
+
+    const covers = useMemo(() => {
+        const allowedCovers = [
+            { id: 'cover.alle_storen', name: 'Alle Storen' },
+            { id: 'cover.terrasse', name: '🪴 Terrasse' },
+            { id: 'cover.wohnzimmer_sofa', name: '🛋️ Wohnzimmer' },
+            { id: 'cover.wohnzimmer_spielplaetzchen', name: '🧸 Spielplätzchen' },
+            { id: 'cover.essbereich', name: '🍽️ Essbereich' },
+            { id: 'cover.kuche', name: '🍳 Küche' },
+        ];
+
+        return allowedCovers.map(def => {
+            const entity = entities.find(e => e.entity_id === def.id);
+            if (!entity) return null;
+            return {
+                ...entity,
+                attributes: {
+                    ...entity.attributes,
+                    friendly_name: def.name
+                }
+            };
+        }).filter(Boolean) as any[];
+    }, [entities]);
     const vacuums = useMemo(() => entities.filter(e => e.entity_id.startsWith('vacuum.')), [entities]);
     const mediaPlayers = useMemo(() => entities.filter(e => e.entity_id.startsWith('media_player.')), [entities]);
     const climate = useMemo(() => entities.filter(e => e.entity_id.startsWith('climate.')), [entities]);
-    const locks = useMemo(() => entities.filter(e => e.entity_id.startsWith('lock.')), [entities]);
+    const securityEntities = useMemo(() => {
+        const locks = entities.filter(e => e.entity_id.startsWith('lock.'));
+        const haustuerButton = entities.find(e => e.entity_id === 'button.hausture_tur_offnen');
+
+        // Combine them
+        const result = [...locks];
+        if (haustuerButton) result.push(haustuerButton);
+        return result;
+    }, [entities]);
     const calendars = useMemo(() => entities.filter(e => e.entity_id.startsWith('calendar.')).filter(c => c.state === 'on' || c.attributes.message), [entities]);
 
-    // Fuzzy search for appliances
-    const appliances = useMemo(() => entities.filter(e => {
-        const id = e.entity_id.toLowerCase();
-        const name = (e.attributes.friendly_name || '').toLowerCase();
-        const isDevice = id.includes('wasch') || id.includes('tumb') || id.includes('trock') || id.includes('geschirr') || id.includes('spül') || id.includes('spuel') ||
-            name.includes('wasch') || name.includes('tumbler') || name.includes('trockner') || name.includes('geschirr') || name.includes('spülmaschine');
-        const isMeaningful = e.entity_id.startsWith('sensor.') || e.entity_id.startsWith('switch.') || e.entity_id.startsWith('binary_sensor.') || e.entity_id.startsWith('input_boolean.');
-        return isDevice && isMeaningful;
-    }), [entities]);
+    // --- Specific Appliance Logic ---
 
-    // Filter out power sensors if we have status sensors (simple heuristic: prefer 'status' or 'state' in name)
-    const displayAppliances = useMemo(() => {
-        // Sort: Running/Finished first
-        const relevant = appliances.filter(a => !a.entity_id.includes('power') && !a.entity_id.includes('energy') && !a.entity_id.includes('meter'));
-        return relevant.sort((a, b) => {
-            const aRunning = a.state === 'running' || a.state === 'on';
-            const bRunning = b.state === 'running' || b.state === 'on';
-            return (aRunning === bRunning) ? 0 : aRunning ? -1 : 1;
-        });
-    }, [appliances]);
+    // 1. Dishwasher
+    const dishwasherStatus = useMemo(() => {
+        const progEnde = entities.find(e => e.entity_id === 'sensor.adoradish_v2000_programm_ende');
+        const prog = entities.find(e => e.entity_id === 'sensor.adoradish_v2000_programm');
+
+        if (!progEnde && !prog) return null;
+
+        // Check End Time
+        if (progEnde && !['unknown', 'unavailable', 'None', ''].includes(progEnde.state)) {
+            const endDate = new Date(progEnde.state);
+            const now = new Date();
+            const diffMs = endDate.getTime() - now.getTime();
+
+            if (diffMs > 0) {
+                const hours = Math.floor(diffMs / (1000 * 60 * 60));
+                const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+                let timeStr = 'noch';
+                if (hours > 0) timeStr += ` ${hours} Std`;
+                if (minutes > 0) timeStr += ` ${minutes} Min`;
+                if (hours === 0 && minutes === 0) timeStr = 'noch < 1 Min';
+
+                return { isRunning: true, isFinished: false, text: timeStr };
+            }
+        }
+
+        // Check Status
+        if (prog && prog.state !== 'standby') {
+            return { isRunning: true, isFinished: false, text: prog.state };
+        }
+
+        // Else Finished
+        return { isRunning: false, isFinished: true, text: 'Geschirrspüler fertig!' };
+    }, [entities]);
+
+    // 2. Washing Machine
+    const washerStatus = useMemo(() => {
+        const progEndeRoh = entities.find(e => e.entity_id === 'sensor.adorawash_v4000_program_ende_rohwert');
+        const progEnde = entities.find(e => e.entity_id === 'sensor.adorawash_v4000_programm_ende');
+
+        if (!progEndeRoh && !progEnde) return null;
+
+        // Check Rohwert (XhYY)
+        if (progEndeRoh && !['unknown', 'unavailable', 'None', '', '0h00'].includes(progEndeRoh.state)) {
+            const parts = progEndeRoh.state.split('h');
+            if (parts.length === 2) {
+                const hours = parseInt(parts[0]);
+                const minutes = parseInt(parts[1]);
+                let timeStr = 'noch';
+                if (hours > 0) timeStr += ` ${hours} Std`;
+                if (minutes > 0) timeStr += ` ${minutes} Min`;
+
+                return { isRunning: true, isFinished: false, text: timeStr };
+            }
+        }
+
+        // Check logic for "finished"
+        if (progEnde && (progEnde.state === 'unknown' || progEnde.state === 'unavailable')) {
+            return { isRunning: false, isFinished: true, text: 'Waschmaschine fertig!' };
+        }
+
+        // Else nothing (YAML didn't specify an else for Washer)
+        return null;
+    }, [entities]);
+
+    // 3. Tumbler
+    const tumblerStatus = useMemo(() => {
+        const current = entities.find(e => e.entity_id === 'sensor.001015699ea263_current');
+        if (!current) return null;
+
+        const val = parseFloat(current.state);
+        if (!isNaN(val) && val >= 12) {
+            return { isRunning: true, isFinished: false, text: 'am trocknen' };
+        } else {
+            return { isRunning: false, isFinished: true, text: 'Tumbler fertig!' };
+        }
+    }, [entities]);
 
     // Find Röbi and Cameras
     const robi = useMemo(() => vacuums.find(v => v.entity_id.includes('robi') || v.attributes.friendly_name?.includes('Röbi')) || vacuums[0], [vacuums]);
@@ -378,6 +710,14 @@ export default function Dashboard() {
                         </Pressable>
                     </View>
                 </View>
+                {/* Calendar Modal */}
+                <CalendarModal
+                    visible={calendarModal.visible}
+                    onClose={() => setCalendarModal({ ...calendarModal, visible: false })}
+                    entityId={calendarModal.entityId}
+                    title={calendarModal.title}
+                    accentColor={calendarModal.color}
+                />
             </SafeAreaView>
         );
     }
@@ -413,24 +753,51 @@ export default function Dashboard() {
                 </View>
 
                 {/* --- APPLIANCE STATUS ROW (Dynamic) --- */}
-                {/* Only shows if something is running or finished */}
-                {displayAppliances.length > 0 && (
-                    <View style={[styles.applianceRow, { marginBottom: 16 }]}>
-                        {displayAppliances.map(app => (
-                            <ApplianceStatusTile key={app.entity_id} entity={app} />
-                        ))}
-                    </View>
-                )}
+                {/* --- APPLIANCE STATUS ROW (Specific) --- */}
+                {(() => {
+                    const activeAppliances = [
+                        { status: dishwasherStatus, label: 'Geschirrspüler', icon: UtensilsCrossed },
+                        { status: washerStatus, label: 'Waschmaschine', icon: Shirt },
+                        { status: tumblerStatus, label: 'Tumbler', icon: Wind },
+                    ].filter(item => item.status !== null);
+
+                    if (activeAppliances.length === 0) return null;
+
+                    return (
+                        <View style={[styles.applianceRow, { marginBottom: 16, flexDirection: 'row' }]}>
+                            {activeAppliances.map((app, index) => (
+                                <View key={index} style={{ flex: 1 }}>
+                                    <SpecificApplianceTile
+                                        label={app.label}
+                                        icon={app.icon}
+                                        statusText={app.status!.text}
+                                        isRunning={app.status!.isRunning}
+                                        isFinished={app.status!.isFinished}
+                                        compact={true}
+                                    />
+                                </View>
+                            ))}
+                        </View>
+                    );
+                })()}
 
 
-                {/* --- EXTRA INFOS (Locks, Calendar) --- */}
-                {(locks.length > 0 || calendars.length > 0) && (
+
+
+                {/* --- EXTRA INFOS (Security: Locks & Haustüre) --- */}
+                {(securityEntities.length > 0 || calendars.length > 0) && (
                     <View style={styles.infoRow}>
-                        {/* Security Section if locks exist */}
-                        {locks.length > 0 && (
-                            <View style={{ flex: 1 }}>
-                                {locks.map(lock => (
-                                    <LockTile key={lock.entity_id} lock={lock} callService={callService} />
+                        {/* Security Section */}
+                        {securityEntities.length > 0 && (
+                            <View style={{ flexDirection: 'row', gap: 8 }}>
+                                {securityEntities.map(item => (
+                                    <View key={item.entity_id} style={{ flex: 1 }}>
+                                        {item.entity_id.startsWith('lock.') ? (
+                                            <LockTile lock={item} callService={callService} />
+                                        ) : (
+                                            <DoorOpenerTile entity={item} callService={callService} />
+                                        )}
+                                    </View>
                                 ))}
                             </View>
                         )}
@@ -442,7 +809,7 @@ export default function Dashboard() {
                         <Text style={styles.sectionTitleSmall}>Nächste Termine</Text>
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
                             {calendars.map(calendar => (
-                                <EventTile key={calendar.entity_id} calendar={calendar} />
+                                <EventTile key={calendar.entity_id} calendar={calendar} onPress={() => handleCalendarPress(calendar)} />
                             ))}
                         </ScrollView>
                     </View>
@@ -559,7 +926,7 @@ export default function Dashboard() {
                                     <View key={c.entity_id} style={{ width: tileWidth }}>
                                         <Tile
                                             label={c.attributes.friendly_name || c.entity_id}
-                                            subtext={c.attributes.current_position ? `${c.attributes.current_position}%` : c.state}
+                                            subtext={c.attributes?.current_position != null ? `${c.attributes?.current_position}%` : c.state}
                                             icon={Blinds}
                                             iconColor="#64748B"
                                             activeColor="#3B82F6"
@@ -651,6 +1018,15 @@ export default function Dashboard() {
                     </View>
                 </View>
             </Modal>
+
+            {/* Calendar Modal */}
+            <CalendarModal
+                visible={calendarModal.visible}
+                onClose={() => setCalendarModal({ ...calendarModal, visible: false })}
+                entityId={calendarModal.entityId}
+                title={calendarModal.title}
+                accentColor={calendarModal.color}
+            />
         </SafeAreaView>
     );
 }
@@ -696,6 +1072,7 @@ const styles = StyleSheet.create({
     // Appliances (Dynamic Row)
     applianceRow: { gap: 8 },
     applianceStatusCard: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 16, backgroundColor: '#1E293B', borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
+    applianceStatusCardCompact: { flexDirection: 'column', paddingHorizontal: 4, paddingVertical: 12, justifyContent: 'center', flex: 1 },
     applianceRunning: { backgroundColor: 'rgba(59,130,246,0.1)', borderColor: '#3B82F6' },
     applianceFinished: { backgroundColor: 'rgba(16, 185, 129, 0.1)', borderColor: '#10B981' },
     applianceStatusIcon: { width: 32, height: 32, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.05)', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
@@ -707,7 +1084,7 @@ const styles = StyleSheet.create({
 
     // Info Row (Locks & Events)
     infoRow: { marginBottom: 28 },
-    lockCard: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 20, backgroundColor: '#1E293B', marginBottom: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
+    lockCard: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 20, backgroundColor: '#1E293B', marginBottom: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)', flex: 1 },
     lockCardOpen: { backgroundColor: 'rgba(239, 68, 68, 0.1)', borderColor: 'rgba(239, 68, 68, 0.4)' },
     lockMainAction: { flex: 1, flexDirection: 'row', alignItems: 'center' },
     lockIcon: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
