@@ -8,7 +8,7 @@ import {
     Briefcase, Baby, Dumbbell, Shirt, TreeDeciduous, Droplets,
     Thermometer, Gamepad2, BookOpen, Armchair, DoorOpen, ChevronUp,
     ParkingSquare, Flower2, Sun, Moon, LucideIcon,
-    Wind, Fan, Play, Pause, Square, Volume2, Tv, Timer, Rocket, Heart, Music, Coffee, Zap
+    Wind, Fan, Play, Pause, Square, Volume2, Tv, Timer, Heart, Music, Coffee, Zap
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Slider from '@react-native-community/slider';
@@ -114,7 +114,7 @@ const SceneTile = memo(({ scene, activateScene, width }: any) => {
 const getRoomIcon = (roomName: string): LucideIcon => {
     const name = roomName.toLowerCase();
     if (name.includes('wohn') || name.includes('living')) return Sofa;
-    if (name.includes('levin')) return Rocket;
+    if (name.includes('levin')) return Gamepad2;
     if (name.includes('schlaf') || name.includes('bed')) return Bed;
     if (name.includes('küche') || name.includes('kueche') || name.includes('kitchen')) return UtensilsCrossed;
     if (name.includes('bad') || name.includes('bath') || name.includes('wc') || name.includes('toilet')) return Bath;

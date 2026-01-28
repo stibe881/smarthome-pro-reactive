@@ -14,6 +14,7 @@ interface AuthContextType {
     isBiometricsEnabled: boolean;
     toggleBiometrics: () => Promise<void>;
     authenticateWithBiometrics: () => Promise<boolean>;
+    biometricLogin: () => Promise<boolean>;
     login: (email: string, password: string) => Promise<void>;
     register: (email: string, password: string) => Promise<void>;
     logout: () => Promise<void>;
@@ -61,6 +62,21 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
     };
 
+    // Credential storage helpers (Simple/Insecure for Hotfix - should use SecureStore)
+    const storeCredentials = async (e: string, p: string) => {
+        try {
+            await AsyncStorage.setItem('biometric_email', e);
+            await AsyncStorage.setItem('biometric_password', p);
+        } catch (err) { console.warn('Failed to store credentials', err); }
+    };
+
+    const clearCredentials = async () => {
+        try {
+            await AsyncStorage.removeItem('biometric_email');
+            await AsyncStorage.removeItem('biometric_password');
+        } catch (err) { console.warn('Failed to clear credentials', err); }
+    };
+
     const toggleBiometrics = async () => {
         if (!isBiometricsSupported) {
             Alert.alert('Nicht verfügbar', 'Biometrie wird von diesem Gerät nicht unterstützt oder ist nicht eingerichtet.');
@@ -73,6 +89,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         if (newState) {
             const success = await authenticateWithBiometrics();
             if (!success) return; // Don't enable if check fails
+        } else {
+            // If disabling, clear stored credentials
+            await clearCredentials();
         }
 
         setIsBiometricsEnabled(newState);
@@ -90,6 +109,32 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         } catch (error) {
             console.error(error);
             return false;
+        }
+    };
+
+    const biometricLogin = async (): Promise<boolean> => {
+        if (!isBiometricsEnabled) return false;
+
+        const success = await authenticateWithBiometrics();
+        if (!success) return false;
+
+        setIsLoading(true);
+        try {
+            const email = await AsyncStorage.getItem('biometric_email');
+            const password = await AsyncStorage.getItem('biometric_password');
+
+            if (!email || !password) {
+                Alert.alert('Fehler', 'Keine gespeicherten Anmeldedaten gefunden. Bitte melde dich einmalig mit Passwort an.');
+                return false;
+            }
+
+            await login(email, password);
+            return true;
+        } catch (e: any) {
+            Alert.alert('Fehler', 'Biometrischer Login fehlgeschlagen: ' + e.message);
+            return false;
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -146,6 +191,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         if (error) throw error;
         setSession(data.session);
         setUser(data.user);
+
+        // Update credentials if biometrics is active
+        if (isBiometricsEnabled) {
+            await storeCredentials(email, password);
+        }
     };
 
     const register = async (email: string, password: string) => {
@@ -160,6 +210,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         if (data.session) {
             setSession(data.session);
             setUser(data.user);
+            if (isBiometricsEnabled) {
+                await storeCredentials(email, password);
+            }
         } else {
             throw new Error('Bitte bestätige deine Email-Adresse');
         }
@@ -182,6 +235,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             isBiometricsEnabled,
             toggleBiometrics,
             authenticateWithBiometrics,
+            biometricLogin,
             login,
             register,
             logout
