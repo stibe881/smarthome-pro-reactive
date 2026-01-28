@@ -328,6 +328,7 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState }: 
     const tileWidth = isTablet ? (width - 64 - 24) / 3 : (width - 32 - 12) / 2;
 
     const shutdownRoom = () => {
+        if (!room) return;
         // Lights Off
         room.lights?.forEach((l: any) => api.callService('light', 'turn_off', l.entity_id));
         // Media Off
@@ -338,6 +339,7 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState }: 
 
     // Calculate if room is "Quiet" (Everything off/closed)
     const isRoomQuiet = useMemo(() => {
+        if (!room) return true;
         const lightsOff = !room.lights?.some((l: any) => l.state === 'on');
         const mediaOff = !room.mediaPlayers?.some((m: any) => m.state === 'playing');
         const coversClosed = !room.covers?.some((c: any) => c.state === 'open' || (c.attributes.current_position || 0) > 0);
