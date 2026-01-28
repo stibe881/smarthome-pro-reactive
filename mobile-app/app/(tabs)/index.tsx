@@ -656,7 +656,47 @@ export default function Dashboard() {
     const activeVacuums = useMemo(() => vacuums.filter(v => v.state === 'cleaning').length, [vacuums]);
     const playingMedia = useMemo(() => mediaPlayers.filter(m => m.state === 'playing').length, [mediaPlayers]);
 
-    const currentTemp = climate[0]?.attributes.current_temperature;
+    const weatherStationTemp = useMemo(() => entities.find(e => e.entity_id === 'sensor.wetterstation_actual_temperature'), [entities]);
+    const weatherZell = useMemo(() => entities.find(e => e.entity_id === 'weather.zell_lu' || e.attributes.friendly_name?.toLowerCase().includes('zell')), [entities]);
+
+    // Format Weather Status (German)
+    const getWeatherText = (state: string) => {
+        const mapping: Record<string, string> = {
+            'clear-night': 'Klar',
+            'cloudy': 'Bewölkt',
+            'fog': 'Nebel',
+            'hail': 'Hagel',
+            'lightning': 'Gewitter',
+            'lightning-rainy': 'Gewitter',
+            'partlycloudy': 'Teils bewölkt',
+            'pouring': 'Starkregen',
+            'rainy': 'Regnerisch',
+            'snowy': 'Schnee',
+            'snowy-rainy': 'Schneeregen',
+            'sunny': 'Sonnig',
+            'windy': 'Windig',
+            'exceptional': 'Warnung',
+        };
+        return mapping[state] || state;
+    };
+
+    // Get Icon based on state
+    const getWeatherIcon = (state: string) => {
+        switch (state) {
+            case 'sunny': return Sun;
+            case 'clear-night': return Moon;
+            case 'partlycloudy': return CloudRain; // Lucide doesn't have partial cloud perfectly, generic cloud or sun-cloud
+            case 'cloudy': return CloudRain;
+            case 'rainy': return CloudRain;
+            case 'pouring': return CloudRain;
+            case 'fog': return Wind;
+            case 'snowy': return CloudRain;
+            case 'windy': return Wind;
+            default: return Sun;
+        }
+    };
+
+    const WeatherIcon = weatherZell ? getWeatherIcon(weatherZell.state) : Sun;
 
     // Callbacks
     const openLightsModal = useCallback(() => setActiveModal('lights'), []);
@@ -744,10 +784,13 @@ export default function Dashboard() {
                         </Text>
                     </View>
                     <View style={styles.headerRight}>
-                        {currentTemp && (
+                        {weatherStationTemp && (
                             <View style={styles.tempBadge}>
-                                <Thermometer size={14} color="#F59E0B" />
-                                <Text style={styles.tempText}>{currentTemp}°</Text>
+                                <WeatherIcon size={14} color="#F59E0B" />
+                                <Text style={styles.tempText}>
+                                    {weatherStationTemp.state}°
+                                    {weatherZell && <Text style={{ fontWeight: '400', opacity: 0.8 }}> {getWeatherText(weatherZell.state)}</Text>}
+                                </Text>
                             </View>
                         )}
                         {shoppingList && shoppingList.state !== '0' && shoppingList.state !== 'unknown' && (
