@@ -17,7 +17,8 @@
       "bundleIdentifier": "com.stibe88.mobileapp",
       "buildNumber": "4",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSFaceIDUsageDescription": "Wir nutzen Face ID für den schnellen Login."
       }
     },
     "android": {

@@ -3,7 +3,7 @@ import { View, Text, TextInput, Pressable, Alert, ActivityIndicator, ScrollView,
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { useHomeAssistant } from '../../contexts/HomeAssistantContext';
-import { Wifi, WifiOff, Save, LogOut, User, Server, Key, CheckCircle, XCircle, Shield, Bell, Palette, ChevronRight, LucideIcon, X } from 'lucide-react-native';
+import { Wifi, WifiOff, Save, LogOut, User, Server, Key, CheckCircle, XCircle, Shield, Bell, Palette, ChevronRight, LucideIcon, X, ScanFace } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -193,7 +193,7 @@ export default function Settings() {
     const { width } = useWindowDimensions();
     const isTablet = width >= 768;
 
-    const { logout, user } = useAuth();
+    const { logout, user, isBiometricsSupported, isBiometricsEnabled, toggleBiometrics } = useAuth();
     const {
         isConnected,
         isConnecting,
@@ -426,6 +426,15 @@ export default function Settings() {
                             showChevron
                             onPress={() => setNotificationModalVisible(true)}
                         />
+                        {isBiometricsSupported && (
+                            <SettingsRow
+                                icon={<ScanFace size={20} color="#0EA5E9" />}
+                                iconColor="#0EA5E9"
+                                label="Face ID / Touch ID"
+                                value={isBiometricsEnabled ? 'Aktiv' : 'Inaktiv'}
+                                onPress={toggleBiometrics}
+                            />
+                        )}
                         <SettingsRow
                             icon={<Palette size={20} color="#8B5CF6" />}
                             iconColor="#8B5CF6"

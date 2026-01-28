@@ -1,12 +1,19 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
 import type { User, Session } from '@supabase/supabase-js';
+import * as LocalAuthentication from 'expo-local-authentication';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Alert } from 'react-native';
 
 interface AuthContextType {
     user: User | null;
     session: Session | null;
     isLoading: boolean;
     userRole: 'admin' | 'user' | null;
+    isBiometricsSupported: boolean;
+    isBiometricsEnabled: boolean;
+    toggleBiometrics: () => Promise<void>;
+    authenticateWithBiometrics: () => Promise<boolean>;
     login: (email: string, password: string) => Promise<void>;
     register: (email: string, password: string) => Promise<void>;
     logout: () => Promise<void>;
@@ -31,6 +38,60 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const [session, setSession] = useState<Session | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [userRole, setUserRole] = useState<'admin' | 'user' | null>(null);
+    const [isBiometricsSupported, setIsBiometricsSupported] = useState(false);
+    const [isBiometricsEnabled, setIsBiometricsEnabled] = useState(false);
+
+    useEffect(() => {
+        checkBiometricsSupport();
+        loadBiometricSettings();
+    }, []);
+
+    const checkBiometricsSupport = async () => {
+        const compatible = await LocalAuthentication.hasHardwareAsync();
+        const enrolled = await LocalAuthentication.isEnrolledAsync();
+        setIsBiometricsSupported(compatible && enrolled);
+    };
+
+    const loadBiometricSettings = async () => {
+        try {
+            const enabled = await AsyncStorage.getItem('biometrics_enabled');
+            setIsBiometricsEnabled(enabled === 'true');
+        } catch (e) {
+            console.warn('Failed to load biometric settings');
+        }
+    };
+
+    const toggleBiometrics = async () => {
+        if (!isBiometricsSupported) {
+            Alert.alert('Nicht verfügbar', 'Biometrie wird von diesem Gerät nicht unterstützt oder ist nicht eingerichtet.');
+            return;
+        }
+
+        const newState = !isBiometricsEnabled;
+
+        // If enabling, verify first
+        if (newState) {
+            const success = await authenticateWithBiometrics();
+            if (!success) return; // Don't enable if check fails
+        }
+
+        setIsBiometricsEnabled(newState);
+        await AsyncStorage.setItem('biometrics_enabled', newState.toString());
+    };
+
+    const authenticateWithBiometrics = async (): Promise<boolean> => {
+        try {
+            const result = await LocalAuthentication.authenticateAsync({
+                promptMessage: 'Login mit Face ID / Touch ID',
+                fallbackLabel: 'Passwort verwenden',
+                disableDeviceFallback: false,
+            });
+            return result.success;
+        } catch (error) {
+            console.error(error);
+            return false;
+        }
+    };
 
     // Function to fetch user role
     const fetchUserRole = async (userId: string) => {
@@ -112,7 +173,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     };
 
     return (
-        <AuthContext.Provider value={{ user, session, isLoading, userRole, login, register, logout }}>
+        <AuthContext.Provider value={{
+            user,
+            session,
+            isLoading,
+            userRole,
+            isBiometricsSupported,
+            isBiometricsEnabled,
+            toggleBiometrics,
+            authenticateWithBiometrics,
+            login,
+            register,
+            logout
+        }}>
             {children}
         </AuthContext.Provider>
     );

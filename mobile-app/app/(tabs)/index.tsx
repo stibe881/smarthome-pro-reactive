@@ -11,13 +11,14 @@ import {
     BedDouble,
     Thermometer, Sun, CloudRain, Lock, Unlock, Loader2, X, Fan,
     Lightbulb, Blinds, Music, Battery, Shirt, Wind, UtensilsCrossed,
-    Calendar, PlayCircle, Home, Map, PartyPopper, DoorOpen, Clock, MapPin
+    Calendar, PlayCircle, Home, Map, PartyPopper, DoorOpen, Clock, MapPin, ShoppingCart
 } from 'lucide-react-native';
 // LinearGradient removed to fix compatibility issue
 
 // =====================================================
 // CHILD COMPONENTS
 // =====================================================
+import RobiVacuumModal from '../../components/RobiVacuumModal';
 
 interface HeroStatCardProps {
     icon: LucideIcon;
@@ -560,6 +561,7 @@ export default function Dashboard() {
         return result;
     }, [entities]);
     const calendars = useMemo(() => entities.filter(e => e.entity_id.startsWith('calendar.')).filter(c => c.state === 'on' || c.attributes.message), [entities]);
+    const shoppingList = useMemo(() => entities.find(e => e.entity_id === 'todo.google_keep_einkaufsliste'), [entities]);
 
     // --- Specific Appliance Logic ---
 
@@ -746,6 +748,12 @@ export default function Dashboard() {
                             <View style={styles.tempBadge}>
                                 <Thermometer size={14} color="#F59E0B" />
                                 <Text style={styles.tempText}>{currentTemp}°</Text>
+                            </View>
+                        )}
+                        {shoppingList && shoppingList.state !== '0' && shoppingList.state !== 'unknown' && (
+                            <View style={[styles.tempBadge, { backgroundColor: 'rgba(59, 130, 246, 0.15)' }]}>
+                                <ShoppingCart size={14} color="#3B82F6" />
+                                <Text style={[styles.tempText, { color: '#3B82F6' }]}>{shoppingList.state}</Text>
                             </View>
                         )}
                         <View style={[styles.statusDot, { backgroundColor: isConnected ? '#22C55E' : '#EF4444' }]} />
@@ -947,77 +955,10 @@ export default function Dashboard() {
             </Modal>
 
             {/* RÖBI MODAL */}
-            <Modal visible={activeModal === 'robi'} animationType="slide" transparent>
-                <View style={styles.modalOverlay}>
-                    <View style={[styles.modalContent, styles.robiContent]}>
-                        <View style={[styles.modalHeader, { backgroundColor: '#10B981' }]}>
-                            <Text style={styles.modalTitle}>Röbi ({robi?.state || 'Offline'})</Text>
-                            <Pressable onPress={closeModal} style={styles.closeBtn}><X size={24} color="#fff" /></Pressable>
-                        </View>
-                        <ScrollView style={styles.modalBody}>
-                            {robi && (
-                                <>
-                                    {/* Actions */}
-                                    <View style={styles.robiActions}>
-                                        <Pressable onPress={handleRobiStart} style={styles.robiBigBtn}>
-                                            <PlayCircle size={32} color="#fff" />
-                                            <Text style={styles.robiBtnText}>Alles saugen</Text>
-                                        </Pressable>
-                                        <Pressable onPress={handleRobiHome} style={[styles.robiBigBtn, styles.robiHomeBtn]}>
-                                            <Home size={32} color="#fff" />
-                                            <Text style={styles.robiBtnText}>Zurück zur Station</Text>
-                                        </Pressable>
-                                    </View>
-
-                                    {/* Map */}
-                                    {mapCamera && mapCamera.attributes.entity_picture ? (
-                                        <View style={styles.mapContainer}>
-                                            <Image
-                                                source={{ uri: getEntityPictureUrl(mapCamera.attributes.entity_picture) }}
-                                                style={styles.mapImage}
-                                                resizeMode="contain"
-                                            />
-                                            <View style={styles.liveBadge}>
-                                                <View style={styles.pulseDot} />
-                                                <Text style={styles.liveText}>LIVE KARTE</Text>
-                                            </View>
-                                        </View>
-                                    ) : (
-                                        <View style={[styles.mapContainer, styles.mapPlaceholder]}>
-                                            <Map size={48} color="rgba(255,255,255,0.2)" />
-                                            <Text style={styles.mapPlaceholderText}>Keine Karte verfügbar</Text>
-                                        </View>
-                                    )}
-
-                                    {/* Room Cleaning Scripts */}
-                                    {cleanScripts.length > 0 && (
-                                        <View style={styles.scriptSection}>
-                                            <Text style={styles.scriptTitle}>Räume saugen</Text>
-                                            <View style={styles.scriptGrid}>
-                                                {cleanScripts.map(script => (
-                                                    <Pressable
-                                                        key={script.entity_id}
-                                                        onPress={() => handleRunScript(script.entity_id)}
-                                                        style={styles.scriptBtn}
-                                                    >
-                                                        <Bot size={18} color="#10B981" />
-                                                        <Text style={styles.scriptText}>
-                                                            {script.attributes.friendly_name?.replace('Saugen ', '').replace('Reinigen ', '') || script.entity_id}
-                                                        </Text>
-                                                    </Pressable>
-                                                ))}
-                                            </View>
-                                        </View>
-                                    )}
-                                </>
-                            )}
-                            {!robi && (
-                                <Text style={styles.errorText}>Röbi konnte nicht gefunden werden.</Text>
-                            )}
-                        </ScrollView>
-                    </View>
-                </View>
-            </Modal>
+            <RobiVacuumModal
+                visible={activeModal === 'robi'}
+                onClose={closeModal}
+            />
 
             {/* Calendar Modal */}
             <CalendarModal
@@ -1118,23 +1059,7 @@ const styles = StyleSheet.create({
     miniBtn: { flex: 1, height: 32, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' },
     miniBtnText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
 
-    // Röbi
+    // Röbi (Replaced by component, styles cleaned)
     robiContent: {},
-    robiActions: { flexDirection: 'row', gap: 12, marginBottom: 24 },
-    robiBigBtn: { flex: 1, backgroundColor: '#10B981', borderRadius: 16, padding: 20, alignItems: 'center', gap: 8 },
-    robiHomeBtn: { backgroundColor: '#334155' },
-    robiBtnText: { color: '#fff', fontWeight: 'bold', textAlign: 'center' },
-    mapContainer: { width: '100%', aspectRatio: 16 / 9, backgroundColor: '#000', borderRadius: 16, overflow: 'hidden', marginBottom: 24 },
-    mapImage: { width: '100%', height: '100%' },
-    mapPlaceholder: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#1E293B' },
-    mapPlaceholderText: { color: '#64748B', marginTop: 12 },
-    liveBadge: { position: 'absolute', top: 12, left: 12, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, flexDirection: 'row', alignItems: 'center', gap: 6 },
-    pulseDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#EF4444' },
-    liveText: { color: '#fff', fontSize: 10, fontWeight: 'bold' },
-    scriptSection: {},
-    scriptTitle: { color: '#94A3B8', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: 12 },
-    scriptGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-    scriptBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(16, 185, 129, 0.15)', paddingHorizontal: 14, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(16, 185, 129, 0.3)' },
-    scriptText: { color: '#10B981', fontWeight: '600' },
     errorText: { color: '#EF4444', textAlign: 'center', marginTop: 24 },
 });
