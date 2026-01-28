@@ -11,7 +11,7 @@ import {
     BedDouble,
     Thermometer, Sun, CloudRain, Lock, Unlock, Loader2, X, Fan,
     Lightbulb, Blinds, Music, Battery, Shirt, Wind, UtensilsCrossed,
-    Calendar, PlayCircle, Home, Map, PartyPopper, DoorOpen, Clock, MapPin, ShoppingCart
+    Calendar, PlayCircle, Home, Map, PartyPopper, DoorOpen, DoorClosed, Clock, MapPin, ShoppingCart
 } from 'lucide-react-native';
 // LinearGradient removed to fix compatibility issue
 
@@ -19,6 +19,8 @@ import {
 // CHILD COMPONENTS
 // =====================================================
 import RobiVacuumModal from '../../components/RobiVacuumModal';
+import CalendarModal from '../../components/CalendarModal';
+import ShoppingListModal from '../../components/ShoppingListModal';
 
 interface HeroStatCardProps {
     icon: LucideIcon;
@@ -276,161 +278,39 @@ const DoorOpenerTile = ({ entity, callService }: { entity: any, callService: any
         ]);
     };
 
+    // Find the corresponding sensor for status (e.g. binary_sensor.hausture_contact)
+    const { entities } = useHomeAssistant();
+    const doorSensor = entities.find(e => e.entity_id === 'binary_sensor.hausture_contact');
+    const isDoorOpen = doorSensor?.state === 'on';
+
     return (
         <View style={styles.lockCard}>
             <View style={styles.lockMainAction}>
-                <View style={[styles.lockIcon, { backgroundColor: '#3B82F6' }]}>
-                    <DoorOpen size={24} color="#fff" />
+                <View style={[styles.lockIcon, { backgroundColor: isDoorOpen ? '#EF4444' : '#3B82F6' }]}>
+                    {isDoorOpen ? <DoorOpen size={24} color="#fff" /> : <DoorClosed size={24} color="#fff" />}
                 </View>
                 <View style={styles.lockInfo}>
                     <Text style={styles.lockTitle}>
                         {friendlyName}
                     </Text>
-                    {/* <Text style={styles.lockState}>
-                        TÜRÖFFNER
-                    </Text> */}
+                    <Text style={[styles.lockState, { color: isDoorOpen ? '#EF4444' : '#64748B' }]}>
+                        {isDoorOpen ? 'OFFEN' : ''}
+                    </Text>
                 </View>
             </View>
 
             {/* OPEN Button */}
-            <Pressable onPress={pressOpener} style={styles.openDoorBtn}>
-                <DoorOpen size={20} color="#3B82F6" />
-                <Text style={styles.openDoorText}>Öffnen</Text>
+            <Pressable onPress={pressOpener} style={[styles.openDoorBtn, isDoorOpen && { backgroundColor: '#FEE2E2' }]}>
+                {isDoorOpen ? <DoorClosed size={20} color="#EF4444" /> : <DoorOpen size={20} color="#3B82F6" />}
+                <Text style={[styles.openDoorText, isDoorOpen && { color: '#EF4444' }]}>
+                    {isDoorOpen ? 'Schliessen' : 'Öffnen'}
+                </Text>
             </Pressable>
         </View>
     );
 };
 
-// --- Calendar Modal Component ---
-const CalendarModal = ({
-    visible,
-    onClose,
-    entityId,
-    title,
-    accentColor = '#3B82F6'
-}: {
-    visible: boolean;
-    onClose: () => void;
-    entityId: string;
-    title: string;
-    accentColor?: string;
-}) => {
-    const { fetchCalendarEvents } = useHomeAssistant();
-    const [events, setEvents] = useState<any[]>([]);
-    const [loading, setLoading] = useState(false);
 
-    useEffect(() => {
-        if (visible && entityId) {
-            loadEvents();
-        }
-    }, [visible, entityId]);
-
-    const loadEvents = async () => {
-        setLoading(true);
-        const now = new Date();
-        const endDate = new Date();
-        endDate.setDate(now.getDate() + 21); // 21 days preview
-
-        try {
-            const result = await fetchCalendarEvents(entityId, now.toISOString(), endDate.toISOString());
-            setEvents(result || []);
-        } catch (e) {
-            console.error("Failed to load events", e);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const groupEventsByDay = (events: any[]) => {
-        const groups: { [key: string]: any[] } = {};
-        events.forEach(event => {
-            const dateStr = event.start.dateTime || event.start.date || '';
-            const date = new Date(dateStr).toDateString();
-            if (!groups[date]) groups[date] = [];
-            groups[date].push(event);
-        });
-        return groups;
-    };
-
-    const groupedEvents = groupEventsByDay(events);
-    const sortedDates = Object.keys(groupedEvents).sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
-
-    return (
-        <Modal visible={visible} animationType="slide" transparent={true} onRequestClose={onClose}>
-            <View style={styles.modalOverlay}>
-                <View style={[styles.modalContent, { backgroundColor: '#0F172A' }]}>
-                    <View style={[styles.modalHeader, { backgroundColor: 'transparent', paddingTop: 60, paddingBottom: 20 }]}>
-                        <View>
-                            <Text style={{ fontSize: 13, color: accentColor, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 }}>KALENDER</Text>
-                            <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#fff' }}>{title}</Text>
-                        </View>
-                        <Pressable onPress={onClose} style={styles.closeBtn}>
-                            <X size={24} color="#fff" />
-                        </Pressable>
-                    </View>
-
-                    <ScrollView style={{ flex: 1, paddingHorizontal: 20 }}>
-                        {loading ? (
-                            <View style={{ padding: 40, alignItems: 'center' }}>
-                                <ActivityIndicator size="large" color={accentColor} />
-                            </View>
-                        ) : (
-                            <View style={{ paddingBottom: 40 }}>
-                                {sortedDates.length === 0 ? (
-                                    <Text style={{ color: '#64748B', textAlign: 'center', marginTop: 40 }}>Keine Termine in den nächsten 21 Tagen</Text>
-                                ) : (
-                                    sortedDates.map(date => {
-                                        const eventDate = new Date(date);
-                                        const isToday = eventDate.toDateString() === new Date().toDateString();
-                                        const isTomorrow = new Date(new Date().setDate(new Date().getDate() + 1)).toDateString() === eventDate.toDateString();
-
-                                        const dayLabel = isToday ? 'Heute' : isTomorrow ? 'Morgen' : eventDate.toLocaleDateString('de-DE', { weekday: 'long' });
-                                        const dateLabel = eventDate.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
-
-                                        return (
-                                            <View key={date} style={{ marginBottom: 24 }}>
-                                                <View style={{ flexDirection: 'row', alignItems: 'baseline', marginBottom: 12 }}>
-                                                    <Text style={{ color: isToday ? accentColor : '#94A3B8', fontWeight: 'bold', fontSize: 16 }}>{dayLabel}</Text>
-                                                    <Text style={{ color: '#64748B', fontSize: 13, marginLeft: 8 }}>{dateLabel}</Text>
-                                                </View>
-
-                                                {groupedEvents[date].map((event, idx) => {
-                                                    const hasTime = !!event.start.dateTime;
-                                                    const timeStr = hasTime ? new Date(event.start.dateTime!).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : 'Ganztägig';
-
-                                                    return (
-                                                        <View key={idx} style={{ flexDirection: 'row', marginBottom: 12, backgroundColor: '#1E293B', borderRadius: 12, overflow: 'hidden' }}>
-                                                            <View style={{ width: 4, backgroundColor: accentColor }} />
-                                                            <View style={{ padding: 12, flex: 1 }}>
-                                                                <Text style={{ color: '#fff', fontSize: 15, fontWeight: '600', marginBottom: 4 }}>{event.summary}</Text>
-                                                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                                                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                                                                        <Clock size={12} color="#94A3B8" />
-                                                                        <Text style={{ color: '#94A3B8', fontSize: 12 }}>{timeStr}</Text>
-                                                                    </View>
-                                                                    {event.location && (
-                                                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1 }}>
-                                                                            <MapPin size={12} color="#94A3B8" />
-                                                                            <Text style={{ color: '#94A3B8', fontSize: 12 }} numberOfLines={1}>{event.location}</Text>
-                                                                        </View>
-                                                                    )}
-                                                                </View>
-                                                            </View>
-                                                        </View>
-                                                    );
-                                                })}
-                                            </View>
-                                        );
-                                    })
-                                )}
-                            </View>
-                        )}
-                    </ScrollView>
-                </View>
-            </View>
-        </Modal>
-    );
-};
 
 const EventTile = ({ calendar, onPress }: { calendar: any, onPress?: () => void }) => {
     if (!calendar.attributes.message && !calendar.attributes.all_day) return null;
@@ -463,15 +343,18 @@ const EventTile = ({ calendar, onPress }: { calendar: any, onPress?: () => void 
 export default function Dashboard() {
     // --- Calendar Modal Logic ---
     const [calendarModal, setCalendarModal] = useState<{ visible: boolean, entityId: string, title: string, color: string }>({ visible: false, entityId: '', title: '', color: '' });
+    const [showShoppingList, setShowShoppingList] = useState(false);
 
     const handleCalendarPress = (calendar: any) => {
-        // Map to specific requested entities
-        // Logic: if birthday (geburtstage_2), else default (stefan_gross_stibe_me)
+        // Logic: if birthday (geburtstage_2), else use the clicked calendar's ID
         const isBirthday = calendar.entity_id.includes('birth') || calendar.entity_id.includes('geburt');
-        const entityId = isBirthday ? 'calendar.geburtstage_2' : 'calendar.stefan_gross_stibe_me';
-        const title = isBirthday ? 'Geburtstage' : 'Familien Kalender';
+
+        const entityId = isBirthday ? 'calendar.geburtstage_2' : calendar.entity_id;
+        // Override title to "Familienkalender" for the main calendar
+        const title = isBirthday ? 'Geburtstage' : 'Familienkalender';
         const color = isBirthday ? '#EC4899' : '#00BFFF';
 
+        console.log('Opening Calendar:', { entityId, title }); // Debugging
         setCalendarModal({ visible: true, entityId, title, color });
     };
 
@@ -655,6 +538,10 @@ export default function Dashboard() {
     const coversOpen = useMemo(() => covers.filter(c => c.state === 'open' || (c.attributes.current_position && c.attributes.current_position > 0)).length, [covers]);
     const activeVacuums = useMemo(() => vacuums.filter(v => v.state === 'cleaning').length, [vacuums]);
     const playingMedia = useMemo(() => mediaPlayers.filter(m => m.state === 'playing').length, [mediaPlayers]);
+    const shoppingListCount = useMemo(() => {
+        if (!shoppingList || isNaN(parseInt(shoppingList.state))) return 0;
+        return parseInt(shoppingList.state);
+    }, [shoppingList]);
 
     const weatherStationTemp = useMemo(() => entities.find(e => e.entity_id === 'sensor.wetterstation_actual_temperature'), [entities]);
     const weatherZell = useMemo(() => entities.find(e => e.entity_id === 'weather.zell_lu' || e.attributes.friendly_name?.toLowerCase().includes('zell')), [entities]);
@@ -895,18 +782,48 @@ export default function Dashboard() {
                             onPress={openCoversModal}
                             onLongPress={handleAllCoversClose}
                         />
-                        <HeroStatCard
-                            icon={Bot}
-                            iconColor="#34D399"
-                            value={activeVacuums}
-                            total={vacuums.length}
-                            label="Röbi"
-                            gradient={['#10B981', '#059669']}
-                            isActive={activeVacuums > 0}
-                            cardWidth={cardWidth}
+                        <Pressable
                             onPress={openRobiModal}
                             onLongPress={handleAllVacuumsHome}
-                        />
+                            style={[styles.heroCard, { width: cardWidth }]}
+                        >
+                            <View style={[styles.heroCardGradient, { backgroundColor: activeVacuums > 0 ? '#10B981' : '#1E293B' }]}>
+                                <View style={[styles.decorativeCircle, { backgroundColor: activeVacuums > 0 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.03)' }]} />
+
+                                <View style={styles.heroCardHeader}>
+                                    <View style={[styles.iconBubble, { backgroundColor: activeVacuums > 0 ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.05)' }]}>
+                                        <Bot size={22} color={activeVacuums > 0 ? '#fff' : '#34D399'} />
+                                    </View>
+                                    <ChevronRight size={16} color="rgba(255,255,255,0.3)" />
+                                </View>
+
+                                <View style={styles.heroCardContent}>
+                                    <View style={styles.valueRow}>
+                                        <Text style={[styles.heroValue, { fontSize: 13 }]} numberOfLines={1}>
+                                            {robi ? (
+                                                robi.state === 'docked' ? 'Angedockt' :
+                                                    robi.state === 'cleaning' ? 'Saugt' :
+                                                        robi.state === 'returning' ? 'Kehrt zurück' :
+                                                            robi.state === 'paused' ? 'Pausiert' :
+                                                                robi.state === 'error' ? 'Fehler' :
+                                                                    robi.state === 'idle' ? 'Bereit' :
+                                                                        robi.state
+                                            ) : 'n/a'}
+                                        </Text>
+                                    </View>
+                                    <Text style={[styles.heroLabel, { color: activeVacuums > 0 ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.5)' }]}>
+                                        {robi?.attributes?.friendly_name || 'Röbi'}
+                                    </Text>
+                                </View>
+
+                                <View style={styles.progressContainer}>
+                                    <View style={[styles.progressBar, {
+                                        width: '100%',
+                                        backgroundColor: robi?.state === 'cleaning' ? '#34D399' : (activeVacuums > 0 ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.1)')
+                                    }]} />
+                                </View>
+                            </View>
+                        </Pressable>
                         <HeroStatCard
                             icon={Tv}
                             iconColor="#A78BFA"
@@ -934,6 +851,7 @@ export default function Dashboard() {
 
             </ScrollView>
 
+            {/* LIGHTS MODAL */}
             {/* LIGHTS MODAL */}
             <Modal visible={activeModal === 'lights'} animationType="slide" transparent>
                 <View style={styles.modalOverlay}>
@@ -1003,7 +921,6 @@ export default function Dashboard() {
                 onClose={closeModal}
             />
 
-            {/* Calendar Modal */}
             <CalendarModal
                 visible={calendarModal.visible}
                 onClose={() => setCalendarModal({ ...calendarModal, visible: false })}
@@ -1011,7 +928,12 @@ export default function Dashboard() {
                 title={calendarModal.title}
                 accentColor={calendarModal.color}
             />
-        </SafeAreaView>
+
+            <ShoppingListModal
+                visible={showShoppingList}
+                onClose={() => setShowShoppingList(false)}
+            />
+        </SafeAreaView >
     );
 }
 

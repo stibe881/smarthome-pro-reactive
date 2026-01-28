@@ -202,20 +202,12 @@ export default function Settings() {
         notificationSettings,
         updateNotificationSettings,
         isGeofencingActive,
-        const {
-            isConnected,
-            haBaseUrl,
-            saveCredentials,
-            disconnect,
-            notificationSettings,
-            updateNotificationSettings,
-            isGeofencingActive,
-            setHomeLocation,
-            connect,
-            getCredentials,
-            entities,
-            isConnecting
-        } = useHomeAssistant();
+        setHomeLocation,
+        connect,
+        getCredentials,
+        entities,
+        isConnecting
+    } = useHomeAssistant();
 
     const [haUrl, setHaUrl] = useState('');
     const [haToken, setHaToken] = useState('');

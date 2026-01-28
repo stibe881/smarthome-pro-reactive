@@ -81,6 +81,9 @@ interface HomeAssistantContextType {
     fetchCalendarEvents: (entityId: string, start: string, end: string) => Promise<any[]>;
     setHomeLocation: () => Promise<void>;
     isGeofencingActive: boolean;
+    fetchTodoItems: (entityId: string) => Promise<any[]>;
+    updateTodoItem: (entityId: string, item: string, status: 'completed' | 'needs_action') => Promise<void>;
+    addTodoItem: (entityId: string, item: string) => Promise<void>;
 }
 
 const HomeAssistantContext = createContext<HomeAssistantContextType | undefined>(undefined);
@@ -464,7 +467,10 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
         updateNotificationSettings,
         fetchCalendarEvents,
         setHomeLocation,
-        isGeofencingActive
+        isGeofencingActive,
+        fetchTodoItems: async (entityId: string) => serviceRef.current?.fetchTodoItems(entityId) || [],
+        updateTodoItem: async (entityId: string, item: string, status: any) => serviceRef.current?.updateTodoItem(entityId, item, status),
+        addTodoItem: async (entityId: string, item: string) => serviceRef.current?.addTodoItem(entityId, item)
     };
 
     return (

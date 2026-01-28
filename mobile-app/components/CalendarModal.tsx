@@ -33,7 +33,10 @@ export default function CalendarModal({ visible, onClose, entityId, title, accen
             const isBirthday = entityId.includes('geburtstage');
             end.setDate(now.getDate() + (isBirthday ? 365 : 30));
 
+            console.log(`CalendarModal: Requesting events for ${entityId} (${now.toISOString()} - ${end.toISOString()})`);
             const data = await fetchCalendarEvents(entityId, now.toISOString(), end.toISOString());
+            console.log(`CalendarModal: Received ${data?.length || 0} events`);
+            if (data && data.length > 0) console.log('First event:', JSON.stringify(data[0]));
 
             let sorted = data || [];
 
@@ -43,8 +46,8 @@ export default function CalendarModal({ visible, onClose, entityId, title, accen
             }
 
             setEvents(sorted);
-        } catch (e) {
-            console.error(e);
+        } catch (e: any) {
+            console.error('CalendarModal Error:', e);
         } finally {
             setLoading(false);
         }
@@ -96,10 +99,20 @@ export default function CalendarModal({ visible, onClose, entityId, title, accen
                         <ScrollView style={styles.body} contentContainerStyle={styles.scrollContent}>
                             {events.length > 0 ? (
                                 events.map((event, index) => {
-                                    // Handle HA Calendar format
-                                    const start = event.start?.dateTime || event.start?.date;
-                                    const end = event.end?.dateTime || event.end?.date;
-                                    const allDay = !event.start?.dateTime;
+                                    // Handle HA Calendar format (can be object {dateTime/date} or direct string)
+                                    const getEventDate = (field: any) => {
+                                        if (typeof field === 'string') return field;
+                                        return field?.dateTime || field?.date || '';
+                                    };
+
+                                    const start = getEventDate(event.start);
+                                    const end = getEventDate(event.end);
+
+                                    // Check if all day:
+                                    // 1. If original field is object and has 'date' (HA standard)
+                                    // 2. If valid string and length is 10 (YYYY-MM-DD)
+                                    // 3. If contains no time component (T)
+                                    const allDay = event.start?.date || (typeof event.start === 'string' && event.start.length === 10);
 
                                     return (
                                         <View key={index} style={styles.eventCard}>
