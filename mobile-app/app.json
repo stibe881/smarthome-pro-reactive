@@ -15,12 +15,13 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.stibe88.mobileapp",
-      "buildNumber": "4",
+      "buildNumber": "6",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSFaceIDUsageDescription": "Wir nutzen Face ID für den schnellen Login.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Wir nutzen deinen Standort, um zu erkennen, wenn du nach Hause kommst, und dir das Öffnen der Tür anzubieten.",
-        "NSLocationWhenInUseUsageDescription": "Wir nutzen deinen Standort für Geofencing funktionen.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Wir nutzen deinen Standort für Geofencing (Zuhause ankommen) und um dich an deine Einkaufsliste zu erinnern, wenn du im Supermarkt bist.",
+        "NSLocationAlwaysUsageDescription": "Wir nutzen deinen Standort für Geofencing (Zuhause ankommen) und um dich an deine Einkaufsliste zu erinnern, wenn du im Supermarkt bist.",
+        "NSLocationWhenInUseUsageDescription": "Wir nutzen deinen Standort für Geofencing Funktionen.",
         "UIBackgroundModes": [
           "location",
           "fetch",

@@ -1,4 +1,4 @@
-import React, { useMemo, useState, memo, useCallback } from 'react';
+import React, { useMemo, useState, memo, useCallback, useEffect } from 'react';
 import { View, Text, ScrollView, Pressable, useWindowDimensions, Modal, StyleSheet, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useHomeAssistant } from '../../contexts/HomeAssistantContext';
@@ -6,12 +6,106 @@ import {
     Home, Bed, Sofa, UtensilsCrossed, Bath, Warehouse, Building2,
     Lightbulb, Blinds, ChevronRight, WifiOff, X,
     Briefcase, Baby, Dumbbell, Shirt, TreeDeciduous, Droplets,
-    Thermometer, Gamepad2, BookOpen, Armchair, DoorOpen, Stairs,
+    Thermometer, Gamepad2, BookOpen, Armchair, DoorOpen, ChevronUp,
     ParkingSquare, Flower2, Sun, Moon, LucideIcon,
-    Wind, Fan, Play, Pause, Square, Volume2, Tv
+    Wind, Fan, Play, Pause, Square, Volume2, Tv, Timer, Rocket, Heart, Music, Coffee, Zap
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Slider from '@react-native-community/slider';
+
+// Script/Scene Tile Component
+// Script/Scene Tile Component
+// Script/Scene Tile Component (Compact & Visual)
+const SceneTile = memo(({ scene, activateScene, width }: any) => {
+    const getSceneStyle = (entityId: string, name: string) => {
+        const id = entityId.toLowerCase();
+        const n = name.toLowerCase();
+
+        if (id.includes('bed') || n.includes('schlafen') || n.includes('nacht')) {
+            return {
+                colors: ['#312E81', '#4F46E5'] as const,
+                icon: Moon,
+                iconColor: '#A5B4FC'
+            };
+        }
+        if (id.includes('sex') || n.includes('romance') || n.includes('liebe')) {
+            return {
+                colors: ['#881337', '#E11D48'] as const,
+                icon: Heart,
+                iconColor: '#FDA4AF'
+            };
+        }
+        if (id.includes('movie') || n.includes('film') || n.includes('tv') || n.includes('netflix')) {
+            return {
+                colors: ['#7F1D1D', '#EF4444'] as const, // Red
+                icon: Tv,
+                iconColor: '#FECACA'
+            };
+        }
+        if (id.includes('party') || n.includes('musik')) {
+            return {
+                colors: ['#701A75', '#D946EF'] as const, // Fuchsia
+                icon: Music,
+                iconColor: '#F0ABFC'
+            };
+        }
+        if (id.includes('essen') || n.includes('dinner') || id.includes('kochen') || n.includes('cooking')) {
+            return {
+                colors: ['#7C2D12', '#F97316'] as const, // Orange
+                icon: UtensilsCrossed,
+                iconColor: '#FDBA74'
+            };
+        }
+        if (id.includes('coffee') || n.includes('kaffee') || n.includes('morgen') || n.includes('aufwachen') || n.includes('wake')) {
+            return {
+                colors: ['#D97706', '#F59E0B'] as const, // Amber
+                icon: Sun,
+                iconColor: '#FEF3C7'
+            };
+        }
+
+        // Default
+        return {
+            colors: ['#1E293B', '#334155'] as const, // Slate
+            icon: Zap,
+            iconColor: '#CBD5E1'
+        };
+    };
+
+    const style = getSceneStyle(scene.entity_id, scene.attributes.friendly_name || '');
+    const Icon = style.icon;
+
+    return (
+        <View style={[styles.tile, { width, minHeight: 60, height: 60 }]}>
+            <Pressable
+                onPress={() => activateScene(scene.entity_id)}
+                style={{ flex: 1 }}
+            >
+                <LinearGradient
+                    colors={style.colors}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={[styles.tileContent, {
+                        minHeight: 60,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'flex-start',
+                        padding: 12,
+                        gap: 12,
+                        borderWidth: 0
+                    }]}
+                >
+                    <View style={[styles.tileIcon, { backgroundColor: 'rgba(255,255,255,0.15)', width: 36, height: 36, borderRadius: 18, marginBottom: 0 }]}>
+                        <Icon size={18} color="#FFF" />
+                    </View>
+                    <Text numberOfLines={1} style={[styles.tileName, { color: '#FFF', fontWeight: '700', fontSize: 13, marginTop: 0 }]}>
+                        {scene.attributes.friendly_name}
+                    </Text>
+                </LinearGradient>
+            </Pressable>
+        </View>
+    );
+});
 
 // =====================================================
 // UTILS
@@ -20,6 +114,7 @@ import Slider from '@react-native-community/slider';
 const getRoomIcon = (roomName: string): LucideIcon => {
     const name = roomName.toLowerCase();
     if (name.includes('wohn') || name.includes('living')) return Sofa;
+    if (name.includes('levin')) return Rocket;
     if (name.includes('schlaf') || name.includes('bed')) return Bed;
     if (name.includes('küche') || name.includes('kueche') || name.includes('kitchen')) return UtensilsCrossed;
     if (name.includes('bad') || name.includes('bath') || name.includes('wc') || name.includes('toilet')) return Bath;
@@ -36,7 +131,7 @@ const getRoomIcon = (roomName: string): LucideIcon => {
     if (name.includes('spiel') || name.includes('game')) return Gamepad2;
     if (name.includes('bibliothek') || name.includes('library')) return BookOpen;
     if (name.includes('flur') || name.includes('hall') || name.includes('korridor')) return DoorOpen;
-    if (name.includes('treppe') || name.includes('stair')) return Stairs;
+    if (name.includes('treppe') || name.includes('stair')) return ChevronUp;
     if (name.includes('dach') || name.includes('attic')) return Home;
     if (name.includes('eingang') || name.includes('entry') || name.includes('foyer')) return DoorOpen;
     if (name.includes('esszimmer') || name.includes('dining')) return Armchair;
@@ -227,10 +322,27 @@ const MediaTile = memo(({ player, playMedia, callService, width }: any) => {
     );
 });
 
-const RoomDetailModal = memo(({ room, visible, onClose, api }: any) => {
+const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState }: any) => {
     const { width } = useWindowDimensions();
     const isTablet = width >= 768;
     const tileWidth = isTablet ? (width - 64 - 24) / 3 : (width - 32 - 12) / 2;
+
+    const shutdownRoom = () => {
+        // Lights Off
+        room.lights?.forEach((l: any) => api.callService('light', 'turn_off', l.entity_id));
+        // Media Off
+        room.mediaPlayers?.forEach((m: any) => api.callService('media_player', 'turn_off', m.entity_id));
+        // Covers Close
+        room.covers?.forEach((c: any) => api.closeCover(c.entity_id));
+    };
+
+    // Calculate if room is "Quiet" (Everything off/closed)
+    const isRoomQuiet = useMemo(() => {
+        const lightsOff = !room.lights?.some((l: any) => l.state === 'on');
+        const mediaOff = !room.mediaPlayers?.some((m: any) => m.state === 'playing');
+        const coversClosed = !room.covers?.some((c: any) => c.state === 'open' || (c.attributes.current_position || 0) > 0);
+        return lightsOff && mediaOff && coversClosed;
+    }, [room]);
 
     if (!room) return null;
 
@@ -242,7 +354,41 @@ const RoomDetailModal = memo(({ room, visible, onClose, api }: any) => {
             onRequestClose={onClose}
         >
             <View style={styles.modalOverlay}>
-                <View style={styles.modalContainer}>
+                <View style={[styles.modalContainer, room.name === "Levins Zimmer" && { backgroundColor: '#0B1026' }]}>
+                    {/* Background Effect for Levin */}
+                    {room.name === "Levins Zimmer" && (
+                        <View style={StyleSheet.absoluteFill}>
+                            <LinearGradient
+                                colors={['#0F172A', '#1E1B4B', '#312E81']}
+                                style={StyleSheet.absoluteFill}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 1 }}
+                            />
+                            {/* Simple Stars dotting */}
+                            <View style={{ position: 'absolute', top: 50, left: 50, width: 2, height: 2, backgroundColor: '#FFF', borderRadius: 1, opacity: 0.7 }} />
+                            <View style={{ position: 'absolute', top: 120, right: 80, width: 3, height: 3, backgroundColor: '#FFF', borderRadius: 1.5, opacity: 0.5 }} />
+                            <View style={{ position: 'absolute', bottom: 200, left: 100, width: 4, height: 4, backgroundColor: '#A78BFA', borderRadius: 2, opacity: 0.6 }} />
+                            <View style={{ position: 'absolute', top: '40%', right: '20%', width: 2, height: 2, backgroundColor: '#FFF', borderRadius: 1, opacity: 0.4 }} />
+                        </View>
+                    )}
+
+                    {/* Background Effect for Lina */}
+                    {room.name === "Linas Zimmer" && (
+                        <View style={StyleSheet.absoluteFill}>
+                            <LinearGradient
+                                colors={['#4A044E', '#831843', '#BE185D']} // Dark Pink/Magents
+                                style={StyleSheet.absoluteFill}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 1 }}
+                            />
+                            {/* Sparkles/Polka dots */}
+                            <View style={{ position: 'absolute', top: 60, left: 40, width: 6, height: 6, backgroundColor: '#FBCFE8', borderRadius: 3, opacity: 0.4 }} />
+                            <View style={{ position: 'absolute', top: 150, right: 60, width: 4, height: 4, backgroundColor: '#FFF', borderRadius: 2, opacity: 0.6 }} />
+                            <View style={{ position: 'absolute', bottom: 100, left: 80, width: 8, height: 8, backgroundColor: '#F472B6', borderRadius: 4, opacity: 0.3 }} />
+                            <View style={{ position: 'absolute', top: '30%', right: '40%', width: 3, height: 3, backgroundColor: '#FFF', borderRadius: 1.5, opacity: 0.5 }} />
+                        </View>
+                    )}
+
                     {/* Header */}
                     <LinearGradient
                         colors={room.gradient}
@@ -256,12 +402,47 @@ const RoomDetailModal = memo(({ room, visible, onClose, api }: any) => {
                             </View>
                             <Text style={styles.modalTitleText}>{room.name}</Text>
                         </View>
-                        <Pressable onPress={onClose} style={styles.closeButton}>
-                            <X size={24} color="#fff" />
-                        </Pressable>
+                        <View style={{ flexDirection: 'row', gap: 12 }}>
+                            {/* Shutdown Button */}
+                            <Pressable onPress={shutdownRoom} style={[styles.closeButton, { backgroundColor: 'rgba(255,255,255,0.15)' }]}>
+                                <Moon
+                                    size={24}
+                                    color={isRoomQuiet ? "#FDB813" : "#FFF"}
+                                    fill={isRoomQuiet ? "#FDB813" : "transparent"}
+                                />
+                            </Pressable>
+                            <Pressable onPress={onClose} style={styles.closeButton}>
+                                <X size={24} color="#fff" />
+                            </Pressable>
+                        </View>
                     </LinearGradient>
 
                     <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+                        {/* Scenes/Scripts Section (Moved to TOP) */}
+                        {room.scripts?.length > 0 && (
+                            <View style={styles.section}>
+                                <SectionHeader title="Szenen" />
+                                <View style={styles.grid}>
+                                    {room.scripts.map((s: any) => (
+                                        <SceneTile
+                                            key={s.entity_id}
+                                            scene={s}
+                                            activateScene={(id: string) => api.callService('script', 'turn_on', id)}
+                                            width={tileWidth}
+                                        />
+                                    ))}
+                                    {room.scenes?.map((s: any) => (
+                                        <SceneTile
+                                            key={s.entity_id}
+                                            scene={s}
+                                            activateScene={(id: string) => api.activateScene(id)}
+                                            width={tileWidth}
+                                        />
+                                    ))}
+                                </View>
+                            </View>
+                        )}
+
                         {/* Climate Section */}
                         {room.climates?.length > 0 && (
                             <View style={styles.section}>
@@ -282,7 +463,7 @@ const RoomDetailModal = memo(({ room, visible, onClose, api }: any) => {
                         {/* Lights Section */}
                         {room.lights?.length > 0 && (
                             <View style={styles.section}>
-                                <SectionHeader title="Beleuchtung" actionIcon={Moon} onAction={() => room.lights.forEach((l: any) => l.state === 'on' && api.toggleLight(l.entity_id))} />
+                                <SectionHeader title="Beleuchtung" />
                                 <View style={styles.grid}>
                                     {room.lights.map((l: any) => (
                                         <LightTile
@@ -332,11 +513,51 @@ const RoomDetailModal = memo(({ room, visible, onClose, api }: any) => {
                             </View>
                         )}
 
+
+
+                        <View style={{ height: 40 }} />
+
+                        {/* Sleep Timer (Specific for Schlafzimmer) */}
+                        {room.name === 'Schlafzimmer' && (
+                            <View style={styles.section}>
+                                <SectionHeader title={`Sleep Timer (Shield) ${sleepTimerState?.remaining ? `— Noch ${sleepTimerState.remaining} Min` : ''}`} />
+                                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                                    {[30, 60, 90, 120, 150].map((min) => {
+                                        const isActive = sleepTimerState?.activeDuration === min;
+                                        return (
+                                            <Pressable
+                                                key={min}
+                                                style={{
+                                                    backgroundColor: isActive ? '#3B82F6' : '#1E293B',
+                                                    paddingHorizontal: 16,
+                                                    paddingVertical: 10,
+                                                    borderRadius: 12,
+                                                    borderWidth: 1,
+                                                    borderColor: isActive ? '#60A5FA' : 'rgba(255,255,255,0.1)'
+                                                }}
+                                                onPress={() => sleepTimerState.startTimer(min)}
+                                            >
+                                                <Text style={{ color: isActive ? '#FFF' : '#E2E8F0', fontWeight: '600' }}>
+                                                    {min === 90 ? '1.5 h' : min === 150 ? '2.5 h' : min >= 60 ? `${min / 60} h` : `${min} Min`}
+                                                </Text>
+                                            </Pressable>
+                                        );
+                                    })}
+                                    <Pressable
+                                        style={{ backgroundColor: '#EF4444', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, opacity: sleepTimerState?.isRunning ? 1 : 0.5 }}
+                                        onPress={sleepTimerState.stopTimer}
+                                    >
+                                        <Text style={{ color: '#FFF', fontWeight: '600' }}>Deaktivieren</Text>
+                                    </Pressable>
+                                </View>
+                            </View>
+                        )}
+
                         <View style={{ height: 40 }} />
                     </ScrollView>
                 </View>
-            </View>
-        </Modal>
+            </View >
+        </Modal >
     );
 });
 
@@ -359,6 +580,7 @@ export default function Rooms() {
         setCoverPosition,
         callService,
         setClimateTemperature, // Assuming availability
+        activateScene,
         connect
     } = useHomeAssistant();
 
@@ -388,7 +610,7 @@ export default function Rooms() {
         // Initialize with allowed rooms to preserve order
         const areaMap = new Map<string, any>();
         ALLOWED_ROOMS.forEach(room => {
-            areaMap.set(room, { lights: [], covers: [], sensors: [], climates: [], mediaPlayers: [] });
+            areaMap.set(room, { lights: [], covers: [], sensors: [], climates: [], mediaPlayers: [], scripts: [], scenes: [] });
         });
 
         // Helper to find room for entity
@@ -430,15 +652,202 @@ export default function Rooms() {
             else if (entity.entity_id.startsWith('sensor.') && entity.attributes.unit_of_measurement === '°C') room.sensors.push(entity);
             else if (entity.entity_id.startsWith('climate.')) room.climates.push(entity);
             else if (entity.entity_id.startsWith('media_player.')) room.mediaPlayers.push(entity);
+            else if (entity.entity_id.startsWith('script.')) room.scripts.push(entity);
         });
 
+        // CUSTOMIZATION: Wohnzimmer strict filtering
+        const wohnzimmer = areaMap.get('Wohnzimmer');
+        if (wohnzimmer) {
+            wohnzimmer.lights = wohnzimmer.lights.filter((l: any) =>
+                l.entity_id === 'light.wohnzimmer' ||
+                l.entity_id === 'light.hue_play_gradient_lightstrip_1'
+            );
+            wohnzimmer.covers = wohnzimmer.covers.filter((c: any) =>
+                c.entity_id === 'cover.wohnzimmer_sofa' ||
+                c.entity_id === 'cover.wohnzimmer_spielplaetzchen'
+            );
+
+            // Add specific scripts to Wohnzimmer if they exist in entities
+            const movieScript = entities.find(e => e.entity_id === 'script.movie_night');
+            const sexScript = entities.find(e => e.entity_id === 'script.sex_wohnzimmer');
+
+            wohnzimmer.scripts = []; // Reset and add specific
+            if (movieScript) wohnzimmer.scripts.push(movieScript);
+            if (sexScript) wohnzimmer.scripts.push(sexScript);
+
+            // Filter Media Players
+            wohnzimmer.mediaPlayers = wohnzimmer.mediaPlayers.filter((m: any) =>
+                m.entity_id === 'media_player.fernseher_im_wohnzimmer_2' ||
+                m.entity_id === 'media_player.nest_wohnzimmer_3'
+            );
+
+            // Clear others
+            wohnzimmer.climates = [];
+            wohnzimmer.sensors = [];
+            wohnzimmer.scenes = [];
+            wohnzimmer.scenes = [];
+        }
+
+        // CUSTOMIZATION: Essbereich strict filtering
+        const essbereich = areaMap.get('Essbereich');
+        if (essbereich) {
+            // Lights
+            essbereich.lights = essbereich.lights.filter((l: any) => l.entity_id === 'light.essbereich');
+
+            // Covers
+            essbereich.covers = essbereich.covers.filter((c: any) => c.entity_id === 'cover.essbereich');
+
+            // Scenes
+            const dinnerScene = entities.find(e => e.entity_id === 'scene.essbereich_essen');
+            essbereich.scenes = [];
+            if (dinnerScene) essbereich.scenes.push(dinnerScene);
+
+            // Media Players
+            essbereich.mediaPlayers = essbereich.mediaPlayers.filter((m: any) => m.entity_id === 'media_player.kuche_2');
+
+            // Clear others
+            essbereich.sensors = [];
+            essbereich.climates = [];
+            essbereich.scripts = [];
+            essbereich.scripts = [];
+        }
+
+        // CUSTOMIZATION: Küche strict filtering
+        const kueche = areaMap.get('Küche');
+        if (kueche) {
+            // Lights
+            kueche.lights = kueche.lights.filter((l: any) => l.entity_id === 'light.kuche');
+
+            // Covers
+            kueche.covers = kueche.covers.filter((c: any) => c.entity_id === 'cover.kuche');
+
+            // Scripts
+            const cookingScript = entities.find(e => e.entity_id === 'script.kochen');
+            kueche.scripts = [];
+            if (cookingScript) kueche.scripts.push(cookingScript);
+
+            // Media Players
+            kueche.mediaPlayers = kueche.mediaPlayers.filter((m: any) => m.entity_id === 'media_player.kuche_2');
+
+            // Clear others
+            kueche.sensors = [];
+            kueche.climates = [];
+            kueche.scenes = [];
+            kueche.scenes = [];
+        }
+
+        // CUSTOMIZATION: Schlafzimmer strict filtering
+        const schlafzimmer = areaMap.get('Schlafzimmer');
+        if (schlafzimmer) {
+            // Lights (Specific hue ambiance)
+            schlafzimmer.lights = schlafzimmer.lights.filter((l: any) => l.entity_id === 'light.hue_ambiance_ceiling_1');
+
+            // Scripts
+            const bedTime = entities.find(e => e.entity_id === 'script.bed_time');
+            const sexScript = entities.find(e => e.entity_id === 'script.sex_schlafzimmer');
+
+            schlafzimmer.scripts = [];
+            if (bedTime) schlafzimmer.scripts.push(bedTime);
+            if (sexScript) schlafzimmer.scripts.push(sexScript);
+
+            // Media
+            schlafzimmer.mediaPlayers = schlafzimmer.mediaPlayers.filter((m: any) =>
+                m.entity_id === 'media_player.shield_schlafzimmer' ||
+                m.entity_id === 'media_player.nest_schlafzimmer_2'
+            );
+
+            // Clear others
+            schlafzimmer.covers = [];
+            schlafzimmer.sensors = [];
+            schlafzimmer.climates = [];
+            schlafzimmer.scenes = [];
+            schlafzimmer.scenes = [];
+        }
+
+        // CUSTOMIZATION: Levins Zimmer strict filtering & Child Theme
+        const levin = areaMap.get('Levins Zimmer');
+        if (levin) {
+            // Helper to rename
+            const rename = (e: any, newName: string) => ({ ...e, attributes: { ...e.attributes, friendly_name: newName } });
+
+            // Lights
+            const lLev = entities.find(e => e.entity_id === 'light.levins_zimmer');
+            const lWardrobe = entities.find(e => e.entity_id === 'light.hue_play_1_2');
+            const lGalaxy = entities.find(e => e.entity_id === 'light.galaxie_kinderzimmer');
+
+            levin.lights = [];
+            if (lLev) levin.lights.push(lLev);
+            if (lWardrobe) levin.lights.push(rename(lWardrobe, 'Licht Kleiderschrank'));
+            if (lGalaxy) levin.lights.push(lGalaxy);
+
+            // Scenes/Scripts
+            const sFocus = entities.find(e => e.entity_id === 'scene.levins_zimmer_konzentrieren');
+            const sBed = entities.find(e => e.entity_id === 'script.bed_time_levin');
+            const sWake = entities.find(e => e.entity_id === 'scene.levins_zimmer_herbsternte');
+            const sParty = entities.find(e => e.entity_id === 'script.levin_party');
+
+            levin.scripts = [];
+            levin.scenes = [];
+
+            // We combine them into 'scripts' or 'scenes' bucket for display, or distribute them
+            // The UI combines them. Let's push all to scripts/scenes.
+            if (sFocus) levin.scenes.push(sFocus);
+            if (sWake) levin.scenes.push(rename(sWake, 'Aufwachen'));
+
+            if (sBed) levin.scripts.push(sBed);
+            if (sParty) levin.scripts.push(sParty);
+
+            // Media
+            levin.mediaPlayers = levin.mediaPlayers.filter((m: any) => m.entity_id === 'media_player.hub_levin');
+
+            // Theme Override
+            levin.gradient = ['#4F46E5', '#818CF8']; // Starry Blue/Indigo
+
+            // Clear others
+            levin.covers = [];
+            levin.sensors = [];
+            levin.climates = [];
+        }
+
+        // CUSTOMIZATION: Linas Zimmer strict filtering & Girl Theme
+        const lina = areaMap.get('Linas Zimmer');
+        if (lina) {
+            // Lights
+            lina.lights = lina.lights.filter((l: any) =>
+                l.entity_id === 'light.licht_lina_decke' ||
+                l.entity_id === 'light.hue_play_wickeltisch'
+            );
+
+            // Media
+            lina.mediaPlayers = lina.mediaPlayers.filter((m: any) => m.entity_id === 'media_player.hub_lina_2');
+
+            // Theme Override
+            lina.gradient = ['#DB2777', '#EC4899']; // Pink
+
+            // Clear others
+            lina.covers = [];
+            lina.sensors = [];
+            lina.climates = [];
+            lina.scripts = [];
+            lina.scenes = [];
+        }
+
         // Return only rooms that have at least one device, in the order of ALLOWED_ROOMS
+        // Sort lights and covers alphabetically by friendly_name
+        const sortByName = (a: any, b: any) => {
+            const nameA = (a.attributes.friendly_name || '').toLowerCase();
+            const nameB = (b.attributes.friendly_name || '').toLowerCase();
+            return nameA.localeCompare(nameB, 'de');
+        };
+
         return ALLOWED_ROOMS
             .map(name => {
                 const data = areaMap.get(name);
                 return {
                     name,
                     ...data,
+                    lights: data.lights.sort(sortByName),
+                    covers: data.covers.sort(sortByName),
                     gradient: ROOM_GRADIENTS[ALLOWED_ROOMS.indexOf(name) % ROOM_GRADIENTS.length],
                     icon: getRoomIcon(name)
                 };
@@ -448,10 +857,9 @@ export default function Rooms() {
                 room.covers.length > 0 ||
                 room.climates.length > 0 ||
                 room.mediaPlayers.length > 0
-            );
+            )
+            .sort((a, b) => a.name.localeCompare(b.name, 'de'));
     }, [entities]);
-
-    const activeRoomData = useMemo(() => rooms.find(r => r.name === selectedRoom), [rooms, selectedRoom]);
 
     // API object stable reference for modal
     const api = useMemo(() => ({
@@ -461,8 +869,61 @@ export default function Rooms() {
         closeCover,
         setCoverPosition,
         setClimateTemperature,
-        callService
-    }), [toggleLight, setLightBrightness, openCover, closeCover, setCoverPosition, setClimateTemperature, callService]);
+        callService,
+        activateScene
+    }), [toggleLight, setLightBrightness, openCover, closeCover, setCoverPosition, setClimateTemperature, callService, activateScene]);
+
+    const activeRoomData = useMemo(() => rooms.find(r => r.name === selectedRoom), [rooms, selectedRoom]);
+
+    // Sleep Timer Logic
+    const [sleepTimerEnd, setSleepTimerEnd] = useState<number | null>(null);
+    const [activeDuration, setActiveDuration] = useState<number | null>(null);
+    const [remainingTime, setRemainingTime] = useState<number | null>(null);
+
+    // Sync with script state
+    useEffect(() => {
+        const script = entities.find(e => e.entity_id === 'script.sleep_timer');
+        if (script && script.state === 'off') {
+            setSleepTimerEnd(null);
+            setActiveDuration(null);
+            setRemainingTime(null);
+        }
+    }, [entities]);
+
+    // Countdown interval
+    useEffect(() => {
+        if (!sleepTimerEnd) return;
+        const interval = setInterval(() => {
+            const now = Date.now();
+            const left = Math.ceil((sleepTimerEnd - now) / 60000);
+            if (left <= 0) {
+                setRemainingTime(0);
+                setSleepTimerEnd(null); // Expired locally
+            } else {
+                setRemainingTime(left);
+            }
+        }, 1000); // Check every second for smoother UI update, but display minutes
+        return () => clearInterval(interval);
+    }, [sleepTimerEnd]);
+
+    const sleepTimerState = useMemo(() => ({
+        activeDuration,
+        remaining: remainingTime,
+        isRunning: !!sleepTimerEnd,
+        startTimer: (min: number) => {
+            const now = Date.now();
+            setSleepTimerEnd(now + min * 60000);
+            setActiveDuration(min);
+            setRemainingTime(min);
+            api.callService('script', 'turn_on', 'script.sleep_timer', { variables: { duration: min, entity_id: 'media_player.shield_schlafzimmer' } });
+        },
+        stopTimer: () => {
+            setSleepTimerEnd(null);
+            setActiveDuration(null);
+            setRemainingTime(null);
+            api.callService('script', 'turn_on', 'script.sleep_timer_cancel', { variables: { entity_id: 'media_player.shield_schlafzimmer' } });
+        }
+    }), [activeDuration, remainingTime, sleepTimerEnd, api]);
 
     const closeModal = useCallback(() => setSelectedRoom(null), []);
 
@@ -542,6 +1003,7 @@ export default function Rooms() {
                 visible={!!selectedRoom}
                 onClose={closeModal}
                 api={api}
+                sleepTimerState={sleepTimerState}
             />
         </SafeAreaView>
     );

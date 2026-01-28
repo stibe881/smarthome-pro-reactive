@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useCallback, memo, useEffect } from 'react';
-import { View, Text, ScrollView, Pressable, useWindowDimensions, Modal, StyleSheet, Image, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, ScrollView, Pressable, useWindowDimensions, Modal, StyleSheet, Image, ActivityIndicator, Alert, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -180,15 +180,53 @@ const SpecificApplianceTile = ({
     );
 };
 
-const LockTile = ({ lock, callService }: { lock: any, callService: any }) => {
+const LockTile = ({ lock, callService, entities }: { lock: any, callService: any, entities?: any[] }) => {
     const isLocked = lock.state === 'locked';
     const isUnlocked = lock.state === 'unlocked';
     const isJammed = lock.state === 'jammed';
+
+    // Animation for blinking effect
+    const blinkAnim = React.useRef(new Animated.Value(1)).current;
+
+    // Check if this is the Nuki Wohnungstüre
+    const isNukiWohnung = lock.entity_id === 'lock.nuki_wohnungsture_lock';
+
+    // Get door sensor state for Wohnungstüre
+    const doorSensor = entities?.find(e => e.entity_id === 'binary_sensor.wohnungsture_tur');
+    const isDoorOpen = doorSensor?.state === 'on';
 
     let friendlyName = lock.attributes.friendly_name || 'Haustür';
     if (friendlyName.toLowerCase().includes('smart lock') || friendlyName.toLowerCase().includes('nuki')) {
         friendlyName = 'Wohnungstüre';
     }
+
+    // Blinking animation when door is open
+    React.useEffect(() => {
+        if (isDoorOpen && isNukiWohnung) {
+            const blink = Animated.loop(
+                Animated.sequence([
+                    Animated.timing(blinkAnim, { toValue: 0.3, duration: 500, useNativeDriver: true }),
+                    Animated.timing(blinkAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+                ])
+            );
+            blink.start();
+            return () => blink.stop();
+        } else {
+            blinkAnim.setValue(1);
+        }
+    }, [isDoorOpen, isNukiWohnung]);
+
+    // Get status text based on lock and door sensor state
+    const getStatusText = () => {
+        if (isNukiWohnung) {
+            if (isDoorOpen) return 'GEÖFFNET';
+            if (isJammed) return 'KLEMMT';
+            if (isUnlocked) return 'ENTRIEGELT';
+            return 'VERRIEGELT';
+        }
+        // Default for other locks
+        return isJammed ? 'KLEMMT' : isUnlocked ? 'OFFEN' : 'GESCHLOSSEN';
+    };
 
     const toggleLock = () => {
         if (isLocked) {
@@ -201,7 +239,7 @@ const LockTile = ({ lock, callService }: { lock: any, callService: any }) => {
         }
     };
 
-    const openDoor = () => {
+    const handleLockAction = () => {
         // Check if this is the front door (Haustür)
         const isHaustuer = lock.entity_id.includes('haustuer') || lock.entity_id.includes('haustür') || (lock.attributes.friendly_name && lock.attributes.friendly_name.toLowerCase().includes('haustür'));
 
@@ -210,36 +248,85 @@ const LockTile = ({ lock, callService }: { lock: any, callService: any }) => {
                 { text: 'Abbrechen', style: 'cancel' },
                 { text: 'ÖFFNEN', style: 'destructive', onPress: () => callService('button', 'press', 'button.hausture_tur_offnen') }
             ]);
+        } else if (isNukiWohnung) {
+            // Dynamic action based on current state
+            if (isUnlocked) {
+                Alert.alert('Tür verriegeln', `Möchtest du ${friendlyName} verriegeln?`, [
+                    { text: 'Abbrechen', style: 'cancel' },
+                    { text: 'VERRIEGELN', onPress: () => callService('lock', 'lock', lock.entity_id) }
+                ]);
+            } else {
+                Alert.alert('Tür entriegeln', `Möchtest du ${friendlyName} entriegeln?`, [
+                    { text: 'Abbrechen', style: 'cancel' },
+                    { text: 'ENTRIEGELN', style: 'destructive', onPress: () => callService('lock', 'unlock', lock.entity_id) }
+                ]);
+            }
         } else {
             Alert.alert('Tür öffnen', `Möchtest du die Falle von ${friendlyName} ziehen (Tür öffnen)?`, [
                 { text: 'Abbrechen', style: 'cancel' },
-                { text: 'ÖFFNEN', style: 'destructive', onPress: () => callService('lock', 'open', lock.entity_id) }
+                { text: 'ÖFFNEN', style: 'destructive', onPress: () => callService('lock', 'unlock', lock.entity_id) }
             ]);
         }
     };
 
+    // Determine button text and icon based on state (for Nuki Wohnung)
+    const getButtonText = () => {
+        if (isNukiWohnung) {
+            return isUnlocked ? 'Verriegeln' : 'Entriegeln';
+        }
+        return 'Öffnen';
+    };
+
+    const getButtonIcon = () => {
+        if (isNukiWohnung) {
+            return isUnlocked ? <Lock size={20} color="#3B82F6" /> : <Unlock size={20} color="#3B82F6" />;
+        }
+        return <DoorOpen size={20} color="#3B82F6" />;
+    };
+
+    // Determine card style based on state
+    const getCardStyle = () => {
+        if (isDoorOpen && isNukiWohnung) return { borderColor: '#F97316', borderWidth: 2 }; // Orange for open door
+        if (isUnlocked) return styles.lockCardOpen;
+        return {};
+    };
+
+    // Determine icon background color
+    const getIconBgColor = () => {
+        if (isDoorOpen && isNukiWohnung) return '#F97316'; // Orange
+        if (isUnlocked) return '#EF4444'; // Red
+        return '#10B981'; // Green
+    };
+
     return (
-        <View style={[styles.lockCard, isUnlocked && styles.lockCardOpen]}>
+        <Animated.View style={[styles.lockCard, getCardStyle(), { opacity: isDoorOpen && isNukiWohnung ? blinkAnim : 1 }]}>
             <Pressable onPress={toggleLock} style={styles.lockMainAction}>
-                <View style={[styles.lockIcon, isUnlocked ? { backgroundColor: '#EF4444' } : { backgroundColor: '#10B981' }]}>
-                    {isUnlocked ? <Unlock size={24} color="#fff" /> : <Lock size={24} color="#fff" />}
+                <View style={[styles.lockIcon, { backgroundColor: getIconBgColor() }]}>
+                    {isDoorOpen && isNukiWohnung ? <DoorOpen size={24} color="#fff" /> :
+                        isUnlocked ? <Unlock size={24} color="#fff" /> : <Lock size={24} color="#fff" />}
                 </View>
-                <View style={styles.lockInfo}>
-                    <Text style={[styles.lockTitle, isUnlocked && { color: '#EF4444' }]}>
-                        {friendlyName}
-                    </Text>
-                    <Text style={styles.lockState}>
-                        {isJammed ? 'KLEMMT' : isUnlocked ? 'OFFEN' : 'GESCHLOSSEN'}
+                <View style={[styles.lockInfo, isNukiWohnung && { justifyContent: 'center', flex: 1 }]}>
+                    {!isNukiWohnung && (
+                        <Text style={[styles.lockTitle, (isUnlocked || isDoorOpen) && { color: isDoorOpen ? '#F97316' : '#EF4444' }]}>
+                            {friendlyName}
+                        </Text>
+                    )}
+                    <Text style={[
+                        styles.lockState,
+                        isNukiWohnung && { textAlign: 'center', width: '100%' },
+                        isDoorOpen && isNukiWohnung && { color: '#F97316', fontWeight: 'bold' }
+                    ]}>
+                        {getStatusText()}
                     </Text>
                 </View>
             </Pressable>
 
-            {/* Separate OPEN Button */}
-            <Pressable onPress={openDoor} style={styles.openDoorBtn}>
-                <DoorOpen size={20} color="#3B82F6" />
-                <Text style={styles.openDoorText}>Öffnen</Text>
+            {/* Dynamic Lock/Unlock Button */}
+            <Pressable onPress={handleLockAction} style={styles.openDoorBtn}>
+                {getButtonIcon()}
+                <Text style={styles.openDoorText}>{getButtonText()}</Text>
             </Pressable>
-        </View>
+        </Animated.View>
     )
 };
 
@@ -317,7 +404,17 @@ const EventTile = ({ calendar, onPress }: { calendar: any, onPress?: () => void 
 
     const isBirthday = calendar.entity_id.includes('birth') || calendar.entity_id.includes('geburt') || calendar.attributes.message?.toLowerCase().includes('geburtstag');
     const startTime = new Date(calendar.attributes.start_time);
-    const isToday = new Date().toDateString() === startTime.toDateString();
+    const now = new Date();
+
+    // Reset time components for accurate date diff
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const eventDate = new Date(startTime.getFullYear(), startTime.getMonth(), startTime.getDate());
+
+    const isToday = today.getTime() === eventDate.getTime();
+
+    // Calculate days until
+    const diffTime = Math.abs(eventDate.getTime() - today.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
     return (
         <Pressable onPress={onPress}>
@@ -328,7 +425,11 @@ const EventTile = ({ calendar, onPress }: { calendar: any, onPress?: () => void 
                 <View style={styles.eventInfo}>
                     <Text style={styles.eventTitle} numberOfLines={1}>{calendar.attributes.message || 'Termin'}</Text>
                     <Text style={styles.eventTime}>
-                        {isToday ? 'Heute' : startTime.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })} • {calendar.attributes.all_day ? 'Ganztägig' : startTime.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+                        {isToday ? 'Heute' : startTime.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })} • {
+                            isBirthday
+                                ? (isToday ? 'Heute' : `In ${diffDays} Tagen`)
+                                : (calendar.attributes.all_day ? 'Ganztägig' : startTime.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }))
+                        }
                     </Text>
                 </View>
             </View>
@@ -375,8 +476,16 @@ export default function Dashboard() {
         startVacuum,
         returnVacuum,
         callService,
-        getEntityPictureUrl
+        getEntityPictureUrl,
+        shoppingListVisible,
+        setShoppingListVisible,
+        startShoppingGeofencing
     } = useHomeAssistant();
+
+    // Start Shopping Geofencing on Mount
+    useEffect(() => {
+        startShoppingGeofencing();
+    }, []);
 
     // Modal states
     const [activeModal, setActiveModal] = useState<'lights' | 'covers' | 'robi' | null>(null);
@@ -393,7 +502,12 @@ export default function Dashboard() {
             { id: 'light.badezimmer', name: '🚿 Badezimmer' },
             { id: 'light.deckenbeleuchtung_buro', name: '🏢 Büro' },
             { id: 'light.licht_garage', name: '🚽 Gäste WC' },
-        ];
+        ].sort((a, b) => {
+            // Extract name after emoji (skip first 2-3 chars which are emoji)
+            const nameA = a.name.slice(a.name.indexOf(' ') + 1).toLowerCase();
+            const nameB = b.name.slice(b.name.indexOf(' ') + 1).toLowerCase();
+            return nameA.localeCompare(nameB, 'de');
+        });
 
         return allowedLights.map(def => {
             const entity = entities.find(e => e.entity_id === def.id);
@@ -412,12 +526,20 @@ export default function Dashboard() {
     const covers = useMemo(() => {
         const allowedCovers = [
             { id: 'cover.alle_storen', name: 'Alle Storen' },
-            { id: 'cover.terrasse', name: '🪴 Terrasse' },
-            { id: 'cover.wohnzimmer_sofa', name: '🛋️ Wohnzimmer' },
-            { id: 'cover.wohnzimmer_spielplaetzchen', name: '🧸 Spielplätzchen' },
             { id: 'cover.essbereich', name: '🍽️ Essbereich' },
             { id: 'cover.kuche', name: '🍳 Küche' },
-        ];
+            { id: 'cover.wohnzimmer_spielplaetzchen', name: '🧸 Spielplätzchen' },
+            { id: 'cover.terrasse', name: '🪴 Terrasse' },
+            { id: 'cover.wohnzimmer_sofa', name: '🛋️ Wohnzimmer' },
+        ].sort((a, b) => {
+            // "Alle Storen" always first, then alphabetically
+            if (a.name === 'Alle Storen') return -1;
+            if (b.name === 'Alle Storen') return 1;
+            // Extract name after emoji (skip first space)
+            const nameA = a.name.includes(' ') ? a.name.slice(a.name.indexOf(' ') + 1).toLowerCase() : a.name.toLowerCase();
+            const nameB = b.name.includes(' ') ? b.name.slice(b.name.indexOf(' ') + 1).toLowerCase() : b.name.toLowerCase();
+            return nameA.localeCompare(nameB, 'de');
+        });
 
         return allowedCovers.map(def => {
             const entity = entities.find(e => e.entity_id === def.id);
@@ -610,13 +732,15 @@ export default function Dashboard() {
     }, [callService]);
 
     const handleSleep = useCallback(() => {
-        if (bedTimeScript) {
-            handleRunScript(bedTimeScript.entity_id);
-            Alert.alert('Gute Nacht', 'Schlafmodus aktiviert.');
-        } else {
-            Alert.alert('Fehler', 'Kein "Bed Time" Script gefunden (script.bed_time)');
-        }
-    }, [bedTimeScript, handleRunScript]);
+        // Direct call to script.bed_time as requested
+        callService('script', 'turn_on', 'script.bed_time');
+        Alert.alert('Gute Nacht', 'Schlafmodus (script.bed_time) aktiviert.');
+    }, [callService]);
+
+    const handleMorning = useCallback(() => {
+        callService('script', 'turn_on', 'script.morgenroutine');
+        Alert.alert('Guten Morgen', 'Morgenroutine (script.morgenroutine) gestartet.');
+    }, [callService]);
 
     const getGreeting = () => {
         const hour = new Date().getHours();
@@ -680,12 +804,12 @@ export default function Dashboard() {
                                 </Text>
                             </View>
                         )}
-                        {shoppingList && shoppingList.state !== '0' && shoppingList.state !== 'unknown' && (
-                            <View style={[styles.tempBadge, { backgroundColor: 'rgba(59, 130, 246, 0.15)' }]}>
-                                <ShoppingCart size={14} color="#3B82F6" />
+                        <Pressable onPress={() => setShowShoppingList(true)} style={[styles.tempBadge, { backgroundColor: 'rgba(59, 130, 246, 0.15)' }]}>
+                            <ShoppingCart size={14} color="#3B82F6" />
+                            {shoppingList && shoppingList.state !== '0' && shoppingList.state !== 'unknown' && (
                                 <Text style={[styles.tempText, { color: '#3B82F6' }]}>{shoppingList.state}</Text>
-                            </View>
-                        )}
+                            )}
+                        </Pressable>
                         <View style={[styles.statusDot, { backgroundColor: isConnected ? '#22C55E' : '#EF4444' }]} />
                     </View>
                 </View>
@@ -731,7 +855,7 @@ export default function Dashboard() {
                                 {securityEntities.map(item => (
                                     <View key={item.entity_id} style={{ flex: 1 }}>
                                         {item.entity_id.startsWith('lock.') ? (
-                                            <LockTile lock={item} callService={callService} />
+                                            <LockTile lock={item} callService={callService} entities={entities} />
                                         ) : (
                                             <DoorOpenerTile entity={item} callService={callService} />
                                         )}
@@ -841,7 +965,8 @@ export default function Dashboard() {
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Schnellaktionen</Text>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickActionsRow}>
-                        <QuickAction icon={Moon} iconColor="#FBBF24" label="Alles aus" onPress={handleAllLightsOff} gradient={['rgba(251,191,36,0.15)', 'rgba(251,191,36,0.05)']} />
+
+                        <QuickAction icon={Sun} iconColor="#F59E0B" label="Morgen" onPress={handleMorning} gradient={['rgba(245, 158, 11, 0.15)', 'rgba(245, 158, 11, 0.05)']} />
                         <QuickAction icon={Blinds} iconColor="#60A5FA" label="Rollläden auf" onPress={handleAllCoversOpen} gradient={['rgba(96, 165, 250,0.15)', 'rgba(96, 165, 250,0.05)']} />
                         <QuickAction icon={Blinds} iconColor="#3B82F6" label="Rollläden zu" onPress={handleAllCoversClose} gradient={['rgba(59,130,246,0.15)', 'rgba(59,130,246,0.05)']} />
                         <QuickAction icon={Bot} iconColor="#22C55E" label="Röbi Start" onPress={handleRobiStart} gradient={['rgba(34,197,94,0.15)', 'rgba(34,197,94,0.05)']} />
@@ -930,8 +1055,11 @@ export default function Dashboard() {
             />
 
             <ShoppingListModal
-                visible={showShoppingList}
-                onClose={() => setShowShoppingList(false)}
+                visible={shoppingListVisible || showShoppingList}
+                onClose={() => {
+                    setShowShoppingList(false);
+                    setShoppingListVisible(false);
+                }}
             />
         </SafeAreaView >
     );
