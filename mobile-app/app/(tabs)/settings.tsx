@@ -3,7 +3,7 @@ import { View, Text, TextInput, Pressable, Alert, ActivityIndicator, ScrollView,
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { useHomeAssistant } from '../../contexts/HomeAssistantContext';
-import { Wifi, WifiOff, Save, LogOut, User, Server, Key, CheckCircle, XCircle, Shield, Bell, Palette, ChevronRight, LucideIcon, X, ScanFace } from 'lucide-react-native';
+import { Wifi, WifiOff, Save, LogOut, User, Server, Key, CheckCircle, XCircle, Shield, Bell, Palette, ChevronRight, LucideIcon, X, ScanFace, MapPin, Smartphone, Search } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -196,13 +196,26 @@ export default function Settings() {
     const { logout, user, isBiometricsSupported, isBiometricsEnabled, toggleBiometrics } = useAuth();
     const {
         isConnected,
-        isConnecting,
-        connect,
-        disconnect,
+        haBaseUrl,
         saveCredentials,
-        getCredentials,
-        entities
-    } = useHomeAssistant();
+        disconnect,
+        notificationSettings,
+        updateNotificationSettings,
+        isGeofencingActive,
+        const {
+            isConnected,
+            haBaseUrl,
+            saveCredentials,
+            disconnect,
+            notificationSettings,
+            updateNotificationSettings,
+            isGeofencingActive,
+            setHomeLocation,
+            connect,
+            getCredentials,
+            entities,
+            isConnecting
+        } = useHomeAssistant();
 
     const [haUrl, setHaUrl] = useState('');
     const [haToken, setHaToken] = useState('');
@@ -419,13 +432,32 @@ export default function Settings() {
                     {/* App Settings */}
                     <SettingsSection title="App">
                         <SettingsRow
-                            icon={<Bell size={20} color="#F59E0B" />}
-                            iconColor="#F59E0B"
+                            icon={<Bell size={20} color={notificationSettings.enabled ? '#3B82F6' : '#94A3B8'} />}
+                            iconColor={notificationSettings.enabled ? '#3B82F6' : '#94A3B8'}
                             label="Benachrichtigungen"
-                            value="Verwalten"
                             showChevron
                             onPress={() => setNotificationModalVisible(true)}
                         />
+                        <SettingsRow
+                            icon={<Palette size={20} color="#8B5CF6" />}
+                            iconColor="#8B5CF6"
+                            label="Erscheinungsbild"
+                            value="Dunkel"
+                            showChevron
+                        />
+                    </SettingsSection>
+
+                    <SettingsSection title="Standort">
+                        <SettingsRow
+                            icon={<MapPin size={20} color={isGeofencingActive ? '#10B981' : '#94A3B8'} />}
+                            iconColor={isGeofencingActive ? '#10B981' : '#94A3B8'}
+                            label="Standort als Zuhause setzen"
+                            value={isGeofencingActive ? 'Aktiv' : 'Inaktiv'}
+                            onPress={setHomeLocation}
+                        />
+                    </SettingsSection>
+
+                    <SettingsSection title="Sicherheit">
                         {isBiometricsSupported && (
                             <SettingsRow
                                 icon={<ScanFace size={20} color="#0EA5E9" />}

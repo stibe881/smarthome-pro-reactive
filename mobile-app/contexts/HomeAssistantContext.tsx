@@ -2,6 +2,32 @@ import React, { createContext, useContext, useState, useEffect, useRef, useCallb
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { HomeAssistantService } from '../services/homeAssistant';
 import * as Notifications from 'expo-notifications';
+import * as Location from 'expo-location';
+import * as TaskManager from 'expo-task-manager';
+
+const GEOFENCING_TASK = 'GEOFENCING_TASK';
+const HOME_COORDS_KEY = '@smarthome_home_coords';
+
+// Define the background task
+TaskManager.defineTask(GEOFENCING_TASK, async ({ data, error }: any) => {
+    if (error) {
+        console.error("Geofencing Task Error:", error);
+        return;
+    }
+    if (data.eventType === Location.GeofencingEventType.Enter) {
+        console.log("Entered Home Region!");
+        await Notifications.scheduleNotificationAsync({
+            content: {
+                title: "Willkommen Zuhause",
+                body: "Möchtest du die Haustüre öffnen?",
+                sound: true,
+                categoryIdentifier: 'DOOR_OPEN_ACTION',
+                data: { action: 'open_door' }
+            },
+            trigger: null
+        });
+    }
+});
 
 export interface EntityState {
     entity_id: string;
@@ -53,6 +79,8 @@ interface HomeAssistantContextType {
     notificationSettings: NotificationSettings;
     updateNotificationSettings: (settings: NotificationSettings) => Promise<void>;
     fetchCalendarEvents: (entityId: string, start: string, end: string) => Promise<any[]>;
+    setHomeLocation: () => Promise<void>;
+    isGeofencingActive: boolean;
 }
 
 const HomeAssistantContext = createContext<HomeAssistantContextType | undefined>(undefined);
@@ -85,6 +113,34 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
             waschkueche: true
         }
     });
+    const [isGeofencingActive, setIsGeofencingActive] = useState(false);
+
+    // Notification Response Listener
+    useEffect(() => {
+        const subscription = Notifications.addNotificationResponseReceivedListener(response => {
+            const actionId = response.actionIdentifier;
+            if (actionId === 'open_door_btn' || (response.notification.request.content.categoryIdentifier === 'DOOR_OPEN_ACTION' && actionId === Notifications.DEFAULT_ACTION_IDENTIFIER)) {
+                // Handle Action
+                handleDoorOpenAction();
+            }
+        });
+        return () => subscription.remove();
+    }, [isConnected]); // Depend on connection to ensure we can call service
+
+    const handleDoorOpenAction = async () => {
+        // We need to ensure service is connected or reconnect
+        // For simplicity, attempt call. If app was killed, we might need to reconnect first.
+        // Assuming app is foregrounded by the interaction.
+        if (serviceRef.current) {
+            // Trigger the button
+            serviceRef.current.callService('button', 'press', 'button.hausture_tur_offnen');
+            // Feedback
+            Notifications.scheduleNotificationAsync({
+                content: { title: "Haustür", body: "Öffnen Befehl gesendet.", sound: false },
+                trigger: null
+            });
+        }
+    };
 
     const handleStateChange = useCallback((newEntities: any[]) => {
         setEntities(newEntities);
@@ -107,6 +163,20 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
                 shouldShowList: true
             }),
         });
+
+        // Register Action Category
+        Notifications.setNotificationCategoryAsync('DOOR_OPEN_ACTION', [
+            {
+                identifier: 'open_door_btn',
+                buttonTitle: 'Haustüre öffnen',
+                options: {
+                    opensAppToForeground: false, // Perform in background if supported, or true to open app
+                },
+            },
+        ]);
+
+        // Check/Restore Geofencing
+        checkGeofencingStatus();
 
         // Load Notification Settings
         (async () => {
@@ -190,6 +260,52 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
         });
 
     }, [entities, notificationSettings]); // Re-run when settings change
+
+    // Geofencing Logic
+    const checkGeofencingStatus = async () => {
+        const isRegistered = await TaskManager.isTaskRegisteredAsync(GEOFENCING_TASK);
+        setIsGeofencingActive(isRegistered);
+    };
+
+    const setHomeLocation = async () => {
+        try {
+            const { status } = await Location.requestForegroundPermissionsAsync();
+            if (status !== 'granted') {
+                alert('Standortberechtigung verweigert');
+                return;
+            }
+            const bgStatus = await Location.requestBackgroundPermissionsAsync();
+            if (bgStatus.status !== 'granted') {
+                alert('Hintergrund-Standortberechtigung verweigert. Diese ist nötig für Geofencing.');
+                return;
+            }
+
+            const location = await Location.getCurrentPositionAsync({});
+            const { latitude, longitude } = location.coords;
+
+            // Save Coords (optional, if we want to show map later)
+            await AsyncStorage.setItem(HOME_COORDS_KEY, JSON.stringify({ latitude, longitude }));
+
+            // Start Geofencing
+            await Location.startGeofencingAsync(GEOFENCING_TASK, [
+                {
+                    identifier: 'home_region',
+                    latitude,
+                    longitude,
+                    radius: 100, // 100 meters
+                    notifyOnEnter: true,
+                    notifyOnExit: false,
+                }
+            ]);
+
+            setIsGeofencingActive(true);
+            alert('Zuhause gesetzt! Du erhältst nun eine Benachrichtigung, wenn du heimkommst.');
+
+        } catch (e: any) {
+            console.error(e);
+            alert('Fehler beim Setzen des Standorts: ' + e.message);
+        }
+    };
 
     const saveCredentials = async (url: string, token: string) => {
         await AsyncStorage.setItem(HA_URL_KEY, url);
@@ -346,7 +462,9 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
         getEntityPictureUrl,
         notificationSettings,
         updateNotificationSettings,
-        fetchCalendarEvents
+        fetchCalendarEvents,
+        setHomeLocation,
+        isGeofencingActive
     };
 
     return (
