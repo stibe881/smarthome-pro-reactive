@@ -145,49 +145,40 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
         await AsyncStorage.setItem(NOTIF_SETTINGS_KEY, JSON.stringify(newSettings));
     };
 
-    // Monitor entities for notifications
+    // Monitor entities for notifications (Doors)
     useEffect(() => {
         if (entities.length === 0) return;
         if (!notificationSettings.enabled) return; // Master Switch Check
 
-        // Find targets
-        const targets = entities.filter(e => {
-            const id = e.entity_id.toLowerCase();
-            const name = (e.attributes.friendly_name || '').toLowerCase();
+        // Specific Targets provided by user
+        const targetIds = {
+            'binary_sensor.waschkuchenture': 'Waschküche',
+            'binary_sensor.highlighttur': 'Highlight'
+        };
 
-            // Check specific toggles
-            const matchesHighlight = (id.includes('highlight') || name.includes('highlight'));
-            const matchesWasch = (name.includes('wasch') && name.includes('tür')) || (id.includes('wasch') && id.includes('door'));
-
-            if (matchesHighlight && !notificationSettings.doors.highlight) return false;
-            if (matchesWasch && !notificationSettings.doors.waschkueche) return false;
-
-            // Must be binary_sensor (contact) or lock? User said "geöffnet" (opened).
-            // Usually binary_sensor is for open/close. Lock is for locked/unlocked.
-            // Let's assume binary_sensor first, or covers/locks if no sensors found.
-            // Also user said "Highlight Türe", could be a lock too.
-            // We'll monitor both binary_sensor (on=open) and lock (unlocked).
-            // BUT "opened" implies physical open.
-            const isContact = e.entity_id.startsWith('binary_sensor.') && e.attributes.device_class === 'door';
-            const isGenericContact = e.entity_id.startsWith('binary_sensor.') && (name.includes('tür') || name.includes('door')); // sometimes device_class is missing
-
-            // If it's a lock, "opened" might mean unlocked, but usually people say "unlocked".
-            // "Geöffnet" = Open.
-            // Let's stick to binary_sensors for "Open" events if possible.
-            return (matchesHighlight || matchesWasch) && (isContact || isGenericContact);
-        });
+        const targets = entities.filter(e => Object.keys(targetIds).includes(e.entity_id));
 
         targets.forEach(e => {
             const prevState = prevDoorStates.current[e.entity_id];
-            const currentState = e.state; // 'on' usually means Open for binary_sensor.door
+            const currentState = e.state; // 'on' = Open for binary_sensor
 
             // Detect transition Closed -> Open (off -> on)
             if (prevState === 'off' && currentState === 'on') {
-                const friendlyName = e.attributes.friendly_name || 'Türe';
+
+                // Check granular settings
+                // We map both to 'security' or specific keys if we had them.
+                // Assuming 'security' cover these doors or checking explicitly.
+                // For now, let's assume if it's in the list, we want it unless security is off.
+                // (Optional: add specific settings keys for them later if needed)
+                if (notificationSettings.doors.highlight === false && e.entity_id.includes('highlight')) return;
+                if (notificationSettings.doors.waschkueche === false && e.entity_id.includes('wasch')) return;
+
+                const friendlyName = targetIds[e.entity_id as keyof typeof targetIds];
+
                 Notifications.scheduleNotificationAsync({
                     content: {
-                        title: "Tür geöffnet!",
-                        body: `${friendlyName} wurde geöffnet.`,
+                        title: "Security Center",
+                        body: `${friendlyName} wurde geöffnet`,
                         sound: true,
                     },
                     trigger: null, // show immediately
