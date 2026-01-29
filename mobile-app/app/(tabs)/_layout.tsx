@@ -55,9 +55,9 @@ export default function TabLayout() {
                 }}
             />
             <Tabs.Screen
-                name="household"
+                name="gemini"
                 options={{
-                    title: 'Haushalt',
+                    title: 'Gemini',
                     tabBarIcon: ({ color }) => <Sparkles size={24} stroke={color} />,
                 }}
             />

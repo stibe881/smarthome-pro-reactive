@@ -11,6 +11,8 @@ const SHOPPING_TASK = 'SHOPPING_TASK';
 const HOME_COORDS_KEY = '@smarthome_home_coords';
 const SHOPPING_COUNT_KEY = '@smarthome_shopping_count';
 const SHOP_ENTRY_KEY = '@smarthome_shop_entry';
+const IS_HOME_KEY = '@smarthome_is_at_home';
+const METEO_WARNING_KEY = '@smarthome_last_weather_warning';
 
 // Shops to trigger notification
 const TARGET_SHOPS = ['coop', 'migros', 'volg', 'aldi', 'lidl', 'kaufland', 'denner'];
@@ -104,7 +106,15 @@ TaskManager.defineTask(GEOFENCING_TASK, async ({ data, error }: any) => {
         console.error("Geofencing Task Error:", error);
         return;
     }
-    if (data.eventType === Location.GeofencingEventType.Enter) {
+    const eventType = data.eventType;
+
+    if (eventType === Location.GeofencingEventType.Enter) {
+        const isHome = await AsyncStorage.getItem(IS_HOME_KEY);
+        if (isHome === 'true') {
+            console.log("Already at home, skipping notification");
+            return;
+        }
+
         console.log("Entered Home Region!");
         await Notifications.scheduleNotificationAsync({
             content: {
@@ -116,6 +126,11 @@ TaskManager.defineTask(GEOFENCING_TASK, async ({ data, error }: any) => {
             },
             trigger: null
         });
+        await AsyncStorage.setItem(IS_HOME_KEY, 'true');
+
+    } else if (eventType === Location.GeofencingEventType.Exit) {
+        console.log("Exited Home Region");
+        await AsyncStorage.setItem(IS_HOME_KEY, 'false');
     }
 });
 
@@ -177,6 +192,7 @@ interface HomeAssistantContextType {
     shoppingListVisible: boolean;
     setShoppingListVisible: (visible: boolean) => void;
     startShoppingGeofencing: () => Promise<void>;
+    fetchWeatherForecast: (entityId: string, forecastType?: 'daily' | 'hourly') => Promise<any[]>;
 }
 
 const HomeAssistantContext = createContext<HomeAssistantContextType | undefined>(undefined);
@@ -214,11 +230,15 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
     useEffect(() => {
         const subscription = Notifications.addNotificationResponseReceivedListener(response => {
             const actionId = response.actionIdentifier;
-            if (actionId === 'open_door_btn' || (response.notification.request.content.categoryIdentifier === 'DOOR_OPEN_ACTION' && actionId === Notifications.DEFAULT_ACTION_IDENTIFIER)) {
-                // Handle Action
+            const categoryId = response.notification.request.content.categoryIdentifier;
+
+            // Handle door open action from any door-related notification
+            if (actionId === 'open_door_btn' ||
+                ((categoryId === 'DOOR_OPEN_ACTION' || categoryId === 'DOORBELL_ACTION') &&
+                    actionId === Notifications.DEFAULT_ACTION_IDENTIFIER)) {
                 handleDoorOpenAction();
             }
-            if (response.notification.request.content.categoryIdentifier === 'SHOPPING_ACTION') {
+            if (categoryId === 'SHOPPING_ACTION') {
                 setShoppingListVisible(true);
             }
         });
@@ -281,38 +301,48 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
 
     // Monitor MeteoAlarm
     useEffect(() => {
-        if (!entities.length) return;
+        const checkWeather = async () => {
+            if (!entities.length) return;
 
-        const meteoData = entities.find(e => e.entity_id === 'binary_sensor.meteoalarm');
-        if (meteoData) {
-            const currentState = meteoData.state;
-            const lastState = prevMeteoState.current;
+            const meteoData = entities.find(e => e.entity_id === 'binary_sensor.meteoalarm');
+            if (meteoData) {
+                const currentState = meteoData.state;
 
-            // Only notify if it turned ON or attributes changed meaningfully while ON (simplified: just checking ON transition for now)
-            if (currentState === 'on' && lastState !== 'on') {
-                const headline = meteoData.attributes.headline || 'Wetterwarnung';
-                const description = meteoData.attributes.description || '';
-                const effective = meteoData.attributes.effective || '';
+                if (currentState === 'on') {
+                    const headline = meteoData.attributes.headline || 'Wetterwarnung';
+                    const description = meteoData.attributes.description || '';
+                    const effective = meteoData.attributes.effective || '';
 
-                const titleDE = translateWeather(headline);
-                const descDE = translateWeather(description);
-                // Simple effective date formatting if it's a timestamp
-                const effectiveDE = effective ? new Date(effective).toLocaleString('de-CH') : '';
+                    // Create unique ID for this specific warning occurrence
+                    const warningId = `${headline}_${effective}`;
+                    const lastWarningId = await AsyncStorage.getItem(METEO_WARNING_KEY);
 
-                const body = `${descDE} ${effectiveDE ? `(gültig ab ${effectiveDE})` : ''}`;
+                    if (warningId !== lastWarningId) {
+                        const titleDE = translateWeather(headline);
+                        const descDE = translateWeather(description);
+                        // Simple effective date formatting if it's a timestamp
+                        const effectiveDE = effective ? new Date(effective).toLocaleString('de-CH') : '';
 
-                Notifications.scheduleNotificationAsync({
-                    content: {
-                        title: titleDE,
-                        body: body,
-                        sound: true,
-                        data: { type: 'weather_warning' }
-                    },
-                    trigger: null
-                });
+                        const body = `${descDE} ${effectiveDE ? `(gültig ab ${effectiveDE})` : ''}`;
+
+                        await Notifications.scheduleNotificationAsync({
+                            content: {
+                                title: titleDE,
+                                body: body,
+                                sound: true,
+                                data: { type: 'weather_warning' }
+                            },
+                            trigger: null
+                        });
+
+                        // Remember we showed this one
+                        await AsyncStorage.setItem(METEO_WARNING_KEY, warningId);
+                    }
+                }
             }
-            prevMeteoState.current = currentState;
-        }
+        };
+
+        checkWeather();
     }, [entities]);
 
     // Initialize service
@@ -340,6 +370,38 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
                 },
             },
         ]);
+
+        // Register Doorbell Action Category
+        Notifications.setNotificationCategoryAsync('DOORBELL_ACTION', [
+            {
+                identifier: 'open_door_btn',
+                buttonTitle: 'Türe öffnen',
+                options: {
+                    opensAppToForeground: false,
+                },
+            },
+        ]);
+
+        // Set up event callback for doorbell
+        serviceRef.current.setEventCallback((event: any) => {
+            // Check if this is a doorbell event
+            if (event.event_type === 'state_changed' &&
+                event.data?.entity_id === 'event.hausture_klingeln' &&
+                event.data?.new_state?.state !== event.data?.old_state?.state) {
+                console.log('🔔 Doorbell rang!', event);
+                // Send notification
+                Notifications.scheduleNotificationAsync({
+                    content: {
+                        title: 'Jemand hat geklingelt',
+                        body: 'Möchtest du die Türe öffnen?',
+                        sound: true,
+                        categoryIdentifier: 'DOORBELL_ACTION',
+                        data: { type: 'doorbell' }
+                    },
+                    trigger: null
+                });
+            }
+        });
 
         // Check/Restore Geofencing
         checkGeofencingStatus();
@@ -476,7 +538,7 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
                     longitude,
                     radius: 100, // 100 meters
                     notifyOnEnter: true,
-                    notifyOnExit: false,
+                    notifyOnExit: true,
                 }
             ]);
 
@@ -794,7 +856,8 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
         addTodoItem: async (entityId: string, item: string) => serviceRef.current?.addTodoItem(entityId, item),
         shoppingListVisible,
         setShoppingListVisible,
-        startShoppingGeofencing
+        startShoppingGeofencing,
+        fetchWeatherForecast: async (entityId: string, forecastType: 'daily' | 'hourly' = 'daily') => serviceRef.current?.fetchWeatherForecast(entityId, forecastType) || [],
     };
 
     return (

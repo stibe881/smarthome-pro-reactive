@@ -149,6 +149,19 @@ export class HomeAssistantService {
                 });
             }
         });
+
+        // Subscribe to all events for specific event handling (e.g., doorbell)
+        this.send({ type: 'subscribe_events' }, (data) => {
+            if (data.type === 'event' && this.onEventCallback) {
+                this.onEventCallback(data.event);
+            }
+        });
+    }
+
+    private onEventCallback: ((event: any) => void) | null = null;
+
+    setEventCallback(callback: (event: any) => void) {
+        this.onEventCallback = callback;
     }
 
     async callService(domain: string, service: string, entityId: string, data: any = {}) {
@@ -473,6 +486,85 @@ export class HomeAssistantService {
     async addTodoItem(entityId: string, itemSummary: string) {
         return this.callService('todo', 'add_item', entityId, {
             item: itemSummary
+        });
+    }
+
+    async fetchWeatherForecast(entityId: string, forecastType: 'daily' | 'hourly' = 'daily'): Promise<any[]> {
+        console.log(`Fetching weather forecast for ${entityId} (${forecastType})`);
+        return new Promise((resolve) => {
+            if (!this.isConnected()) {
+                console.warn('Cannot fetch forecast - not connected');
+                resolve([]);
+                return;
+            }
+
+            const id = this.messageId++;
+            const message = {
+                id,
+                type: 'call_service',
+                domain: 'weather',
+                service: 'get_forecasts',
+                target: {
+                    entity_id: entityId
+                },
+                service_data: {
+                    type: forecastType
+                },
+                return_response: true
+            };
+
+            console.log('Sending Weather Forecast Request:', JSON.stringify(message));
+
+            this.socket!.send(JSON.stringify(message));
+
+            const timeout = setTimeout(() => {
+                console.warn(`Weather forecast request ${id} timed out`);
+                if (this.handlers.has(id)) {
+                    this.handlers.delete(id);
+                    resolve([]);
+                }
+            }, 15000);
+
+            this.handlers.set(id, (response: any) => {
+                clearTimeout(timeout);
+                console.log('Raw Weather Forecast Response:', JSON.stringify(response));
+
+                if (response.success && response.result) {
+                    let forecast: any[] = [];
+                    const res = response.result;
+
+                    // 1. Try Direct Path (res.response[entityId].forecast)
+                    if (res.response && res.response[entityId] && Array.isArray(res.response[entityId].forecast)) {
+                        forecast = res.response[entityId].forecast;
+                        console.log(`✅ Found ${forecast.length} forecast entries via res.response path`);
+                    }
+                    // 2. Try res[entityId].forecast
+                    else if (res[entityId] && Array.isArray(res[entityId].forecast)) {
+                        forecast = res[entityId].forecast;
+                        console.log(`✅ Found ${forecast.length} forecast entries via res[entityId] path`);
+                    }
+                    // 3. Try Recursive Fallback
+                    else {
+                        const findForecast = (obj: any): any[] | null => {
+                            if (!obj || typeof obj !== 'object') return null;
+                            if (Array.isArray(obj.forecast)) return obj.forecast;
+                            for (const key of Object.keys(obj)) {
+                                if (key === 'context' || key === 'id') continue;
+                                const found = findForecast(obj[key]);
+                                if (found) return found;
+                            }
+                            return null;
+                        };
+                        forecast = findForecast(res) || [];
+                        console.log(`⚠️ Used recursive search, found ${forecast.length} forecast entries`);
+                    }
+
+                    resolve(forecast);
+                } else {
+                    console.warn('Weather forecast call failed or no result', response);
+                    resolve([]);
+                }
+            });
         });
     }
 }

@@ -21,6 +21,7 @@ import {
 import RobiVacuumModal from '../../components/RobiVacuumModal';
 import CalendarModal from '../../components/CalendarModal';
 import ShoppingListModal from '../../components/ShoppingListModal';
+import WeatherForecastModal from '../../components/WeatherForecastModal';
 
 interface HeroStatCardProps {
     icon: LucideIcon;
@@ -445,6 +446,7 @@ export default function Dashboard() {
     // --- Calendar Modal Logic ---
     const [calendarModal, setCalendarModal] = useState<{ visible: boolean, entityId: string, title: string, color: string }>({ visible: false, entityId: '', title: '', color: '' });
     const [showShoppingList, setShowShoppingList] = useState(false);
+    const [showWeatherForecast, setShowWeatherForecast] = useState(false);
 
     const handleCalendarPress = (calendar: any) => {
         // Logic: if birthday (geburtstage_2), else use the clicked calendar's ID
@@ -668,6 +670,17 @@ export default function Dashboard() {
     const weatherStationTemp = useMemo(() => entities.find(e => e.entity_id === 'sensor.wetterstation_actual_temperature'), [entities]);
     const weatherZell = useMemo(() => entities.find(e => e.entity_id === 'weather.zell_lu' || e.attributes.friendly_name?.toLowerCase().includes('zell')), [entities]);
 
+    // Use weather.familie_gross for forecast data (user requested)
+    const weatherFamilieGross = useMemo(() => entities.find(e => e.entity_id === 'weather.familie_gross'), [entities]);
+
+    // Composite Weather Entity: Use Zell for current state, Familie Gross for Forecast
+    const weatherComposite = useMemo(() => {
+        // Prefer Familie Gross for forecast, fallback to Zell
+        const forecastEntity = weatherFamilieGross || weatherZell;
+        if (!forecastEntity) return weatherZell;
+        return forecastEntity;
+    }, [weatherZell, weatherFamilieGross]);
+
     // Format Weather Status (German)
     const getWeatherText = (state: string) => {
         const mapping: Record<string, string> = {
@@ -796,13 +809,13 @@ export default function Dashboard() {
                     </View>
                     <View style={styles.headerRight}>
                         {weatherStationTemp && (
-                            <View style={styles.tempBadge}>
+                            <Pressable onPress={() => setShowWeatherForecast(true)} style={styles.tempBadge}>
                                 <WeatherIcon size={14} color="#F59E0B" />
                                 <Text style={styles.tempText}>
                                     {weatherStationTemp.state}°
                                     {weatherZell && <Text style={{ fontWeight: '400', opacity: 0.8 }}> {getWeatherText(weatherZell.state)}</Text>}
                                 </Text>
-                            </View>
+                            </Pressable>
                         )}
                         <Pressable onPress={() => setShowShoppingList(true)} style={[styles.tempBadge, { backgroundColor: 'rgba(59, 130, 246, 0.15)' }]}>
                             <ShoppingCart size={14} color="#3B82F6" />
@@ -842,6 +855,19 @@ export default function Dashboard() {
                         </View>
                     );
                 })()}
+
+                {/* Quick Actions (Moved below Appliances) */}
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Schnellaktionen</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickActionsRow}>
+
+                        <QuickAction icon={Sun} iconColor="#F59E0B" label="Morgen" onPress={handleMorning} gradient={['rgba(245, 158, 11, 0.15)', 'rgba(245, 158, 11, 0.05)']} />
+                        <QuickAction icon={Blinds} iconColor="#60A5FA" label="Rollläden auf" onPress={handleAllCoversOpen} gradient={['rgba(96, 165, 250,0.15)', 'rgba(96, 165, 250,0.05)']} />
+                        <QuickAction icon={Blinds} iconColor="#3B82F6" label="Rollläden zu" onPress={handleAllCoversClose} gradient={['rgba(59,130,246,0.15)', 'rgba(59,130,246,0.05)']} />
+                        <QuickAction icon={Bot} iconColor="#22C55E" label="Röbi Start" onPress={handleRobiStart} gradient={['rgba(34,197,94,0.15)', 'rgba(34,197,94,0.05)']} />
+                        <QuickAction icon={BedDouble} iconColor="#8B5CF6" label="Schlafen" onPress={handleSleep} gradient={['rgba(139, 92, 246,0.15)', 'rgba(139, 92, 246,0.05)']} />
+                    </ScrollView>
+                </View>
 
 
 
@@ -961,18 +987,7 @@ export default function Dashboard() {
                     </View>
                 </View>
 
-                {/* Quick Actions */}
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Schnellaktionen</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickActionsRow}>
 
-                        <QuickAction icon={Sun} iconColor="#F59E0B" label="Morgen" onPress={handleMorning} gradient={['rgba(245, 158, 11, 0.15)', 'rgba(245, 158, 11, 0.05)']} />
-                        <QuickAction icon={Blinds} iconColor="#60A5FA" label="Rollläden auf" onPress={handleAllCoversOpen} gradient={['rgba(96, 165, 250,0.15)', 'rgba(96, 165, 250,0.05)']} />
-                        <QuickAction icon={Blinds} iconColor="#3B82F6" label="Rollläden zu" onPress={handleAllCoversClose} gradient={['rgba(59,130,246,0.15)', 'rgba(59,130,246,0.05)']} />
-                        <QuickAction icon={Bot} iconColor="#22C55E" label="Röbi Start" onPress={handleRobiStart} gradient={['rgba(34,197,94,0.15)', 'rgba(34,197,94,0.05)']} />
-                        <QuickAction icon={BedDouble} iconColor="#8B5CF6" label="Schlafen" onPress={handleSleep} gradient={['rgba(139, 92, 246,0.15)', 'rgba(139, 92, 246,0.05)']} />
-                    </ScrollView>
-                </View>
 
             </ScrollView>
 
@@ -1060,6 +1075,12 @@ export default function Dashboard() {
                     setShowShoppingList(false);
                     setShoppingListVisible(false);
                 }}
+            />
+
+            <WeatherForecastModal
+                visible={showWeatherForecast}
+                onClose={() => setShowWeatherForecast(false)}
+                weatherEntity={weatherComposite}
             />
         </SafeAreaView >
     );

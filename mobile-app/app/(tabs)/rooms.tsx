@@ -1,5 +1,5 @@
 import React, { useMemo, useState, memo, useCallback, useEffect } from 'react';
-import { View, Text, ScrollView, Pressable, useWindowDimensions, Modal, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, Pressable, useWindowDimensions, Modal, StyleSheet, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useHomeAssistant } from '../../contexts/HomeAssistantContext';
 import {
@@ -8,10 +8,12 @@ import {
     Briefcase, Baby, Dumbbell, Shirt, TreeDeciduous, Droplets,
     Thermometer, Gamepad2, BookOpen, Armchair, DoorOpen, ChevronUp,
     ParkingSquare, Flower2, Sun, Moon, LucideIcon,
-    Wind, Fan, Play, Pause, Square, Volume2, Tv, Timer, Heart, Music, Coffee, Zap
+    Wind, Fan, Play, Pause, Square, Volume2, Tv, Timer, Heart, Music, Coffee, Zap, Camera,
+    SkipBack, SkipForward, Palette, DoorClosed
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Slider from '@react-native-community/slider';
+import LightControlModal from '../../components/LightControlModal';
 
 // Script/Scene Tile Component
 // Script/Scene Tile Component
@@ -21,6 +23,38 @@ const SceneTile = memo(({ scene, activateScene, width }: any) => {
         const id = entityId.toLowerCase();
         const n = name.toLowerCase();
 
+        // Gaming / Spielen / Zocken
+        if (n.includes('spielen') || n.includes('zocken') || n.includes('gaming') || id.includes('zock') || id.includes('game')) {
+            return {
+                colors: ['#7C3AED', '#A855F7'] as const, // Purple
+                icon: Gamepad2,
+                iconColor: '#DDD6FE'
+            };
+        }
+        // Work / Arbeit
+        if (n.includes('arbeit') || n.includes('work') || id.includes('arbeit')) {
+            return {
+                colors: ['#0369A1', '#0EA5E9'] as const, // Sky Blue
+                icon: Briefcase,
+                iconColor: '#BAE6FD'
+            };
+        }
+        // Focus / Konzentrieren
+        if (n.includes('konzentrier') || n.includes('focus') || n.includes('konzentration')) {
+            return {
+                colors: ['#065F46', '#10B981'] as const, // Emerald
+                icon: BookOpen,
+                iconColor: '#A7F3D0'
+            };
+        }
+        // Cinema / Kino
+        if (n.includes('kino') || n.includes('cinema') || id.includes('kino')) {
+            return {
+                colors: ['#7F1D1D', '#EF4444'] as const, // Red
+                icon: Tv,
+                iconColor: '#FECACA'
+            };
+        }
         if (id.includes('bed') || n.includes('schlafen') || n.includes('nacht')) {
             return {
                 colors: ['#312E81', '#4F46E5'] as const,
@@ -75,8 +109,16 @@ const SceneTile = memo(({ scene, activateScene, width }: any) => {
     const style = getSceneStyle(scene.entity_id, scene.attributes.friendly_name || '');
     const Icon = style.icon;
 
+    // Renaming Logic (Specific overrides requested by user)
+    let displayName = scene.attributes.friendly_name;
+    if (displayName === 'Arbeit mit Musik') displayName = 'Arbeit';
+    else if (displayName === 'Kino Büro') displayName = 'Kino';
+    else if (displayName === 'Büro Konzentrieren') displayName = 'Konzentrieren';
+    else if (displayName === 'Büro Zocken') displayName = 'Zocken';
+    else if (displayName?.toLowerCase().startsWith('levins')) displayName = 'Spielen';
+
     return (
-        <View style={[styles.tile, { width, minHeight: 60, height: 60 }]}>
+        <View style={[styles.tile, { width, height: 72, borderRadius: 20, overflow: 'hidden', borderWidth: 0 }]}>
             <Pressable
                 onPress={() => activateScene(scene.entity_id)}
                 style={{ flex: 1 }}
@@ -85,22 +127,32 @@ const SceneTile = memo(({ scene, activateScene, width }: any) => {
                     colors={style.colors}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
-                    style={[styles.tileContent, {
-                        minHeight: 60,
+                    style={{
+                        flex: 1,
                         flexDirection: 'row',
                         alignItems: 'center',
                         justifyContent: 'flex-start',
-                        padding: 12,
-                        gap: 12,
-                        borderWidth: 0
-                    }]}
+                        paddingHorizontal: 16,
+                        gap: 16
+                    }}
                 >
-                    <View style={[styles.tileIcon, { backgroundColor: 'rgba(255,255,255,0.15)', width: 36, height: 36, borderRadius: 18, marginBottom: 0 }]}>
-                        <Icon size={18} color="#FFF" />
+                    <View style={{
+                        width: 40, height: 40, borderRadius: 14,
+                        backgroundColor: 'rgba(255,255,255,0.2)',
+                        alignItems: 'center', justifyContent: 'center',
+                        borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)'
+                    }}>
+                        <Icon size={20} color="#FFF" />
                     </View>
-                    <Text numberOfLines={1} style={[styles.tileName, { color: '#FFF', fontWeight: '700', fontSize: 13, marginTop: 0 }]}>
-                        {scene.attributes.friendly_name}
-                    </Text>
+                    <View style={{ flex: 1 }}>
+                        <Text numberOfLines={1} style={{ color: '#FFF', fontWeight: '700', fontSize: 15, letterSpacing: 0.5 }}>
+                            {displayName}
+                        </Text>
+                        {/* Secondary info hidden as requested */}
+                    </View>
+                    <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' }}>
+                        <Play size={10} color="#FFF" fill="#FFF" />
+                    </View>
                 </LinearGradient>
             </Pressable>
         </View>
@@ -166,7 +218,7 @@ const SectionHeader = memo(({ title, actionIcon: ActionIcon, onAction }: { title
     </View>
 ));
 
-const LightTile = memo(({ light, toggleLight, setBrightness, width }: any) => {
+const LightTile = memo(({ light, toggleLight, setBrightness, width, onLongPress }: any) => {
     const isOn = light.state === 'on';
     const brightness = light.attributes.brightness || 0;
 
@@ -174,19 +226,31 @@ const LightTile = memo(({ light, toggleLight, setBrightness, width }: any) => {
         <View style={[styles.tile, { width }]}>
             <Pressable
                 onPress={() => toggleLight(light.entity_id)}
+                onLongPress={() => onLongPress && onLongPress(light)}
                 style={[styles.tileContent, isOn && styles.tileActive]}
             >
                 <View style={[styles.tileHeader]}>
                     <View style={[styles.tileIcon, isOn && { backgroundColor: '#FBBF24' }]}>
                         <Lightbulb size={24} color={isOn ? "#FFF" : "#FBBF24"} />
                     </View>
-                    <Text style={[styles.tileState, isOn && styles.textActive]}>
+                    {onLongPress && (
+                        <Pressable
+                            onPress={() => onLongPress(light)}
+                            hitSlop={12}
+                            style={{ position: 'absolute', top: 0, right: 0, padding: 4 }}
+                        >
+                            <Palette size={20} color={isOn ? "#FFF" : "#94A3B8"} opacity={0.8} />
+                        </Pressable>
+                    )}
+                </View>
+                <View style={{ marginTop: 8 }}>
+                    <Text numberOfLines={1} style={[styles.tileName, isOn && styles.textActive]}>
+                        {light.attributes.friendly_name}
+                    </Text>
+                    <Text style={[styles.tileState, isOn && styles.textActive, { marginTop: 2, fontSize: 11 }]}>
                         {isOn ? `${Math.round(brightness / 255 * 100)}%` : 'Aus'}
                     </Text>
                 </View>
-                <Text numberOfLines={2} style={[styles.tileName, isOn && styles.textActive]}>
-                    {light.attributes.friendly_name}
-                </Text>
             </Pressable>
 
             {isOn && (
@@ -278,45 +342,225 @@ const ClimateTile = memo(({ climate, setTemp, width }: any) => {
     );
 });
 
-const MediaTile = memo(({ player, playMedia, callService, width }: any) => {
+const MediaTile = memo(({ player, api, width }: any) => {
+    const { getEntityPictureUrl } = useHomeAssistant();
     const isPlaying = player.state === 'playing';
     const volume = player.attributes.volume_level || 0;
+    const title = player.attributes.media_title || 'Keine Wiedergabe';
+    const artist = player.attributes.media_artist || (player.state === 'playing' ? 'Unbekannt' : player.state);
 
-    const togglePlay = () => {
-        callService('media_player', isPlaying ? 'media_pause' : 'media_play', player.entity_id);
-    };
+    // Construct Image URL
+    const imageUrl = player.attributes.entity_picture ? getEntityPictureUrl(player.attributes.entity_picture) : null;
 
-    const setVolume = (val: number) => {
-        callService('media_player', 'volume_set', player.entity_id, { volume_level: val });
-    };
+    const togglePlay = () => api.callService('media_player', isPlaying ? 'media_pause' : 'media_play', player.entity_id);
+    const nextTrack = () => api.callService('media_player', 'media_next_track', player.entity_id);
+    const prevTrack = () => api.callService('media_player', 'media_previous_track', player.entity_id);
+    const setVolume = (val: number) => api.callService('media_player', 'volume_set', player.entity_id, { volume_level: val });
 
     return (
-        <View style={[styles.tile, { width }]}>
-            <View style={[styles.tileContent, isPlaying && styles.tileActiveMedia]}>
-                <View style={styles.tileHeader}>
-                    <View style={[styles.tileIcon, isPlaying && { backgroundColor: '#8B5CF6' }]}>
-                        <Volume2 size={24} color={isPlaying ? "#FFF" : "#8B5CF6"} />
+        <View style={[styles.tile, { width, height: 160, padding: 0, overflow: 'hidden' }]}>
+            {/* Background Image / Blur */}
+            {imageUrl && (
+                <Image
+                    source={{ uri: imageUrl }}
+                    style={StyleSheet.absoluteFill}
+                    resizeMode="cover"
+                    blurRadius={20}
+                />
+            )}
+            <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(15, 23, 42, 0.7)' }} />
+
+            <View style={{ flex: 1, padding: 16, justifyContent: 'space-between' }}>
+                <View style={{ flexDirection: 'row', gap: 12 }}>
+                    {/* Album Art */}
+                    <View style={{ width: 48, height: 48, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.1)', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }}>
+                        {imageUrl ? (
+                            <Image source={{ uri: imageUrl }} style={{ width: '100%', height: '100%' }} />
+                        ) : (
+                            <Music size={24} color="#94A3B8" />
+                        )}
                     </View>
-                    <Pressable onPress={togglePlay} style={styles.playBtn}>
-                        {isPlaying ? <Pause size={20} color={isPlaying ? "#FFF" : "#CBD5E1"} /> : <Play size={20} color="#CBD5E1" />}
+                    <View style={{ flex: 1, justifyContent: 'center' }}>
+                        <Text numberOfLines={1} style={{ color: '#FFF', fontWeight: 'bold', fontSize: 14 }}>{title}</Text>
+                        <Text numberOfLines={1} style={{ color: '#94A3B8', fontSize: 12 }}>{artist}</Text>
+                    </View>
+                </View>
+
+                {/* Controls */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 24, marginVertical: 8 }}>
+                    <Pressable onPress={prevTrack} hitSlop={10}>
+                        <SkipBack size={24} color="#E2E8F0" />
+                    </Pressable>
+                    <Pressable onPress={togglePlay} style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: '#FFF', alignItems: 'center', justifyContent: 'center' }}>
+                        {isPlaying ? <Pause size={24} color="#0F172A" fill="#0F172A" /> : <Play size={24} color="#0F172A" fill="#0F172A" style={{ marginLeft: 2 }} />}
+                    </Pressable>
+                    <Pressable onPress={nextTrack} hitSlop={10}>
+                        <SkipForward size={24} color="#E2E8F0" />
                     </Pressable>
                 </View>
-                <Text numberOfLines={1} style={[styles.tileName, isPlaying && styles.textActive]}>
-                    {player.attributes.friendly_name}
-                </Text>
-                {/* Volume Slider if supported */}
-                {volume !== undefined && (
+
+                {/* Volume Slider */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Volume2 size={16} color="#94A3B8" />
                     <Slider
-                        style={{ height: 40, width: '100%', marginTop: 8 }}
+                        style={{ flex: 1, height: 32 }}
                         value={volume}
                         onSlidingComplete={setVolume}
                         minimumValue={0}
                         maximumValue={1}
-                        minimumTrackTintColor={isPlaying ? "#FFF" : "#8B5CF6"}
-                        maximumTrackTintColor="rgba(255,255,255,0.1)"
+                        minimumTrackTintColor="#FFF"
+                        maximumTrackTintColor="rgba(255,255,255,0.2)"
                         thumbTintColor="#FFF"
                     />
+                </View>
+            </View>
+        </View>
+    );
+});
+
+const SensorTile = memo(({ sensor, width }: any) => {
+    const isBinary = sensor.entity_id.startsWith('binary_sensor.');
+    const isOn = sensor.state === 'on';
+
+    // Icon Logic
+    let Icon: any = Zap;
+    if (sensor.entity_id.includes('temp')) Icon = Thermometer;
+    else if (sensor.entity_id.includes('humid')) Icon = Droplets;
+    else if (sensor.entity_id.includes('wind')) Icon = Wind;
+    else if (sensor.entity_id.includes('rain')) Icon = Droplets;
+
+    // Display Logic
+    let display = sensor.state;
+    if (isBinary) {
+        if (sensor.entity_id.includes('rain')) display = isOn ? 'Regen' : 'Trocken';
+        else if (sensor.attributes.device_class === 'door' || sensor.attributes.device_class === 'window' || sensor.entity_id.includes('tur') || sensor.entity_id.includes('door')) {
+            display = isOn ? 'Offen' : 'Geschlossen';
+        }
+        else display = isOn ? 'An' : 'Aus';
+    } else {
+        display = `${sensor.state}${sensor.attributes.unit_of_measurement ? ` ${sensor.attributes.unit_of_measurement}` : ''}`;
+    }
+
+    // Friendly Name Cleanup
+    let name = sensor.attributes.friendly_name;
+    const isWetterstation = name.startsWith('Wetterstation ');
+    if (isWetterstation) name = name.replace('Wetterstation ', '');
+
+    // Ensure specific sensor names
+    if (sensor.entity_id === 'binary_sensor.balkonture') name = 'Balkontüre';
+    if (sensor.entity_id === 'binary_sensor.highlighttur') name = 'Highlighttür';
+    if (sensor.entity_id === 'binary_sensor.waschkuchenture') name = 'Waschküchentüre';
+    if (sensor.entity_id === 'binary_sensor.terrassenture_tur') name = 'Terrassentüre';
+
+    // SPECIAL LOGIC: Specific Doors (Balkon, Highlight, Waschküche)
+    // User Request: Closed = Green + OpenIcon. Open = Red + ClosedIcon.
+    const isSpecialDoor = ['binary_sensor.balkonture', 'binary_sensor.highlighttur', 'binary_sensor.waschkuchenture', 'binary_sensor.terrassenture_tur'].includes(sensor.entity_id);
+    let specialColor = null;
+    let SpecialIcon = null;
+
+    if (isSpecialDoor) {
+        if (isOn) { // Open
+            specialColor = '#EF4444'; // Red
+            SpecialIcon = DoorClosed; // User requested "icon eine geschlossene türe" when open
+        } else { // Closed
+            specialColor = '#22C55E'; // Green
+            SpecialIcon = DoorOpen; // User requested "icon eine geöffnete türe" when closed
+        }
+    }
+
+    // Determine final styles
+    const activeColor = specialColor || (isBinary && isOn ? "#60A5FA" : "#94A3B8");
+    const bgColor = specialColor ? `${specialColor}33` : (isBinary && isOn ? 'rgba(59, 130, 246, 0.2)' : 'rgba(255,255,255,0.08)');
+    const borderColor = specialColor ? `${specialColor}66` : (isBinary && isOn ? 'rgba(59, 130, 246, 0.4)' : 'rgba(255,255,255,0.05)');
+    const textColor = specialColor ? '#FFF' : (isBinary && isOn ? '#FFF' : '#E2E8F0');
+
+    // Override Icon if special
+    if (SpecialIcon) Icon = SpecialIcon;
+
+    return (
+        <View style={{
+            width: 110,
+            height: 80,
+            justifyContent: 'space-between',
+            backgroundColor: bgColor,
+            padding: 10,
+            borderRadius: 16,
+            borderWidth: 1,
+            borderColor: borderColor,
+        }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Icon size={18} color={specialColor || activeColor} />
+            </View>
+
+            <View>
+                <Text numberOfLines={1} style={{ fontSize: 15, fontWeight: '700', color: textColor, marginBottom: 2 }}>
+                    {display}
+                </Text>
+
+                {/* Hide secondary info for Wetterstation (Terrasse) as requested */}
+                {!isWetterstation && (
+                    <Text numberOfLines={1} style={{ fontSize: 11, color: '#94A3B8' }}>
+                        {name}
+                    </Text>
                 )}
+            </View>
+        </View>
+    );
+});
+
+
+
+
+const CameraTile = memo(({ camera, width, api }: any) => {
+    const { haBaseUrl, getCredentials } = useHomeAssistant();
+    const [streamUrl, setStreamUrl] = useState<string | null>(null);
+    const [headers, setHeaders] = useState<any>(null);
+
+    useEffect(() => {
+        let mounted = true;
+        const load = async () => {
+            const creds = await getCredentials();
+            if (mounted && creds && haBaseUrl) {
+                // Setup headers
+                setHeaders({
+                    Authorization: `Bearer ${creds.token}`
+                });
+
+                // Construct Clean URL
+                const cleanBaseUrl = haBaseUrl.replace(/\/$/, '');
+                // Try entity_picture first if it's a proxy link, otherwise standard stream
+                // Use standard MJPEG stream endpoint
+                setStreamUrl(`${cleanBaseUrl}/api/camera_proxy_stream/${camera.entity_id}`);
+            }
+        };
+        load();
+        return () => { mounted = false; };
+    }, [camera.entity_id, haBaseUrl]);
+
+    return (
+        <View style={[styles.tile, { width, height: width * 0.75 }]}>
+            <View style={[styles.tileContent, { padding: 0, overflow: 'hidden' }]}>
+                {streamUrl && headers ? (
+                    <Image
+                        source={{
+                            uri: streamUrl,
+                            headers: headers
+                        }}
+                        style={{ width: '100%', height: '100%' }}
+                        resizeMode="cover"
+                    />
+                ) : (
+                    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#334155' }}>
+                        <Camera size={32} color="#94A3B8" />
+                        <ActivityIndicator size="small" color="#94A3B8" style={{ marginTop: 8 }} />
+                    </View>
+                )}
+
+                <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: 8, backgroundColor: 'rgba(0,0,0,0.6)' }}>
+                    <Text numberOfLines={1} style={[styles.tileName, { marginTop: 0, color: '#FFF', fontSize: 12 }]}>
+                        {camera.attributes.friendly_name}
+                    </Text>
+                </View>
             </View>
         </View>
     );
@@ -326,6 +570,7 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState }: 
     const { width } = useWindowDimensions();
     const isTablet = width >= 768;
     const tileWidth = isTablet ? (width - 64 - 24) / 3 : (width - 32 - 12) / 2;
+    const [selectedLight, setSelectedLight] = useState<any>(null);
 
     const shutdownRoom = () => {
         if (!room) return;
@@ -420,6 +665,29 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState }: 
                     </LinearGradient>
 
                     <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+                        {/* Sensors Section (Moved to TOP per user request) - Subtle display */}
+                        {room.sensors?.length > 0 && (
+                            <View style={[styles.section, { marginTop: 16 }]}>
+                                {/* Tiny Header or no header for "decent"? User said "dezent angezeigt". Let's use a smaller header or just the grid. */}
+                                {/* Using standard SectionHeader but maybe users means just top row. */}
+                                <SectionHeader title="Status" />
+                                <ScrollView
+                                    horizontal
+                                    showsHorizontalScrollIndicator={false}
+                                    contentContainerStyle={{ gap: 8, paddingHorizontal: 4 }}
+                                >
+                                    {room.sensors.map((s: any) => (
+                                        <SensorTile
+                                            key={s.entity_id}
+                                            sensor={s}
+                                        />
+                                    ))}
+                                </ScrollView>
+                            </View>
+                        )}
+
+
+
                         {/* Scenes/Scripts Section (Moved to TOP) */}
                         {room.scripts?.length > 0 && (
                             <View style={styles.section}>
@@ -473,12 +741,20 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState }: 
                                             light={l}
                                             toggleLight={api.toggleLight}
                                             setBrightness={api.setLightBrightness}
-                                            width={tileWidth}
+                                            width={l.fullWidth ? '100%' : tileWidth}
+                                            onLongPress={setSelectedLight}
                                         />
                                     ))}
                                 </View>
                             </View>
                         )}
+
+                        <LightControlModal
+                            visible={!!selectedLight}
+                            light={selectedLight}
+                            onClose={() => setSelectedLight(null)}
+                            callService={api.callService}
+                        />
 
                         {/* Covers Section */}
                         {room.covers?.length > 0 && (
@@ -507,7 +783,7 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState }: 
                                         <MediaTile
                                             key={m.entity_id}
                                             player={m}
-                                            callService={api.callService}
+                                            api={api}
                                             width={isTablet ? tileWidth : '100%'}
                                         />
                                     ))}
@@ -517,7 +793,24 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState }: 
 
 
 
+
                         <View style={{ height: 40 }} />
+
+                        {/* Cameras Section (Moved to BOTTOM and Full Width) */}
+                        {room.cameras?.length > 0 && (
+                            <View style={styles.section}>
+                                <SectionHeader title="Kameras" />
+                                <View style={styles.grid}>
+                                    {room.cameras.map((c: any) => (
+                                        <CameraTile
+                                            key={c.entity_id}
+                                            camera={c}
+                                            width="100%" // Full width as requested
+                                        />
+                                    ))}
+                                </View>
+                            </View>
+                        )}
 
                         {/* Sleep Timer (Specific for Schlafzimmer) */}
                         {room.name === 'Schlafzimmer' && (
@@ -557,7 +850,7 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState }: 
 
                         <View style={{ height: 40 }} />
                     </ScrollView>
-                </View>
+                </View >
             </View >
         </Modal >
     );
@@ -589,30 +882,30 @@ export default function Rooms() {
     const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
 
     // Allowed Rooms Configuration
-    const ALLOWED_ROOMS = [
-        'Wohnzimmer',
-        'Essbereich',
-        'Küche',
-        'Schlafzimmer',
-        'Levins Zimmer',
-        'Linas Zimmer',
-        'Büro',
-        'Bad',
-        'Gäste WC',
-        'Terrasse',
-        'Grillplatz',
-        'Balkon',
-        'Reduit',
-        'Waschküche',
-        'Highlight'
+    // Categories Configuration
+    const ROOM_CATEGORIES = [
+        {
+            title: 'Innenbereich',
+            data: ['Wohnzimmer', 'Essbereich', 'Küche', 'Schlafzimmer', 'Levin', 'Lina', 'Büro', 'Bad', 'Gäste WC', 'Reduit']
+        },
+        {
+            title: 'Aussenbereich',
+            data: ['Terrasse', 'Grillplatz', 'Balkon']
+        },
+        {
+            title: 'UG',
+            data: ['Waschküche', 'Highlight']
+        }
     ];
+
+    const ALLOWED_ROOMS = ROOM_CATEGORIES.flatMap(c => c.data);
 
     // Prepare rooms data
     const rooms = useMemo(() => {
         // Initialize with allowed rooms to preserve order
         const areaMap = new Map<string, any>();
         ALLOWED_ROOMS.forEach(room => {
-            areaMap.set(room, { lights: [], covers: [], sensors: [], climates: [], mediaPlayers: [], scripts: [], scenes: [] });
+            areaMap.set(room, { lights: [], covers: [], sensors: [], climates: [], mediaPlayers: [], scripts: [], scenes: [], cameras: [] });
         });
 
         // Helper to find room for entity
@@ -625,8 +918,8 @@ export default function Rooms() {
             if (name.includes('licht garage') || id.includes('garage') || name.includes('gäste wc')) return 'Gäste WC';
             if (name.includes('badezimmer') || area.includes('badezimmer')) return 'Bad';
             if (name.includes('büro') || area.includes('buro') || id.includes('buro')) return 'Büro';
-            if (name.includes('levin')) return 'Levins Zimmer';
-            if (name.includes('lina')) return 'Linas Zimmer';
+            if (name.includes('levin')) return 'Levin';
+            if (name.includes('lina')) return 'Lina';
             if (name.includes('schlaf')) return 'Schlafzimmer';
             if (name.includes('wohn') || name.includes('living')) return 'Wohnzimmer';
             if (name.includes('ess') || name.includes('dining')) return 'Essbereich';
@@ -655,6 +948,7 @@ export default function Rooms() {
             else if (entity.entity_id.startsWith('climate.')) room.climates.push(entity);
             else if (entity.entity_id.startsWith('media_player.')) room.mediaPlayers.push(entity);
             else if (entity.entity_id.startsWith('script.')) room.scripts.push(entity);
+            else if (entity.entity_id.startsWith('camera.')) room.cameras.push(entity);
         });
 
         // CUSTOMIZATION: Wohnzimmer strict filtering
@@ -663,11 +957,19 @@ export default function Rooms() {
             wohnzimmer.lights = wohnzimmer.lights.filter((l: any) =>
                 l.entity_id === 'light.wohnzimmer' ||
                 l.entity_id === 'light.hue_play_gradient_lightstrip_1'
-            );
+            ).map((l: any) => {
+                if (l.entity_id === 'light.wohnzimmer') return { ...l, attributes: { ...l.attributes, friendly_name: 'Deckenbeleuchtung' } };
+                if (l.entity_id === 'light.hue_play_gradient_lightstrip_1') return { ...l, attributes: { ...l.attributes, friendly_name: 'TV Ambilight' } };
+                return l;
+            });
             wohnzimmer.covers = wohnzimmer.covers.filter((c: any) =>
                 c.entity_id === 'cover.wohnzimmer_sofa' ||
                 c.entity_id === 'cover.wohnzimmer_spielplaetzchen'
-            );
+            ).map((c: any) => {
+                if (c.entity_id === 'cover.wohnzimmer_sofa') return { ...c, attributes: { ...c.attributes, friendly_name: 'Sofa' } };
+                if (c.entity_id === 'cover.wohnzimmer_spielplaetzchen') return { ...c, attributes: { ...c.attributes, friendly_name: 'Spielplätzchen' } };
+                return c;
+            });
 
             // Add specific scripts to Wohnzimmer if they exist in entities
             const movieScript = entities.find(e => e.entity_id === 'script.movie_night');
@@ -675,7 +977,7 @@ export default function Rooms() {
 
             wohnzimmer.scripts = []; // Reset and add specific
             if (movieScript) wohnzimmer.scripts.push(movieScript);
-            if (sexScript) wohnzimmer.scripts.push(sexScript);
+            if (sexScript) wohnzimmer.scripts.push({ ...sexScript, attributes: { ...sexScript.attributes, friendly_name: 'Romantic' } });
 
             // Filter Media Players
             wohnzimmer.mediaPlayers = wohnzimmer.mediaPlayers.filter((m: any) =>
@@ -694,10 +996,14 @@ export default function Rooms() {
         const essbereich = areaMap.get('Essbereich');
         if (essbereich) {
             // Lights
-            essbereich.lights = essbereich.lights.filter((l: any) => l.entity_id === 'light.essbereich');
+            essbereich.lights = essbereich.lights
+                .filter((l: any) => l.entity_id === 'light.essbereich')
+                .map((l: any) => ({ ...l, attributes: { ...l.attributes, friendly_name: 'Deckenbeleuchtung' } }));
 
             // Covers
-            essbereich.covers = essbereich.covers.filter((c: any) => c.entity_id === 'cover.essbereich');
+            essbereich.covers = essbereich.covers
+                .filter((c: any) => c.entity_id === 'cover.essbereich')
+                .map((c: any) => ({ ...c, attributes: { ...c.attributes, friendly_name: 'Store' } }));
 
             // Scenes
             const dinnerScene = entities.find(e => e.entity_id === 'scene.essbereich_essen');
@@ -718,10 +1024,14 @@ export default function Rooms() {
         const kueche = areaMap.get('Küche');
         if (kueche) {
             // Lights
-            kueche.lights = kueche.lights.filter((l: any) => l.entity_id === 'light.kuche');
+            kueche.lights = kueche.lights
+                .filter((l: any) => l.entity_id === 'light.kuche')
+                .map((l: any) => ({ ...l, attributes: { ...l.attributes, friendly_name: 'Deckenbeleuchtung' } }));
 
             // Covers
-            kueche.covers = kueche.covers.filter((c: any) => c.entity_id === 'cover.kuche');
+            kueche.covers = kueche.covers
+                .filter((c: any) => c.entity_id === 'cover.kuche')
+                .map((c: any) => ({ ...c, attributes: { ...c.attributes, friendly_name: 'Küchenfenster' } }));
 
             // Scripts
             const cookingScript = entities.find(e => e.entity_id === 'script.kochen');
@@ -742,7 +1052,9 @@ export default function Rooms() {
         const schlafzimmer = areaMap.get('Schlafzimmer');
         if (schlafzimmer) {
             // Lights (Specific hue ambiance)
-            schlafzimmer.lights = schlafzimmer.lights.filter((l: any) => l.entity_id === 'light.hue_ambiance_ceiling_1');
+            schlafzimmer.lights = schlafzimmer.lights
+                .filter((l: any) => l.entity_id === 'light.hue_ambiance_ceiling_1')
+                .map((l: any) => ({ ...l, attributes: { ...l.attributes, friendly_name: 'Deckenbeleuchtung' } }));
 
             // Scripts
             const bedTime = entities.find(e => e.entity_id === 'script.bed_time');
@@ -750,7 +1062,7 @@ export default function Rooms() {
 
             schlafzimmer.scripts = [];
             if (bedTime) schlafzimmer.scripts.push(bedTime);
-            if (sexScript) schlafzimmer.scripts.push(sexScript);
+            if (sexScript) schlafzimmer.scripts.push({ ...sexScript, attributes: { ...sexScript.attributes, friendly_name: 'Romantic' } });
 
             // Media
             schlafzimmer.mediaPlayers = schlafzimmer.mediaPlayers.filter((m: any) =>
@@ -766,8 +1078,8 @@ export default function Rooms() {
             schlafzimmer.scenes = [];
         }
 
-        // CUSTOMIZATION: Levins Zimmer strict filtering & Child Theme
-        const levin = areaMap.get('Levins Zimmer');
+        // CUSTOMIZATION: Levin strict filtering & Child Theme
+        const levin = areaMap.get('Levin');
         if (levin) {
             // Helper to rename
             const rename = (e: any, newName: string) => ({ ...e, attributes: { ...e.attributes, friendly_name: newName } });
@@ -778,15 +1090,16 @@ export default function Rooms() {
             const lGalaxy = entities.find(e => e.entity_id === 'light.galaxie_kinderzimmer');
 
             levin.lights = [];
-            if (lLev) levin.lights.push(lLev);
-            if (lWardrobe) levin.lights.push(rename(lWardrobe, 'Licht Kleiderschrank'));
-            if (lGalaxy) levin.lights.push(lGalaxy);
+            if (lLev) levin.lights.push({ ...rename(lLev, 'Deckenbeleuchtung'), fullWidth: true, order: 0 });
+            if (lWardrobe) levin.lights.push({ ...rename(lWardrobe, 'Kleiderschrank'), order: 1 });
+            if (lGalaxy) levin.lights.push({ ...rename(lGalaxy, 'Galaxy'), order: 2 });
 
             // Scenes/Scripts
             const sFocus = entities.find(e => e.entity_id === 'scene.levins_zimmer_konzentrieren');
             const sBed = entities.find(e => e.entity_id === 'script.bed_time_levin');
             const sWake = entities.find(e => e.entity_id === 'scene.levins_zimmer_herbsternte');
             const sParty = entities.find(e => e.entity_id === 'script.levin_party');
+            const sPlay = entities.find(e => e.entity_id === 'scene.levins_zimmer_spielen'); // Guessing ID
 
             levin.scripts = [];
             levin.scenes = [];
@@ -795,9 +1108,10 @@ export default function Rooms() {
             // The UI combines them. Let's push all to scripts/scenes.
             if (sFocus) levin.scenes.push(sFocus);
             if (sWake) levin.scenes.push(rename(sWake, 'Aufwachen'));
+            if (sPlay) levin.scenes.push(rename(sPlay, 'Spielen'));
 
-            if (sBed) levin.scripts.push(sBed);
-            if (sParty) levin.scripts.push(sParty);
+            if (sBed) levin.scripts.push(rename(sBed, 'Bed-Time'));
+            if (sParty) levin.scripts.push(rename(sParty, 'Party'));
 
             // Media
             levin.mediaPlayers = levin.mediaPlayers.filter((m: any) => m.entity_id === 'media_player.hub_levin');
@@ -811,14 +1125,18 @@ export default function Rooms() {
             levin.climates = [];
         }
 
-        // CUSTOMIZATION: Linas Zimmer strict filtering & Girl Theme
-        const lina = areaMap.get('Linas Zimmer');
+        // CUSTOMIZATION: Lina strict filtering & Girl Theme
+        const lina = areaMap.get('Lina');
         if (lina) {
             // Lights
             lina.lights = lina.lights.filter((l: any) =>
                 l.entity_id === 'light.licht_lina_decke' ||
                 l.entity_id === 'light.hue_play_wickeltisch'
-            );
+            ).map((l: any) => {
+                if (l.entity_id === 'light.licht_lina_decke') return { ...l, attributes: { ...l.attributes, friendly_name: 'Deckenbeleuchtung' } };
+                if (l.entity_id === 'light.hue_play_wickeltisch') return { ...l, attributes: { ...l.attributes, friendly_name: 'Wickeltisch' } };
+                return l;
+            });
 
             // Media
             lina.mediaPlayers = lina.mediaPlayers.filter((m: any) => m.entity_id === 'media_player.hub_lina_2');
@@ -834,9 +1152,253 @@ export default function Rooms() {
             lina.scenes = [];
         }
 
+        // CUSTOMIZATION: Büro strict filtering
+        const buro = areaMap.get('Büro');
+        if (buro) {
+            // Scenes & Scripts
+            const sMusic = entities.find(e => e.entity_id === 'script.arbeiten_mit_musik');
+            const sFocus = entities.find(e => e.entity_id === 'scene.buro_konzentration');
+            const sPhantom = entities.find(e => e.entity_id === 'scene.buro_phantom');
+            const sCinema = entities.find(e => e.entity_id === 'script.kino_buro');
+
+            buro.scripts = [];
+            buro.scenes = [];
+
+            // We combine them for display
+            if (sMusic) buro.scripts.push(sMusic);
+            if (sCinema) buro.scripts.push(sCinema);
+
+            if (sFocus) buro.scenes.push(sFocus);
+            if (sPhantom) buro.scenes.push(sPhantom);
+
+            // Lights
+            buro.lights = buro.lights.filter((l: any) =>
+                l.entity_id === 'light.deckenbeleuchtung_buro' ||
+                l.entity_id === 'light.ambilight_kallax' ||
+                l.entity_id === 'light.ambiente_buro'
+            );
+
+            // Renaming
+            buro.lights = buro.lights.map((l: any) => {
+                if (l.entity_id === 'light.ambiente_buro') return { ...l, attributes: { ...l.attributes, friendly_name: 'Ambilight' } };
+                if (l.entity_id === 'light.deckenbeleuchtung_buro') return { ...l, attributes: { ...l.attributes, friendly_name: 'Deckenbeleuchtung' } };
+                return l;
+            });
+
+            // Media
+            buro.mediaPlayers = buro.mediaPlayers.filter((m: any) =>
+                m.entity_id === 'media_player.nest_garage_2' ||
+                m.entity_id === 'media_player.xgimi_halo_3'
+            );
+
+            // Gradient
+            buro.gradient = ['#3B82F6', '#2563EB']; // Blue
+
+            // Clear others
+            buro.covers = [];
+            buro.sensors = [];
+            buro.climates = [];
+        }
+
+        // CUSTOMIZATION: Bad strict filtering
+        const bad = areaMap.get('Bad');
+        if (bad) {
+            // Lights
+            // Explicitly find light.badezimmer as it might not be in the area list
+            const lBad = entities.find(e => e.entity_id === 'light.badezimmer');
+            bad.lights = lBad
+                ? [{ ...lBad, attributes: { ...lBad.attributes, friendly_name: 'Spiegelschrank' } }]
+                : [];
+
+            // Media
+            bad.mediaPlayers = bad.mediaPlayers.filter((m: any) => m.entity_id === 'media_player.badezimmer_2');
+
+            // Clear others
+            bad.covers = [];
+            bad.sensors = [];
+            bad.climates = [];
+            bad.scripts = [];
+            bad.scenes = [];
+        }
+
+        // CUSTOMIZATION: Gäste WC strict filtering
+        const guestWc = areaMap.get('Gäste WC');
+        if (guestWc) {
+            // Lights
+            // Fix entity ID (was pointing to garage) and rename
+            guestWc.lights = guestWc.lights
+                .filter((l: any) => l.entity_id === 'light.gaste_wc' || l.entity_id === 'light.licht_gaste_wc')
+                .map((l: any) => ({ ...l, attributes: { ...l.attributes, friendly_name: 'Spiegelschrank' } }));
+
+            // Media
+            guestWc.mediaPlayers = guestWc.mediaPlayers.filter((m: any) => m.entity_id === 'media_player.gaste_wc_2');
+
+            // Clear others
+            guestWc.covers = [];
+            guestWc.sensors = [];
+            guestWc.climates = [];
+            guestWc.scripts = [];
+            guestWc.scenes = [];
+        }
+
+
+        // CUSTOMIZATION: Terrasse strict filtering
+        const terrasse = areaMap.get('Terrasse');
+        if (terrasse) {
+            // Sensors (Manual add)
+            const sTemp = entities.find(e => e.entity_id === 'sensor.wetterstation_actual_temperature');
+            const sHum = entities.find(e => e.entity_id === 'sensor.wetterstation_humidity');
+            const sWind = entities.find(e => e.entity_id === 'sensor.wetterstation_wind_speed');
+            const sRain = entities.find(e => e.entity_id === 'binary_sensor.wetterstation_raining');
+            const sDoor = entities.find(e => e.entity_id === 'binary_sensor.terrassenture_tur');
+
+            terrasse.sensors = [];
+            if (sDoor) terrasse.sensors.push(sDoor); // Door sensor first for prominence
+            if (sTemp) terrasse.sensors.push(sTemp);
+            if (sHum) terrasse.sensors.push(sHum);
+            if (sWind) terrasse.sensors.push(sWind);
+            if (sRain) terrasse.sensors.push(sRain);
+
+            // Light
+            terrasse.lights = terrasse.lights.filter((l: any) => l.entity_id === 'light.terrasse');
+
+            // Media
+            terrasse.mediaPlayers = terrasse.mediaPlayers.filter((m: any) => m.entity_id === 'media_player.lounge_2');
+
+            // Cover
+            terrasse.covers = terrasse.covers.filter((c: any) => c.entity_id === 'cover.terrasse');
+
+            // Scenes & Scripts (Same as Büro)
+            const sMusic = entities.find(e => e.entity_id === 'script.arbeiten_mit_musik');
+            const sFocus = entities.find(e => e.entity_id === 'scene.buro_konzentration');
+            const sPhantom = entities.find(e => e.entity_id === 'scene.buro_phantom');
+            const sCinema = entities.find(e => e.entity_id === 'script.kino_buro');
+
+            terrasse.scripts = [];
+            terrasse.scenes = [];
+            if (sMusic) terrasse.scripts.push(sMusic);
+            if (sCinema) terrasse.scripts.push(sCinema);
+            if (sFocus) terrasse.scenes.push(sFocus);
+            if (sPhantom) terrasse.scenes.push(sPhantom);
+
+            // Clear others
+            terrasse.climates = [];
+        }
+
+        // CUSTOMIZATION: Grillplatz strict filtering
+        const grill = areaMap.get('Grillplatz');
+        if (grill) {
+            // Camera
+            const cam = entities.find(e => e.entity_id === 'camera.kamera_grillplatz_high_resolution_channel');
+            grill.cameras = [];
+            if (cam) grill.cameras.push(cam);
+
+            // Clear others
+            grill.lights = [];
+            grill.covers = [];
+            grill.sensors = [];
+            grill.climates = [];
+            grill.mediaPlayers = [];
+            grill.scripts = [];
+            grill.scenes = [];
+        }
+
+        // CUSTOMIZATION: Balkon strict filtering
+        const balkon = areaMap.get('Balkon');
+        if (balkon) {
+            // Sensors
+            const sDoor = entities.find(e => e.entity_id === 'binary_sensor.balkonture');
+            balkon.sensors = [];
+            if (sDoor) balkon.sensors.push(sDoor);
+
+            // Camera
+            const cam = entities.find(e => e.entity_id === 'camera.kamera_balkon_high_resolution_channel');
+            balkon.cameras = [];
+            if (cam) balkon.cameras.push(cam);
+
+            // Clear others
+            balkon.lights = [];
+            balkon.covers = [];
+            balkon.climates = [];
+            balkon.mediaPlayers = [];
+            balkon.scripts = [];
+            balkon.scenes = [];
+        }
+
+        // CUSTOMIZATION: Reduit strict filtering
+        const reduit = areaMap.get('Reduit');
+        if (reduit) {
+            // Light
+            reduit.lights = reduit.lights
+                .filter((l: any) => l.entity_id === 'light.reduit')
+                .map((l: any) => ({ ...l, attributes: { ...l.attributes, friendly_name: 'Deckenbeleuchtung' } }));
+
+            // Clear others
+            reduit.covers = [];
+            reduit.sensors = [];
+            reduit.climates = [];
+            reduit.mediaPlayers = [];
+            reduit.scripts = [];
+            reduit.scenes = [];
+            reduit.cameras = [];
+        }
+
+        // CUSTOMIZATION: Waschküche strict filtering
+        const wasch = areaMap.get('Waschküche');
+        if (wasch) {
+            // Sensors
+            const sDoor = entities.find(e => e.entity_id === 'binary_sensor.waschkuchenture');
+            // const sMotion = entities.find(e => e.entity_id === 'binary_sensor.kamera_waschkuche_motion');
+            wasch.sensors = [];
+            if (sDoor) wasch.sensors.push(sDoor);
+            // if (sMotion) wasch.sensors.push(sMotion);
+
+            // Media
+            wasch.mediaPlayers = wasch.mediaPlayers.filter((m: any) => m.entity_id === 'media_player.nesthub5b73_2');
+
+            // Camera
+            const cam = entities.find(e => e.entity_id === 'camera.kamera_waschkuche_high_resolution_channel');
+            wasch.cameras = [];
+            if (cam) wasch.cameras.push(cam);
+
+            // Clear others
+            wasch.lights = [];
+            wasch.covers = [];
+            wasch.climates = [];
+            wasch.scripts = [];
+            wasch.scenes = [];
+        }
+
+        // CUSTOMIZATION: Highlight strict filtering
+        const highlight = areaMap.get('Highlight');
+        if (highlight) {
+            // Sensors
+            const sDoor = entities.find(e => e.entity_id === 'binary_sensor.highlighttur');
+            highlight.sensors = [];
+            if (sDoor) highlight.sensors.push(sDoor);
+
+            // Camera
+            const cam = entities.find(e => e.entity_id === 'camera.kamera_balkon_high_resolution_channel_2');
+            highlight.cameras = [];
+            if (cam) highlight.cameras.push(cam);
+
+            // Clear others
+            highlight.lights = [];
+            highlight.covers = [];
+            highlight.climates = [];
+            highlight.mediaPlayers = [];
+            highlight.scripts = [];
+            highlight.scenes = [];
+        }
+
         // Return only rooms that have at least one device, in the order of ALLOWED_ROOMS
         // Sort lights and covers alphabetically by friendly_name
+        // Sort lights and covers alphabetically by friendly_name, or by 'order' prop if exists
         const sortByName = (a: any, b: any) => {
+            const orderA = a.order ?? 999;
+            const orderB = b.order ?? 999;
+            if (orderA !== orderB) return orderA - orderB;
+
             const nameA = (a.attributes.friendly_name || '').toLowerCase();
             const nameB = (b.attributes.friendly_name || '').toLowerCase();
             return nameA.localeCompare(nameB, 'de');
@@ -858,7 +1420,9 @@ export default function Rooms() {
                 room.lights.length > 0 ||
                 room.covers.length > 0 ||
                 room.climates.length > 0 ||
-                room.mediaPlayers.length > 0
+                room.mediaPlayers.length > 0 ||
+                room.sensors.length > 0 ||
+                room.cameras.length > 0
             )
             .sort((a, b) => a.name.localeCompare(b.name, 'de'));
     }, [entities]);
@@ -958,46 +1522,58 @@ export default function Rooms() {
                     </Text>
                 </View>
 
-                {/* Grid */}
-                <View style={styles.roomsGrid}>
-                    {rooms.map((room) => {
-                        const Icon = room.icon;
-                        const lightsOn = room.lights.filter((l: any) => l.state === 'on').length;
-                        const hasActive = lightsOn > 0 || room.mediaPlayers.some((m: any) => m.state === 'playing');
-                        const temp = room.climates[0]?.attributes.current_temperature || room.sensors[0]?.state;
+                {/* Categorized Grids */}
+                {ROOM_CATEGORIES.map((category) => {
+                    const categoryRooms = rooms.filter(r => category.data.includes(r.name));
+                    if (categoryRooms.length === 0) return null;
 
-                        return (
-                            <Pressable
-                                key={room.name}
-                                onPress={() => setSelectedRoom(room.name)}
-                                style={[styles.roomCard, { width: isTablet ? '32%' : '48%' }]}
-                            >
-                                <LinearGradient
-                                    colors={hasActive ? room.gradient : ['#1E293B', '#0F172A']}
-                                    start={{ x: 0, y: 0 }}
-                                    end={{ x: 1, y: 1 }}
-                                    style={styles.cardGradient}
-                                >
-                                    <View style={[styles.iconContainer, hasActive && { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
-                                        <Icon size={24} color={hasActive ? '#FFF' : room.gradient[0]} />
-                                    </View>
+                    return (
+                        <View key={category.title} style={{ marginBottom: 24 }}>
+                            <Text style={{ fontSize: 20, fontWeight: '600', color: '#E2E8F0', marginBottom: 12, marginLeft: 4 }}>
+                                {category.title}
+                            </Text>
+                            <View style={styles.roomsGrid}>
+                                {categoryRooms.map((room) => {
+                                    const Icon = room.icon;
+                                    const lightsOn = room.lights.filter((l: any) => l.state === 'on').length;
+                                    const hasActive = lightsOn > 0 || room.mediaPlayers.some((m: any) => m.state === 'playing');
+                                    const temp = room.climates[0]?.attributes.current_temperature || room.sensors[0]?.state;
 
-                                    <View style={styles.cardContent}>
-                                        <Text numberOfLines={1} style={styles.roomName}>{room.name}</Text>
-                                        <View style={styles.cardStats}>
-                                            <Text style={styles.statsText}>
-                                                {lightsOn > 0 ? `${lightsOn} an` : 'Aus'}
-                                            </Text>
-                                            {temp && (
-                                                <Text style={styles.statsText}>• {temp}°</Text>
-                                            )}
-                                        </View>
-                                    </View>
-                                </LinearGradient>
-                            </Pressable>
-                        )
-                    })}
-                </View>
+                                    return (
+                                        <Pressable
+                                            key={room.name}
+                                            onPress={() => setSelectedRoom(room.name)}
+                                            style={[styles.roomCard, { width: isTablet ? '32%' : '48%' }]}
+                                        >
+                                            <LinearGradient
+                                                colors={hasActive ? room.gradient : ['#1E293B', '#0F172A']}
+                                                start={{ x: 0, y: 0 }}
+                                                end={{ x: 1, y: 1 }}
+                                                style={styles.cardGradient}
+                                            >
+                                                <View style={[styles.iconContainer, hasActive && { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+                                                    <Icon size={24} color={hasActive ? '#FFF' : room.gradient[0]} />
+                                                </View>
+
+                                                <View style={styles.cardContent}>
+                                                    <Text numberOfLines={1} style={styles.roomName}>{room.name}</Text>
+                                                    <View style={styles.cardStats}>
+                                                        <Text style={styles.statsText}>
+                                                            {lightsOn > 0 ? `${lightsOn} an` : 'Aus'}
+                                                        </Text>
+                                                        {temp && (
+                                                            <Text style={styles.statsText}>• {temp}°</Text>
+                                                        )}
+                                                    </View>
+                                                </View>
+                                            </LinearGradient>
+                                        </Pressable>
+                                    )
+                                })}
+                            </View>
+                        </View>
+                    );
+                })}
             </ScrollView>
 
             <RoomDetailModal
