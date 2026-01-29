@@ -54,23 +54,34 @@ export default function CalendarModal({ visible, onClose, entityId, title, accen
     };
 
     const formatDate = (dateStr: string) => {
-        const date = new Date(dateStr);
-        const today = new Date();
-        const tomorrow = new Date();
-        tomorrow.setDate(today.getDate() + 1);
+        if (!dateStr) return '';
+        try {
+            const date = new Date(dateStr);
+            if (isNaN(date.getTime())) return dateStr; // Fallback to raw string
 
-        const isToday = date.getDate() === today.getDate() && date.getMonth() === today.getMonth();
-        const isTomorrow = date.getDate() === tomorrow.getDate() && date.getMonth() === tomorrow.getMonth();
+            const today = new Date();
+            const tomorrow = new Date();
+            tomorrow.setDate(today.getDate() + 1);
 
-        if (isToday) return 'Heute';
-        if (isTomorrow) return 'Morgen';
+            const isToday = date.getDate() === today.getDate() && date.getMonth() === today.getMonth() && date.getFullYear() === today.getFullYear();
+            const isTomorrow = date.getDate() === tomorrow.getDate() && date.getMonth() === tomorrow.getMonth() && date.getFullYear() === tomorrow.getFullYear();
 
-        return date.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: '2-digit' });
+            if (isToday) return 'Heute';
+            if (isTomorrow) return 'Morgen';
+
+            return date.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: '2-digit' });
+        } catch (e) {
+            return dateStr;
+        }
     };
 
     const formatTime = (dateStr: string) => {
-        const date = new Date(dateStr);
-        return date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+        if (!dateStr) return '';
+        try {
+            const date = new Date(dateStr);
+            if (isNaN(date.getTime())) return '';
+            return date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+        } catch (e) { return ''; }
     };
 
     // Helper to check if event is all day
@@ -79,6 +90,12 @@ export default function CalendarModal({ visible, onClose, entityId, title, accen
         return start.includes('T') === false || (start.includes('00:00:00') && end.includes('00:00:00'));
         // HA often returns YYYY-MM-DD for all day
     };
+
+    useEffect(() => {
+        if (events.length > 0) {
+            console.log('CalendarModal Render: events count', events.length);
+        }
+    }, [events]);
 
     return (
         <Modal visible={visible} animationType="slide" transparent>
@@ -101,8 +118,9 @@ export default function CalendarModal({ visible, onClose, entityId, title, accen
                                 events.map((event, index) => {
                                     // Handle HA Calendar format (can be object {dateTime/date} or direct string)
                                     const getEventDate = (field: any) => {
+                                        if (!field) return '';
                                         if (typeof field === 'string') return field;
-                                        return field?.dateTime || field?.date || '';
+                                        return field.dateTime || field.date || '';
                                     };
 
                                     const start = getEventDate(event.start);
@@ -139,7 +157,14 @@ export default function CalendarModal({ visible, onClose, entityId, title, accen
                                                 {allDay && (
                                                     <View style={styles.metaRow}>
                                                         <Clock size={14} color="#94A3B8" />
-                                                        <Text style={styles.metaText}>Ganztägig</Text>
+                                                        <Text style={styles.metaText}>
+                                                            {(() => {
+                                                                const sDate = new Date(start);
+                                                                const now = new Date();
+                                                                const diff = Math.ceil((sDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                                                                return diff <= 0 ? 'Heute' : `In ${diff} Tagen`;
+                                                            })()}
+                                                        </Text>
                                                     </View>
                                                 )}
 
@@ -174,7 +199,7 @@ const styles = StyleSheet.create({
     header: { padding: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     title: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
     closeBtn: { padding: 4, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 20 },
-    body: { flex: 1 },
+    body: { width: '100%', minHeight: 100 },
     scrollContent: { padding: 16, gap: 12 },
     center: { flex: 1, padding: 40, alignItems: 'center' },
     eventCard: { flexDirection: 'row', backgroundColor: '#334155', borderRadius: 12, overflow: 'hidden' },

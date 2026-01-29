@@ -23,8 +23,10 @@ export default function ShoppingListModal({ visible, onClose }: ShoppingListModa
 
     const loadItems = async () => {
         setLoading(true);
+        console.log('ShoppingList: Loading items...');
         try {
             const data = await fetchTodoItems(ENTITY_ID);
+            console.log('ShoppingList: Received items:', JSON.stringify(data));
             // Sort: Needs Action first, then Completed
             const sorted = data.sort((a, b) => {
                 if (a.status === 'needs_action' && b.status === 'completed') return -1;
@@ -33,7 +35,7 @@ export default function ShoppingListModal({ visible, onClose }: ShoppingListModa
             });
             setItems(sorted);
         } catch (e) {
-            console.error(e);
+            console.error('ShoppingList error:', e);
         } finally {
             setLoading(false);
         }
@@ -143,7 +145,7 @@ export default function ShoppingListModal({ visible, onClose }: ShoppingListModa
 
 const styles = StyleSheet.create({
     overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: 16 },
-    content: { backgroundColor: '#1E293B', borderRadius: 24, maxHeight: '80%', overflow: 'hidden', width: '100%' },
+    content: { backgroundColor: '#1E293B', borderRadius: 24, maxHeight: '80%', width: '100%', display: 'flex', flexDirection: 'column' },
     header: { padding: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: '#334155' },
     titleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
     title: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
@@ -153,7 +155,7 @@ const styles = StyleSheet.create({
     input: { flex: 1, backgroundColor: '#334155', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, color: '#fff', fontSize: 16 },
     addBtn: { backgroundColor: '#10B981', borderRadius: 12, width: 48, alignItems: 'center', justifyContent: 'center' },
 
-    body: { flex: 1 },
+    body: { width: '100%', minHeight: 100 },
     scrollContent: { padding: 16 },
     center: { flex: 1, padding: 40, alignItems: 'center' },
 

@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
 
 export default function LoginScreen() {
-    const { login, isBiometricsEnabled, authenticateWithBiometrics } = useAuth();
+    const { login, isBiometricsEnabled, biometricLogin } = useAuth();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
@@ -20,12 +20,13 @@ export default function LoginScreen() {
     }, [isBiometricsEnabled]);
 
     const handleBiometricLogin = async () => {
-        const success = await authenticateWithBiometrics();
-        // Note: Actual login logic usually requires storing a token securely
-        // For now, we will just simulate a login or would need to retrieve credentials from SecureStore
-        // Since we are not storing password, user still needs to login once or we use session persistence
-        // If session is persisted, we might not even be here.
-        // Assuming session is handled by AuthContext independently.
+        setLoading(true);
+        const success = await biometricLogin();
+        // If success, AuthContext (onAuthStateChange) will handle navigation
+        // If fail, we just stop loading
+        if (!success) {
+            setLoading(false);
+        }
     };
 
     const handleSubmit = async () => {

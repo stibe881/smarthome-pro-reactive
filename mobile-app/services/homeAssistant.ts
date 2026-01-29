@@ -157,11 +157,19 @@ export class HomeAssistantService {
             return;
         }
 
+        console.log(`📤 Calling service: ${domain}.${service} for ${entityId}`, data);
+
         this.send({
             type: 'call_service',
             domain,
             service,
             service_data: { entity_id: entityId, ...data }
+        }, (response) => {
+            if (response.success) {
+                console.log(`✅ Service ${domain}.${service} executed successfully for ${entityId}`);
+            } else {
+                console.error(`❌ Service ${domain}.${service} failed for ${entityId}:`, response.error);
+            }
         });
     }
 
@@ -235,13 +243,16 @@ export class HomeAssistantService {
 
             console.log('Sending Calendar Request:', JSON.stringify(message));
 
+            // Actually send the message to the WebSocket
+            this.socket!.send(JSON.stringify(message));
+
             const timeout = setTimeout(() => {
                 console.warn(`Calendar request ${id} timed out`);
                 if (this.handlers.has(id)) {
                     this.handlers.delete(id);
                     resolve([]);
                 }
-            }, 5000);
+            }, 15000);
 
             this.handlers.set(id, (response: any) => {
                 clearTimeout(timeout);
