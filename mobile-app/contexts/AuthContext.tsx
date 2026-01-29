@@ -5,6 +5,7 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert, Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 
 interface AuthContextType {
     user: User | null;
@@ -179,12 +180,28 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             finalStatus = status;
         }
         if (finalStatus !== 'granted') {
-            console.log('Failed to get push token for push notification!');
+            alert('Failed to get push token for push notification!');
             return;
         }
-        token = (await Notifications.getExpoPushTokenAsync({
-            projectId: process.env.EXPO_PUBLIC_PROJECT_ID // Ensure this env var exists or fallback
-        })).data;
+
+        // Get Project ID from Constants (Standard for Expo/EAS)
+        const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
+
+        if (!projectId) {
+            console.error('Project ID not found in app config');
+            // Alert for debugging in TestFlight if needed
+            // alert('Error: Project ID not found');
+            return;
+        }
+
+        try {
+            token = (await Notifications.getExpoPushTokenAsync({
+                projectId,
+            })).data;
+        } catch (e: any) {
+            console.error('Error getting push token:', e);
+            alert('Push Token Error: ' + e.message);
+        }
 
         return token;
     };
