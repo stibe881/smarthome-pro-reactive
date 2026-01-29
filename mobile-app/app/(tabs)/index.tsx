@@ -579,31 +579,38 @@ export default function Dashboard() {
 
         if (!progEnde && !prog) return null;
 
-        // Check End Time
-        if (progEnde && !['unknown', 'unavailable', 'None', ''].includes(progEnde.state)) {
+        // Check End Time - only if we have a valid future timestamp
+        if (progEnde && progEnde.state && !['unknown', 'unavailable', 'None', ''].includes(progEnde.state)) {
             const endDate = new Date(progEnde.state);
-            const now = new Date();
-            const diffMs = endDate.getTime() - now.getTime();
+            const now = new Date(); // Re-use this line to match existing code structure for replacement
 
-            if (diffMs > 0) {
-                const hours = Math.floor(diffMs / (1000 * 60 * 60));
-                const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-                let timeStr = 'noch';
-                if (hours > 0) timeStr += ` ${hours} Std`;
-                if (minutes > 0) timeStr += ` ${minutes} Min`;
-                if (hours === 0 && minutes === 0) timeStr = 'noch < 1 Min';
+            // Validate date
+            if (!isNaN(endDate.getTime())) {
+                const diffMs = endDate.getTime() - now.getTime();
 
-                return { isRunning: true, isFinished: false, text: timeStr };
+                if (diffMs > 0) {
+                    const hours = Math.floor(diffMs / (1000 * 60 * 60));
+                    const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+                    let timeStr = 'noch';
+                    if (hours > 0) timeStr += ` ${hours} Std`;
+                    if (minutes > 0) timeStr += ` ${minutes} Min`;
+                    if (hours === 0 && minutes === 0) timeStr = 'noch < 1 Min';
+
+                    return { isRunning: true, isFinished: false, text: timeStr };
+                } else {
+                    // Time is past → Finished!
+                    return { isRunning: false, isFinished: true, text: 'Fertig' };
+                }
             }
         }
 
-        // Check Status
-        if (prog && prog.state !== 'standby') {
+        // Check Status - if program is not standby and not unavailable, it's running
+        if (prog && prog.state && !['standby', 'unknown', 'unavailable', 'None', ''].includes(prog.state)) {
             return { isRunning: true, isFinished: false, text: prog.state };
         }
 
-        // Else Finished
-        return { isRunning: false, isFinished: true, text: 'Geschirrspüler fertig!' };
+        // If program is standby or end time is in the past or unavailable → finished
+        return { isRunning: false, isFinished: true, text: 'Fertig' };
     }, [entities]);
 
     // 2. Washing Machine

@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, Pressable, ActivityIndicator, useWindowDimensions, TextInput, Modal, Alert } from 'react-native';
+import { View, Text, ScrollView, Pressable, ActivityIndicator, useWindowDimensions, TextInput, Modal, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { Users, UserPlus, Mail, Crown, X, Send } from 'lucide-react-native';
+import { Users, UserPlus, Mail, Crown, X, Send, Lock, Eye, EyeOff } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 interface FamilyMember {
@@ -30,6 +30,9 @@ export default function Family() {
     const [isLoading, setIsLoading] = useState(true);
     const [showInviteModal, setShowInviteModal] = useState(false);
     const [inviteEmail, setInviteEmail] = useState('');
+    const [invitePassword, setInvitePassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
+    const [isInviting, setIsInviting] = useState(false);
 
     useEffect(() => {
         loadFamilyData();
@@ -68,10 +71,62 @@ export default function Family() {
             Alert.alert('Fehler', 'Bitte E-Mail eingeben');
             return;
         }
-        // TODO: Implement invite logic
-        Alert.alert('Info', 'Einladung gesendet an: ' + inviteEmail);
-        setShowInviteModal(false);
-        setInviteEmail('');
+        if (!invitePassword.trim() || invitePassword.length < 6) {
+            Alert.alert('Fehler', 'Passwort muss mindestens 6 Zeichen haben');
+            return;
+        }
+
+        setIsInviting(true);
+        try {
+            // Get current session for authorization
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) {
+                Alert.alert('Fehler', 'Nicht angemeldet');
+                return;
+            }
+
+
+            const { data, error } = await supabase.functions.invoke('create-family-member', {
+                body: {
+                    email: inviteEmail.trim(),
+                    password: invitePassword,
+                },
+            });
+
+            if (error) {
+                console.log('Invite failed:', error);
+                // Try to parse if it's a JSON string in the error message, otherwise show message
+                let errorMessage = error.message;
+                try {
+                    const parsed = JSON.parse(errorMessage);
+                    if (parsed.error) errorMessage = parsed.error;
+                } catch (e) { /* ignore */ }
+
+                Alert.alert('Fehler', errorMessage || 'Unbekannter Fehler');
+                return;
+            }
+
+            // Check if application level error came back in data
+            if (data && data.error) {
+                Alert.alert('Fehler', data.error);
+                return;
+            }
+
+
+            Alert.alert(
+                'Erfolgreich',
+                `${inviteEmail} wurde zur Familie hinzugefügt.\n\nInitialpasswort: ${invitePassword}\n\nDie Person muss das Passwort beim ersten Login ändern.`
+            );
+            setShowInviteModal(false);
+            setInviteEmail('');
+            setInvitePassword('');
+            loadFamilyData();
+        } catch (error) {
+            console.error('Invite error:', error);
+            Alert.alert('Fehler', 'Verbindungsfehler');
+        } finally {
+            setIsInviting(false);
+        }
     };
 
     const getInitials = (email: string) => {
@@ -203,7 +258,10 @@ export default function Family() {
 
             {/* Invite Modal */}
             <Modal visible={showInviteModal} animationType="slide" transparent>
-                <View style={styles.modalOverlay}>
+                <KeyboardAvoidingView
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    style={styles.modalOverlay}
+                >
                     <View style={styles.modalContent}>
                         <View style={styles.modalHeader}>
                             <Text style={styles.modalTitle}>Mitglied einladen</Text>
@@ -214,7 +272,7 @@ export default function Family() {
                                 <X size={20} color="#94A3B8" />
                             </Pressable>
                         </View>
-                        <View style={styles.modalBody}>
+                        <ScrollView style={styles.modalBody}>
                             <Text style={styles.inputLabel}>E-Mail-Adresse</Text>
                             <View style={styles.inputContainer}>
                                 <View style={styles.inputIcon}>
@@ -230,17 +288,48 @@ export default function Family() {
                                     keyboardType="email-address"
                                 />
                             </View>
+                            <Text style={styles.inputLabel}>Initialpasswort</Text>
+                            <View style={styles.inputContainer}>
+                                <View style={styles.inputIcon}>
+                                    <Lock size={18} color="#64748B" />
+                                </View>
+                                <TextInput
+                                    style={styles.textInput}
+                                    placeholder="Mindestens 6 Zeichen"
+                                    placeholderTextColor="#64748B"
+                                    value={invitePassword}
+                                    onChangeText={setInvitePassword}
+                                    secureTextEntry={!showPassword}
+                                    autoCapitalize="none"
+                                />
+                                <Pressable
+                                    onPress={() => setShowPassword(!showPassword)}
+                                    style={styles.inputIcon}
+                                >
+                                    {showPassword ? <EyeOff size={18} color="#64748B" /> : <Eye size={18} color="#64748B" />}
+                                </Pressable>
+                            </View>
+                            <Text style={styles.helperText}>
+                                Die Person muss das Passwort beim ersten Login ändern.
+                            </Text>
                             <Pressable
                                 onPress={handleInvite}
-                                style={styles.sendButton}
+                                style={[styles.sendButton, isInviting && styles.sendButtonDisabled]}
+                                disabled={isInviting}
                             >
-                                <Send size={18} color="#fff" />
-                                <Text style={styles.sendButtonText}>Einladung senden</Text>
+                                {isInviting ? (
+                                    <ActivityIndicator size="small" color="#fff" />
+                                ) : (
+                                    <>
+                                        <Send size={18} color="#fff" />
+                                        <Text style={styles.sendButtonText}>Mitglied hinzufügen</Text>
+                                    </>
+                                )}
                             </Pressable>
-                        </View>
+                        </ScrollView>
                         <View style={styles.modalFooter} />
                     </View>
-                </View>
+                </KeyboardAvoidingView>
             </Modal>
         </SafeAreaView>
     );
@@ -499,5 +588,14 @@ const styles = StyleSheet.create({
     },
     modalFooter: {
         height: 32,
+    },
+    helperText: {
+        color: '#64748B',
+        fontSize: 12,
+        marginBottom: 16,
+        marginTop: -8,
+    },
+    sendButtonDisabled: {
+        opacity: 0.6,
     },
 });

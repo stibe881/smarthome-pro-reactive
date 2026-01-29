@@ -5,9 +5,10 @@ import { HomeAssistantProvider } from "../contexts/HomeAssistantContext";
 import { useEffect } from "react";
 import { View, ActivityIndicator } from "react-native";
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import ChangePasswordModal from "../components/ChangePasswordModal";
 
 function RootLayoutNav() {
-    const { session, isLoading } = useAuth();
+    const { session, isLoading, mustChangePassword, clearMustChangePassword } = useAuth();
     const segments = useSegments();
     const router = useRouter();
 
@@ -33,7 +34,18 @@ function RootLayoutNav() {
         );
     }
 
-    return <Slot />;
+    return (
+        <>
+            <Slot />
+            {/* Show forced password change modal when user needs to change password */}
+            <ChangePasswordModal
+                visible={mustChangePassword}
+                onClose={() => { }} // Cannot close when forced
+                onSuccess={clearMustChangePassword}
+                isForced={true}
+            />
+        </>
+    );
 }
 
 export default function Layout() {

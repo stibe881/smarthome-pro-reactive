@@ -3,13 +3,15 @@ import { supabase } from '../lib/supabase';
 import type { User, Session } from '@supabase/supabase-js';
 import * as LocalAuthentication from 'expo-local-authentication';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Alert } from 'react-native';
+import { Alert, Platform } from 'react-native';
+import * as Notifications from 'expo-notifications';
 
 interface AuthContextType {
     user: User | null;
     session: Session | null;
     isLoading: boolean;
     userRole: 'admin' | 'user' | null;
+    mustChangePassword: boolean;
     isBiometricsSupported: boolean;
     isBiometricsEnabled: boolean;
     toggleBiometrics: () => Promise<void>;
@@ -18,6 +20,7 @@ interface AuthContextType {
     login: (email: string, password: string) => Promise<void>;
     register: (email: string, password: string) => Promise<void>;
     logout: () => Promise<void>;
+    clearMustChangePassword: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -39,6 +42,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const [session, setSession] = useState<Session | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [userRole, setUserRole] = useState<'admin' | 'user' | null>(null);
+    const [mustChangePassword, setMustChangePassword] = useState(false);
     const [isBiometricsSupported, setIsBiometricsSupported] = useState(false);
     const [isBiometricsEnabled, setIsBiometricsEnabled] = useState(false);
 
@@ -155,6 +159,53 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setUserRole((data?.role as 'admin' | 'user') || 'user');
     };
 
+
+    // Push Notification Token Registration
+    const registerForPushNotificationsAsync = async () => {
+        let token;
+        if (Platform.OS === 'android') {
+            await Notifications.setNotificationChannelAsync('default', {
+                name: 'default',
+                importance: Notifications.AndroidImportance.MAX,
+                vibrationPattern: [0, 250, 250, 250],
+                lightColor: '#FF231F7C',
+            });
+        }
+
+        const { status: existingStatus } = await Notifications.getPermissionsAsync();
+        let finalStatus = existingStatus;
+        if (existingStatus !== 'granted') {
+            const { status } = await Notifications.requestPermissionsAsync();
+            finalStatus = status;
+        }
+        if (finalStatus !== 'granted') {
+            console.log('Failed to get push token for push notification!');
+            return;
+        }
+        token = (await Notifications.getExpoPushTokenAsync({
+            projectId: process.env.EXPO_PUBLIC_PROJECT_ID // Ensure this env var exists or fallback
+        })).data;
+
+        return token;
+    };
+
+    const savePushTokenToSupabase = async (userId: string) => {
+        try {
+            const token = await registerForPushNotificationsAsync();
+            if (token) {
+                const { error } = await supabase
+                    .from('family_members')
+                    .update({ push_token: token })
+                    .eq('user_id', userId);
+
+                if (error) console.error('Error saving push token:', error);
+                else console.log('Push token saved:', token);
+            }
+        } catch (error) {
+            console.error('Error in savePushTokenToSupabase:', error);
+        }
+    };
+
     useEffect(() => {
         // Get initial session
         supabase.auth.getSession().then(({ data: { session } }) => {
@@ -162,6 +213,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             setUser(session?.user ?? null);
             if (session?.user) {
                 fetchUserRole(session.user.id);
+                // Save push token on startup if logged in
+                savePushTokenToSupabase(session.user.id);
             }
             setIsLoading(false);
         });
@@ -174,8 +227,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             setUser(session?.user ?? null);
             if (session?.user) {
                 fetchUserRole(session.user.id);
+                // Check if password change is required
+                const needsPasswordChange = session.user.user_metadata?.must_change_password === true;
+                setMustChangePassword(needsPasswordChange);
+
+                // Save push token on login
+                savePushTokenToSupabase(session.user.id);
             } else {
                 setUserRole(null);
+                setMustChangePassword(false);
             }
         });
 
@@ -223,6 +283,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         if (error) throw error;
         setSession(null);
         setUser(null);
+        setMustChangePassword(false);
+    };
+
+    const clearMustChangePassword = () => {
+        setMustChangePassword(false);
     };
 
     return (
@@ -238,7 +303,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             biometricLogin,
             login,
             register,
-            logout
+            logout,
+            mustChangePassword,
+            clearMustChangePassword
         }}>
             {children}
         </AuthContext.Provider>
