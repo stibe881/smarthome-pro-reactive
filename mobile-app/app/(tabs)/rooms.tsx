@@ -1,5 +1,5 @@
 import React, { useMemo, useState, memo, useCallback, useEffect } from 'react';
-import { View, Text, ScrollView, Pressable, useWindowDimensions, Modal, StyleSheet, ActivityIndicator, Image } from 'react-native';
+import { View, Text, ScrollView, Pressable, useWindowDimensions, Modal, StyleSheet, ActivityIndicator, Image, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useHomeAssistant } from '../../contexts/HomeAssistantContext';
 import {
@@ -9,7 +9,7 @@ import {
     Thermometer, Gamepad2, BookOpen, Armchair, DoorOpen, ChevronUp,
     ParkingSquare, Flower2, Sun, Moon, LucideIcon,
     Wind, Fan, Play, Pause, Square, Volume2, Tv, Timer, Heart, Music, Coffee, Zap, Camera,
-    SkipBack, SkipForward, Palette, DoorClosed, Rocket, Sparkles, Star, Crown
+    SkipBack, SkipForward, Palette, DoorClosed, Rocket, Sparkles, Star, Crown, Power
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Slider from '@react-native-community/slider';
@@ -258,7 +258,7 @@ const LightTile = memo(({ light, toggleLight, setBrightness, width, onLongPress,
             >
                 <View style={[styles.tileHeader]}>
                     <View style={[styles.tileIcon, isOn && { backgroundColor: activeColor }]}>
-                        <Lightbulb size={24} color={isOn ? "#FFF" : activeColor} />
+                        <Lightbulb size={24} color={isOn ? "#FFF" : "#94A3B8"} />
                     </View>
                     {onLongPress && (
                         <Pressable
@@ -287,7 +287,6 @@ const LightTile = memo(({ light, toggleLight, setBrightness, width, onLongPress,
                         value={brightness / 255}
                         onSlidingComplete={(val) => setBrightness(light.entity_id, Math.round(val * 255))}
                         minimumValue={0}
-                        maximumValue={1}
                         maximumValue={1}
                         minimumTrackTintColor={activeColor}
                         maximumTrackTintColor="rgba(255,255,255,0.1)"
@@ -361,7 +360,6 @@ const ClimateTile = memo(({ climate, setTemp, width, theme }: any) => {
                         onSlidingComplete={(val) => setTemp(climate.entity_id, Math.round(val))}
                         minimumValue={16}
                         maximumValue={30}
-                        maximumValue={30}
                         step={0.5}
                         minimumTrackTintColor={activeColor}
                         maximumTrackTintColor="rgba(255,255,255,0.2)"
@@ -376,73 +374,151 @@ const ClimateTile = memo(({ climate, setTemp, width, theme }: any) => {
 const MediaTile = memo(({ player, api, width, theme }: any) => {
     const { getEntityPictureUrl } = useHomeAssistant();
     const isPlaying = player.state === 'playing';
+    const isOff = player.state === 'off' || player.state === 'unavailable';
     const volume = player.attributes.volume_level || 0;
-    const title = player.attributes.media_title || 'Keine Wiedergabe';
-    const artist = player.attributes.media_artist || (player.state === 'playing' ? 'Unbekannt' : player.state);
 
-    // Construct Image URL
-    const imageUrl = player.attributes.entity_picture ? getEntityPictureUrl(player.attributes.entity_picture) : null;
+    // Smart metadata extraction
+    const appName = player.attributes.app_name;
+    const isSpotify = appName === 'Spotify';
 
+    // Title/Artist logic
+    let title = player.attributes.media_title;
+    let artist = player.attributes.media_artist || player.attributes.media_series_title;
+
+    if (isOff) {
+        title = "Ausgeschaltet";
+        artist = "Tippen zum Starten";
+    } else if (!title) {
+        title = appName || player.state;
+        artist = "Keine Wiedergabe";
+    }
+
+    // Controls
     const togglePlay = () => api.callService('media_player', isPlaying ? 'media_pause' : 'media_play', player.entity_id);
+    const togglePower = () => api.callService('media_player', isOff ? 'turn_on' : 'turn_off', player.entity_id);
     const nextTrack = () => api.callService('media_player', 'media_next_track', player.entity_id);
     const prevTrack = () => api.callService('media_player', 'media_previous_track', player.entity_id);
     const setVolume = (val: number) => api.callService('media_player', 'volume_set', player.entity_id, { volume_level: val });
 
+    const imageUrl = player.attributes.entity_picture ? getEntityPictureUrl(player.attributes.entity_picture) : null;
+    const activeColor = theme ? theme.accentColor : '#3B82F6';
+
+    // Layout calculation - Adjust height based on whether controls fit
+    // Standard tile height is usually ~150-180. We make this one slightly taller to fit everything nicely if needed.
+    const TILE_HEIGHT = 200;
+
     return (
-        <View style={[styles.tile, { width, height: 160, padding: 0, overflow: 'hidden' }]}>
-            {/* Background Image / Blur */}
-            {imageUrl && (
+        <View style={[styles.tile, { width, height: TILE_HEIGHT, padding: 0, overflow: 'hidden', borderWidth: 0, borderRadius: 24, backgroundColor: '#1E293B' }]}>
+            {/* Background Layer */}
+            {imageUrl && !isOff ? (
                 <Image
                     source={{ uri: imageUrl }}
-                    style={StyleSheet.absoluteFill}
+                    style={[StyleSheet.absoluteFill, { opacity: 0.6 }]}
                     resizeMode="cover"
-                    blurRadius={20}
+                    blurRadius={40}
+                />
+            ) : (
+                <LinearGradient
+                    colors={['#1e293b', '#0f172a']}
+                    style={StyleSheet.absoluteFill}
                 />
             )}
-            <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(15, 23, 42, 0.7)' }} />
+
+            {/* Gradient Overlay for Readability */}
+            <LinearGradient
+                colors={['rgba(0,0,0,0.1)', 'rgba(0,0,0,0.6)', 'rgba(0,0,0,0.9)']}
+                style={StyleSheet.absoluteFill}
+            />
 
             <View style={{ flex: 1, padding: 16, justifyContent: 'space-between' }}>
-                <View style={{ flexDirection: 'row', gap: 12 }}>
-                    {/* Album Art */}
-                    <View style={{ width: 48, height: 48, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.1)', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }}>
-                        {imageUrl ? (
+                {/* Header: Name + Power */}
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+                        <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: isOff ? '#64748B' : (isPlaying ? '#22C55E' : '#EAB308') }} />
+                        <Text numberOfLines={1} style={{ color: 'rgba(255,255,255,0.7)', fontSize: 11, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase' }}>
+                            {player.attributes.friendly_name}
+                        </Text>
+                    </View>
+                    <Pressable
+                        onPress={togglePower}
+                        hitSlop={12}
+                        style={{ padding: 6, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 12 }}
+                    >
+                        <Power size={14} color={isOff ? '#EF4444' : '#FFF'} />
+                    </Pressable>
+                </View>
+
+                {/* Main Content: Art + Info */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16, marginVertical: 4 }}>
+                    {/* Floating Artwork */}
+                    <View style={{
+                        width: 56, height: 56, borderRadius: 14,
+                        backgroundColor: '#334155',
+                        shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 5, elevation: 6,
+                        alignItems: 'center', justifyContent: 'center', overflow: 'hidden'
+                    }}>
+                        {imageUrl && !isOff ? (
                             <Image source={{ uri: imageUrl }} style={{ width: '100%', height: '100%' }} />
                         ) : (
-                            <Music size={24} color="#94A3B8" />
+                            <Music size={24} color="#64748B" />
                         )}
                     </View>
+
+                    {/* Meta */}
                     <View style={{ flex: 1, justifyContent: 'center' }}>
-                        <Text numberOfLines={1} style={{ color: '#FFF', fontWeight: 'bold', fontSize: 14 }}>{title}</Text>
-                        <Text numberOfLines={1} style={{ color: '#94A3B8', fontSize: 12 }}>{artist}</Text>
+                        <Text numberOfLines={1} style={{ color: '#FFF', fontWeight: '700', fontSize: 16, marginBottom: 2 }}>
+                            {title}
+                        </Text>
+                        <Text numberOfLines={1} style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>
+                            {artist}
+                        </Text>
                     </View>
                 </View>
 
-                {/* Controls */}
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 24, marginVertical: 8 }}>
-                    <Pressable onPress={prevTrack} hitSlop={10}>
-                        <SkipBack size={24} color="#E2E8F0" />
-                    </Pressable>
-                    <Pressable onPress={togglePlay} style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: '#FFF', alignItems: 'center', justifyContent: 'center' }}>
-                        {isPlaying ? <Pause size={24} color="#0F172A" fill="#0F172A" /> : <Play size={24} color="#0F172A" fill="#0F172A" style={{ marginLeft: 2 }} />}
-                    </Pressable>
-                    <Pressable onPress={nextTrack} hitSlop={10}>
-                        <SkipForward size={24} color="#E2E8F0" />
-                    </Pressable>
-                </View>
+                {/* Controls Section */}
+                <View style={{ gap: 14 }}>
+                    {/* Playback Buttons */}
+                    <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 24 }}>
+                        <Pressable onPress={prevTrack} disabled={isOff} style={{ opacity: isOff ? 0.3 : 1 }}>
+                            <SkipBack size={24} color="#FFF" />
+                        </Pressable>
 
-                {/* Volume Slider */}
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <Volume2 size={16} color="#94A3B8" />
-                    <Slider
-                        style={{ flex: 1, height: 32 }}
-                        value={volume}
-                        onSlidingComplete={setVolume}
-                        minimumValue={0}
-                        maximumValue={1}
-                        minimumTrackTintColor="#FFF"
-                        maximumTrackTintColor="rgba(255,255,255,0.2)"
-                        thumbTintColor="#FFF"
-                    />
+                        <Pressable
+                            onPress={togglePlay}
+                            disabled={isOff}
+                            style={{
+                                width: 48, height: 48, borderRadius: 24,
+                                backgroundColor: isOff ? 'rgba(255,255,255,0.1)' : '#FFF',
+                                alignItems: 'center', justifyContent: 'center',
+                                shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 2
+                            }}
+                        >
+                            {isPlaying ? (
+                                <Pause size={24} color="#0F172A" fill="#0F172A" />
+                            ) : (
+                                <Play size={24} color={isOff ? 'rgba(255,255,255,0.3)' : '#0F172A'} fill={isOff ? 'rgba(255,255,255,0.3)' : '#0F172A'} style={{ marginLeft: 3 }} />
+                            )}
+                        </Pressable>
+
+                        <Pressable onPress={nextTrack} disabled={isOff} style={{ opacity: isOff ? 0.3 : 1 }}>
+                            <SkipForward size={24} color="#FFF" />
+                        </Pressable>
+                    </View>
+
+                    {/* Volume Slider */}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                        <Volume2 size={16} color="rgba(255,255,255,0.5)" />
+                        <Slider
+                            style={{ flex: 1, height: 20 }}
+                            value={volume}
+                            onSlidingComplete={setVolume}
+                            minimumValue={0}
+                            maximumValue={1}
+                            minimumTrackTintColor={activeColor}
+                            maximumTrackTintColor="rgba(255,255,255,0.15)"
+                            thumbTintColor="#FFF"
+                        />
+                    </View>
                 </View>
             </View>
         </View>
@@ -595,6 +671,64 @@ const CameraTile = memo(({ camera, width, api }: any) => {
             </View>
         </View>
     );
+});
+
+const HelperTile = memo(({ entity, api, width, theme }: any) => {
+    const activeColor = theme ? theme.accentColor : '#8B5CF6';
+    const isInputSelect = entity.entity_id.startsWith('input_select.');
+    const state = entity.state;
+
+    // Timer Logic for TV Bedroom
+    if (isInputSelect && entity.entity_id === 'input_select.timer_tv_schlafzimmer') {
+        const icon = Timer;
+        const isActive = state?.toLowerCase() !== 'aus';
+
+        return (
+            <View style={[styles.tile, { width }]}>
+                <View style={[styles.tileContent, isActive && { backgroundColor: activeColor + '20', borderColor: activeColor + '50' }]}>
+                    <View style={styles.tileHeader}>
+                        <View style={[styles.tileIcon, isActive && { backgroundColor: activeColor }]}>
+                            <Timer size={24} color={isActive ? "#FFF" : activeColor} />
+                        </View>
+                        <Text style={[styles.tileState, isActive && styles.textActive]}>
+                            {state}
+                        </Text>
+                    </View>
+                    <Text numberOfLines={2} style={[styles.tileName, isActive && styles.textActive]}>
+                        TV Timer
+                    </Text>
+
+                    {/* Simple Dropdown Trigger or Cycle */}
+                    <View style={styles.tileActions}>
+                        <Pressable
+                            onPress={() => {
+                                const options = entity.attributes.options || [];
+
+                                Alert.alert(
+                                    "Timer einstellen",
+                                    `Aktuell: ${state}`,
+                                    [
+                                        // Specific "Ausschalten" option if active, or just "Aus" if in list.
+                                        // We map all options.
+                                        ...options.map((opt: string) => ({
+                                            text: opt,
+                                            onPress: () => api.callService('input_select', 'select_option', entity.entity_id, { option: opt }),
+                                            style: (opt.toLowerCase() === 'aus') ? 'destructive' : 'default'
+                                        })),
+                                        { text: "Abbrechen", style: "cancel" }
+                                    ]
+                                );
+                            }}
+                            style={[styles.actionBtn, { width: '100%' }]}
+                        >
+                            <Text style={styles.actionBtnText}>{isActive ? 'Ändern' : 'Starten'}</Text>
+                        </Pressable>
+                    </View>
+                </View>
+            </View>
+        );
+    }
+    return null;
 });
 
 const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState }: any) => {
@@ -774,6 +908,8 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState }: 
                             </View>
                         )}
 
+
+
                         {/* Climate Section */}
                         {room.climates?.length > 0 && (
                             <View style={styles.section}>
@@ -818,6 +954,24 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState }: 
                             onClose={() => setSelectedLight(null)}
                             callService={api.callService}
                         />
+
+                        {/* Helpers Section (TV Timer etc) */}
+                        {room.helpers?.length > 0 && (
+                            <View style={styles.section}>
+                                <SectionHeader title="Einstellungen" />
+                                <View style={styles.grid}>
+                                    {room.helpers.map((h: any) => (
+                                        <HelperTile
+                                            key={h.entity_id}
+                                            entity={h}
+                                            api={api}
+                                            width={isTablet ? tileWidth : '100%'}
+                                            theme={theme}
+                                        />
+                                    ))}
+                                </View>
+                            </View>
+                        )}
 
                         {/* Covers Section */}
                         {room.covers?.length > 0 && (
@@ -877,41 +1031,7 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState }: 
                             </View>
                         )}
 
-                        {/* Sleep Timer (Specific for Schlafzimmer) */}
-                        {room.name === 'Schlafzimmer' && (
-                            <View style={styles.section}>
-                                <SectionHeader title={`Sleep Timer (Shield) ${sleepTimerState?.remaining ? `— Noch ${sleepTimerState.remaining} Min` : ''}`} />
-                                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                                    {[30, 60, 90, 120, 150].map((min) => {
-                                        const isActive = sleepTimerState?.activeDuration === min;
-                                        return (
-                                            <Pressable
-                                                key={min}
-                                                style={{
-                                                    backgroundColor: isActive ? '#3B82F6' : '#1E293B',
-                                                    paddingHorizontal: 16,
-                                                    paddingVertical: 10,
-                                                    borderRadius: 12,
-                                                    borderWidth: 1,
-                                                    borderColor: isActive ? '#60A5FA' : 'rgba(255,255,255,0.1)'
-                                                }}
-                                                onPress={() => sleepTimerState.startTimer(min)}
-                                            >
-                                                <Text style={{ color: isActive ? '#FFF' : '#E2E8F0', fontWeight: '600' }}>
-                                                    {min === 90 ? '1.5 h' : min === 150 ? '2.5 h' : min >= 60 ? `${min / 60} h` : `${min} Min`}
-                                                </Text>
-                                            </Pressable>
-                                        );
-                                    })}
-                                    <Pressable
-                                        style={{ backgroundColor: '#EF4444', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, opacity: sleepTimerState?.isRunning ? 1 : 0.5 }}
-                                        onPress={sleepTimerState.stopTimer}
-                                    >
-                                        <Text style={{ color: '#FFF', fontWeight: '600' }}>Deaktivieren</Text>
-                                    </Pressable>
-                                </View>
-                            </View>
-                        )}
+
 
                         <View style={{ height: 40 }} />
                     </ScrollView>
@@ -970,7 +1090,7 @@ export default function Rooms() {
         // Initialize with allowed rooms to preserve order
         const areaMap = new Map<string, any>();
         ALLOWED_ROOMS.forEach(room => {
-            areaMap.set(room, { lights: [], covers: [], sensors: [], climates: [], mediaPlayers: [], scripts: [], scenes: [], cameras: [] });
+            areaMap.set(room, { lights: [], covers: [], sensors: [], climates: [], mediaPlayers: [], scripts: [], scenes: [], cameras: [], helpers: [] });
         });
 
         // Helper to find room for entity
@@ -1013,7 +1133,8 @@ export default function Rooms() {
             else if (entity.entity_id.startsWith('climate.')) room.climates.push(entity);
             else if (entity.entity_id.startsWith('media_player.')) room.mediaPlayers.push(entity);
             else if (entity.entity_id.startsWith('script.')) room.scripts.push(entity);
-            else if (entity.entity_id.startsWith('camera.')) room.cameras.push(entity);
+            // else if (entity.entity_id.startsWith('camera.')) room.cameras.push(entity);
+            else if (entity.entity_id.startsWith('input_select.')) room.helpers.push(entity);
         });
 
         // CUSTOMIZATION: Wohnzimmer strict filtering
@@ -1135,6 +1256,11 @@ export default function Rooms() {
                 m.entity_id === 'media_player.nest_schlafzimmer_2'
             );
 
+            // Helpers
+            schlafzimmer.helpers = schlafzimmer.helpers.filter((h: any) =>
+                h.entity_id === 'input_select.timer_tv_schlafzimmer'
+            );
+
             // Clear others
             schlafzimmer.covers = [];
             schlafzimmer.sensors = [];
@@ -1194,14 +1320,15 @@ export default function Rooms() {
         const lina = areaMap.get('Lina');
         if (lina) {
             // Lights
-            lina.lights = lina.lights.filter((l: any) =>
-                l.entity_id === 'light.licht_lina_decke' ||
-                l.entity_id === 'light.hue_play_wickeltisch'
-            ).map((l: any) => {
-                if (l.entity_id === 'light.licht_lina_decke') return { ...l, attributes: { ...l.attributes, friendly_name: 'Deckenbeleuchtung' } };
-                if (l.entity_id === 'light.hue_play_wickeltisch') return { ...l, attributes: { ...l.attributes, friendly_name: 'Wickeltisch' } };
-                return l;
-            });
+            const lDecke = entities.find(e => e.entity_id === 'light.licht_lina_decke');
+            const lWickel = entities.find(e => e.entity_id === 'light.hue_play_wickeltisch');
+            const lWickelAlt = entities.find(e => e.entity_id === 'light.wickeltisch');
+
+            lina.lights = [];
+            if (lDecke) lina.lights.push({ ...lDecke, attributes: { ...lDecke.attributes, friendly_name: 'Deckenbeleuchtung' } });
+            if (lWickel) lina.lights.push({ ...lWickel, attributes: { ...lWickel.attributes, friendly_name: 'Wickeltisch' } });
+            if (lWickelAlt) lina.lights.push({ ...lWickelAlt, attributes: { ...lWickelAlt.attributes, friendly_name: 'Wickeltisch (Alt)' } });
+
 
             // Media
             lina.mediaPlayers = lina.mediaPlayers.filter((m: any) => m.entity_id === 'media_player.hub_lina_2');
@@ -1215,6 +1342,10 @@ export default function Rooms() {
             lina.climates = [];
             lina.scripts = [];
             lina.scenes = [];
+
+            // Add Scenes
+            const sNachtlicht = entities.find(e => e.entity_id === 'script.nachtlicht_lina');
+            if (sNachtlicht) lina.scripts.push({ ...sNachtlicht, attributes: { ...sNachtlicht.attributes, friendly_name: 'Nachtlicht' } });
         }
 
         // CUSTOMIZATION: Büro strict filtering
@@ -1354,9 +1485,9 @@ export default function Rooms() {
         const grill = areaMap.get('Grillplatz');
         if (grill) {
             // Camera
-            const cam = entities.find(e => e.entity_id === 'camera.kamera_grillplatz_high_resolution_channel');
+            // const cam = entities.find(e => e.entity_id === 'camera.kamera_grillplatz_high_resolution_channel');
             grill.cameras = [];
-            if (cam) grill.cameras.push(cam);
+            // if (cam) grill.cameras.push(cam);
 
             // Clear others
             grill.lights = [];
@@ -1377,9 +1508,9 @@ export default function Rooms() {
             if (sDoor) balkon.sensors.push(sDoor);
 
             // Camera
-            const cam = entities.find(e => e.entity_id === 'camera.kamera_balkon_high_resolution_channel');
+            // const cam = entities.find(e => e.entity_id === 'camera.kamera_balkon_high_resolution_channel');
             balkon.cameras = [];
-            if (cam) balkon.cameras.push(cam);
+            // if (cam) balkon.cameras.push(cam);
 
             // Clear others
             balkon.lights = [];
@@ -1422,9 +1553,9 @@ export default function Rooms() {
             wasch.mediaPlayers = wasch.mediaPlayers.filter((m: any) => m.entity_id === 'media_player.nesthub5b73_2');
 
             // Camera
-            const cam = entities.find(e => e.entity_id === 'camera.kamera_waschkuche_high_resolution_channel');
+            // const cam = entities.find(e => e.entity_id === 'camera.kamera_waschkuche_high_resolution_channel');
             wasch.cameras = [];
-            if (cam) wasch.cameras.push(cam);
+            // if (cam) wasch.cameras.push(cam);
 
             // Clear others
             wasch.lights = [];
@@ -1443,9 +1574,9 @@ export default function Rooms() {
             if (sDoor) highlight.sensors.push(sDoor);
 
             // Camera
-            const cam = entities.find(e => e.entity_id === 'camera.kamera_balkon_high_resolution_channel_2');
+            // const cam = entities.find(e => e.entity_id === 'camera.kamera_balkon_high_resolution_channel_2');
             highlight.cameras = [];
-            if (cam) highlight.cameras.push(cam);
+            // if (cam) highlight.cameras.push(cam);
 
             // Clear others
             highlight.lights = [];

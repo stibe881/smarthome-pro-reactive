@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import * as Clipboard from 'expo-clipboard';
 import { View, Text, TextInput, Pressable, Alert, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform, useWindowDimensions, StyleSheet, Switch, Linking, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
@@ -10,6 +11,23 @@ import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 
 const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onClose: () => void }) => {
+    const { user } = useAuth();
+    const { entities, callService, isConnected } = useHomeAssistant();
+
+    // Derive user slug (e.g. stefan_gross from stefan.gross@hotmail.ch)
+    const userSlug = useMemo(() => {
+        if (!user?.email) return 'user';
+        return user.email.split('@')[0].replace(/\./g, '_').toLowerCase();
+    }, [user]);
+
+    // Define Entity IDs
+    const entityIds = {
+        security: `input_boolean.notify_${userSlug}_security`,
+        appliances: `input_boolean.notify_${userSlug}_appliances`,
+        updates: `input_boolean.notify_${userSlug}_updates`,
+        all_push: `input_boolean.notify_${userSlug}_global`
+    };
+
     const [config, setConfig] = useState({
         enabled: true,
         security: true,
@@ -19,10 +37,29 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
     const [token, setToken] = useState<string | null>(null);
     const [isTesting, setIsTesting] = useState(false);
 
+    // Sync with HA on Open
     useEffect(() => {
-        loadSettings();
-        loadToken();
-    }, []);
+        if (visible) {
+            loadToken();
+            loadSettings();
+
+            if (isConnected) {
+                // Try to read from HA entities if they exist
+                const sec = entities.find(e => e.entity_id === entityIds.security);
+                const app = entities.find(e => e.entity_id === entityIds.appliances);
+                const up = entities.find(e => e.entity_id === entityIds.updates);
+                const glob = entities.find(e => e.entity_id === entityIds.all_push);
+
+                setConfig(prev => ({
+                    ...prev,
+                    security: sec ? sec.state === 'on' : prev.security,
+                    appliances: app ? app.state === 'on' : prev.appliances,
+                    updates: up ? up.state === 'on' : prev.updates,
+                    enabled: glob ? glob.state === 'on' : prev.enabled
+                }));
+            }
+        }
+    }, [visible, isConnected, entities]);
 
     const loadToken = async () => {
         try {
@@ -41,7 +78,7 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
         try {
             const saved = await AsyncStorage.getItem('notification_settings');
             if (saved) {
-                setConfig(JSON.parse(saved));
+                setConfig(prev => ({ ...prev, ...JSON.parse(saved) }));
             }
         } catch (e) {
             console.error("Failed to load generic notification settings", e);
@@ -49,12 +86,30 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
     };
 
     const toggleSetting = async (key: keyof typeof config) => {
-        const newSettings = { ...config, [key]: !config[key] };
+        const newValue = !config[key];
+        const newSettings = { ...config, [key]: newValue };
         setConfig(newSettings);
+
+        // 1. Save Local
         try {
             await AsyncStorage.setItem('notification_settings', JSON.stringify(newSettings));
-        } catch (e) {
-            console.error("Failed to save notification settings", e);
+        } catch (e) { console.error("Failed to save notification settings", e); }
+
+        // 2. Sync to HA
+        if (isConnected) {
+            let entityId = '';
+            if (key === 'security') entityId = entityIds.security;
+            if (key === 'appliances') entityId = entityIds.appliances;
+            if (key === 'updates') entityId = entityIds.updates;
+            if (key === 'enabled') entityId = entityIds.all_push;
+
+            if (entityId) {
+                // Fire and forget - optimistically updated UI
+                callService('input_boolean', newValue ? 'turn_on' : 'turn_off', entityId).catch(e => {
+                    console.warn(`Failed to toggle ${entityId}`, e);
+                    // Don't alert, just log. 
+                });
+            }
         }
     };
 
@@ -65,7 +120,6 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
         }
         setIsTesting(true);
         try {
-            // Trigger a local notification immediately to test if sound/banners work
             await Notifications.scheduleNotificationAsync({
                 content: {
                     title: "Test Nachricht",
@@ -74,12 +128,9 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
                 },
                 trigger: null,
             });
-
-            // Explain why server-side test is different
             Alert.alert(
                 "Lokaler Test gesendet",
-                "Die lokale Nachricht wurde gesendet. Wenn diese ankommt, sind Sound und Banner korrekt konfiguriert.\n\n" +
-                "Kopiere deinen Token, um ihn im HA-Entwickler-Tool zu testen, falls die automatischen Nachrichten nicht kommen."
+                "Die lokale Nachricht wurde gesendet. Wenn Benachrichtigungen generell funktionieren, solltest du sie jetzt sehen."
             );
         } catch (e) {
             Alert.alert("Fehler", "Lokaler Test fehlgeschlagen.");
@@ -92,18 +143,31 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
         <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
             <View style={styles.modalContainer}>
                 <View style={styles.modalHeader}>
-                    <Text style={styles.modalTitle}>Benachrichtigungen</Text>
+                    <Text style={styles.modalTitle}>Benachrichtigungen ({userSlug})</Text>
                     <Pressable onPress={onClose} style={styles.closeButton}>
                         <X size={24} color="#94A3B8" />
                     </Pressable>
                 </View>
 
                 <ScrollView style={styles.modalContent}>
+                    {/* INFO BOX ABOUT HA SYNC */}
+                    <View style={{ backgroundColor: '#1E293B', padding: 12, borderRadius: 12, marginBottom: 24, borderWidth: 1, borderColor: '#334155' }}>
+                        <Text style={{ color: '#60A5FA', fontWeight: 'bold', marginBottom: 4, fontSize: 13 }}>💡 Home Assistant Setup nötig</Text>
+                        <Text style={{ color: '#94A3B8', fontSize: 12, lineHeight: 18 }}>
+                            Damit diese Schalter funktionieren, erstelle bitte folgende "Helfer" (Umschalter) in Home Assistant:
+                        </Text>
+                        <View style={{ marginTop: 8, gap: 4 }}>
+                            <Text style={{ fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', fontSize: 11, color: '#E2E8F0' }}>• {entityIds.all_push}</Text>
+                            <Text style={{ fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', fontSize: 11, color: '#E2E8F0' }}>• {entityIds.security}</Text>
+                            <Text style={{ fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', fontSize: 11, color: '#E2E8F0' }}>• {entityIds.appliances}</Text>
+                        </View>
+                    </View>
+
                     <View style={styles.settingGroup}>
                         <View style={styles.settingRow}>
                             <View style={{ flex: 1 }}>
-                                <Text style={styles.settingLabel}>Benachrichtigungen erlauben</Text>
-                                <Text style={styles.settingDescription}>Generelle Erlaubnis für Push-Nachrichten</Text>
+                                <Text style={styles.settingLabel}>Alle Benachrichtigungen</Text>
+                                <Text style={styles.settingDescription}>Globaler Schalter für dieses Gerät</Text>
                             </View>
                             <Switch
                                 value={config.enabled}
@@ -140,7 +204,7 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
                                 </View>
                                 <View style={{ flex: 1, marginLeft: 12 }}>
                                     <Text style={styles.settingLabel}>Haushaltsgeräte</Text>
-                                    <Text style={styles.settingDescription}>Waschmaschine, Tumbler, Geschirrspüler</Text>
+                                    <Text style={styles.settingDescription}>Waschmaschine, Tumbler, etc.</Text>
                                 </View>
                                 <Switch
                                     value={config.appliances}
@@ -155,10 +219,17 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
                     <View style={styles.settingGroup}>
                         <Text style={styles.groupTitle}>DIAGNOSE</Text>
                         <View style={{ marginBottom: 16 }}>
-                            <Text style={styles.settingLabel}>Push Token</Text>
-                            <Text style={[styles.settingDescription, { fontSize: 11, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' }]} numberOfLines={2}>
-                                {token || "Wird geladen..."}
-                            </Text>
+                            <Text style={styles.settingLabel}>Push Token (Tippen zum Kopieren)</Text>
+                            <Pressable onPress={async () => {
+                                if (token) {
+                                    await Clipboard.setStringAsync(token);
+                                    Alert.alert("Kopiert", "Token in Zwischenablage kopiert!");
+                                }
+                            }}>
+                                <Text style={[styles.settingDescription, { fontSize: 11, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', color: '#3B82F6' }]} numberOfLines={2}>
+                                    {token || "Wird geladen..."}
+                                </Text>
+                            </Pressable>
                         </View>
 
                         <Pressable
@@ -173,7 +244,7 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
 
                     <View style={styles.infoBox}>
                         <Text style={styles.infoText}>
-                            Hinweis: Wenn Benachrichtigungen im Standby nicht ankommen, prüfe ob die App "Hintergrundaktualisierung" erlaubt hat.
+                            Hinweis: Diese Einstellungen steuern "Helper" in Home Assistant. Deine Automatisierungen müssen diese prüfen.
                         </Text>
                     </View>
                 </ScrollView>

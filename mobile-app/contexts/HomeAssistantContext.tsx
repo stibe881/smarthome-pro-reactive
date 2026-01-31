@@ -165,6 +165,7 @@ interface HomeAssistantContextType {
     isConnecting: boolean;
     error: string | null;
     haBaseUrl: string | null;
+    authToken: string | null; // Expose token
     connect: () => Promise<boolean>;
     disconnect: () => void;
     toggleLight: (entityId: string) => void;
@@ -196,6 +197,8 @@ interface HomeAssistantContextType {
     setShoppingListVisible: (visible: boolean) => void;
     startShoppingGeofencing: () => Promise<void>;
     fetchWeatherForecast: (entityId: string, forecastType?: 'daily' | 'hourly') => Promise<any[]>;
+    debugShoppingLogic: () => Promise<void>;
+    getExpoPushToken: () => string | null;
 }
 
 const HomeAssistantContext = createContext<HomeAssistantContextType | undefined>(undefined);
@@ -218,6 +221,8 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
     const [isConnecting, setIsConnecting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [haBaseUrl, setHaBaseUrl] = useState<string | null>(null);
+    const [authToken, setAuthToken] = useState<string | null>(null); // State for token
+    const [expoPushToken, setExpoPushToken] = useState<string | null>(null); // State for Expo Push Token
     const serviceRef = useRef<HomeAssistantService | null>(null);
     const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>({
         enabled: true,
@@ -229,6 +234,40 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
     const [isGeofencingActive, setIsGeofencingActive] = useState(false);
     const [shoppingListVisible, setShoppingListVisible] = useState(false);
     const disconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // Register for Push Notifications
+    useEffect(() => {
+        registerForPushNotificationsAsync().then(token => setExpoPushToken(token ?? null));
+    }, []);
+
+    async function registerForPushNotificationsAsync() {
+        if (!Device.isDevice) {
+            console.log('Must use physical device for Push Notifications');
+            return;
+        }
+
+        try {
+            const { status: existingStatus } = await Notifications.getPermissionsAsync();
+            let finalStatus = existingStatus;
+
+            if (existingStatus !== 'granted') {
+                const { status } = await Notifications.requestPermissionsAsync();
+                finalStatus = status;
+            }
+
+            if (finalStatus !== 'granted') {
+                console.log('Failed to get push token for push notification!');
+                return;
+            }
+
+            const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
+            const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+            console.log("🔥 Expo Push Token:", token);
+            return token;
+        } catch (e) {
+            console.error("Error getting push token:", e);
+        }
+    }
 
     useEffect(() => {
         console.log("🔵 HomeAssistantProvider MOUNTED");
@@ -517,8 +556,8 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
             if (!e.entity_id.startsWith('binary_sensor.')) return false;
             const id = e.entity_id.toLowerCase();
 
-            // Only allow these two specific doors
-            return id.includes('waschkuchenture') || id.includes('highlighttur');
+            // Relaxed matching to ensure we catch variations like "highlight_tür" or "waschküchentür"
+            return id.includes('highlight') || (id.includes('wasch') && (id.includes('tur') || id.includes('tür')));
         });
 
         // Log found sensors for debugging (only once when entities change significantly)
@@ -803,13 +842,15 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
             if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
                 cleanUrl = 'http://' + cleanUrl;
             }
+            setHaBaseUrl(cleanUrl); // Set base URL immediately
+            setAuthToken(creds.token); // Save token to state
 
-            const success = await serviceRef.current!.connect(creds.url, creds.token);
+            const success = await serviceRef.current!.connect(cleanUrl, creds.token);
             setIsConnected(success);
-            if (success) {
-                setHaBaseUrl(cleanUrl);
-            } else {
+            if (!success) { // If connection failed, clear the token and URL
                 setError('Verbindung fehlgeschlagen');
+                setHaBaseUrl(null);
+                setAuthToken(null);
             }
             return success;
         } catch (e: any) {
@@ -899,10 +940,13 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
         return serviceRef.current?.browseMedia(entityId, mediaContentId, mediaContentType) || Promise.resolve(null);
     };
 
-    const callService = (domain: string, service: string, entityId: string, data?: any) => {
-        return serviceRef.current?.callService(domain, service, entityId, data);
-    };
-
+    const callService = useCallback((domain: string, service: string, entityId: string, data: any = {}) => {
+        if (!serviceRef.current || !serviceRef.current.isConnected()) {
+            console.warn('Cannot call service - HA not connected');
+            return;
+        }
+        serviceRef.current.callService(domain, service, entityId, data);
+    }, []);
     const setClimateTemperature = (entityId: string, temperature: number) => {
         serviceRef.current?.callService('climate', 'set_temperature', entityId, { temperature });
     };
@@ -918,7 +962,32 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
             return entityPicture;
         }
         // Construct full URL using HA base URL
-        if (haBaseUrl) {
+        if (haBaseUrl && serviceRef.current?.token) {
+            // Append token for authentication if needed (especially for camera streams)
+            // HA supports ?token=... for some endpoints, but for security it's better to just relay usage 
+            // However, for <Image> components we can't easily add headers.
+            // A common workaround for HA images is using the &token= query param if the integration supports it, 
+            // or relying on the session if the user was logged in via webview (which we aren't).
+            // 
+            // Actually, HA Long-Lived Access Tokens cannot be passed via query param for all endpoints.
+            // But `entity_picture` for cameras often points to `/api/camera_proxy/...?token=...` which is a temporary token generated by HA.
+            // If the entity_picture ALREADY has a token (e.g. from camera entity attribute), we don't need to do anything.
+
+            // Let's check if it already has a query param
+            const joinChar = entityPicture.includes('?') ? '&' : '?';
+
+            // NOTE: The Long-Lived Token is NOT accepted in query params for core API images usually.
+            // BUT: Camera entities often update their `entity_picture` attribute to include a short-lived `token` valid for that session context.
+            // If the Image fails to load, it might be because the HA instance requires auth headers which <Image> doesn't send.
+
+            // STRATEGY CHANGE: We will NOT append the long-lived token here (security risk + might not work).
+            // Instead, we trust the `entity_picture` attribute from the entity state, which normally contains a signed temp token.
+            // If that fails, the user might need to use a WebView or a specialized Player.
+
+            // Wait, for standard Lovelace behavior, the frontend API often handles this. 
+            // For external apps, passing the LLAT in the URL is unsupported by HA core for security.
+            // 
+            // Code Modification: Just return the full URL. If it fails, we might need a custom Image component that sends headers.
             return `${haBaseUrl}${entityPicture}`;
         }
         return entityPicture;
@@ -935,6 +1004,7 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
         isConnecting,
         error,
         haBaseUrl,
+        authToken, // Expose
         connect,
         disconnect,
         toggleLight,
@@ -966,6 +1036,54 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
         setShoppingListVisible,
         startShoppingGeofencing,
         fetchWeatherForecast: async (entityId: string, forecastType: 'daily' | 'hourly' = 'daily') => serviceRef.current?.fetchWeatherForecast(entityId, forecastType) || [],
+        debugShoppingLogic: async () => {
+            try {
+                // 1. Check Permissions
+                const { status } = await Location.getForegroundPermissionsAsync();
+                const { status: bgStatus } = await Location.getBackgroundPermissionsAsync();
+
+                // 2. Check Stored Count
+                const countStr = await AsyncStorage.getItem(SHOPPING_COUNT_KEY);
+
+                // 3. Get Location & Reverse Geocode
+                const loc = await Location.getCurrentPositionAsync({});
+                const addresses = await Location.reverseGeocodeAsync({
+                    latitude: loc.coords.latitude,
+                    longitude: loc.coords.longitude
+                });
+
+                let match = 'NO MATCH';
+                let shopData = '';
+
+                if (addresses.length > 0) {
+                    const addr = addresses[0];
+                    const name = (addr.name || '').toLowerCase();
+                    const street = (addr.street || '').toLowerCase();
+                    const city = (addr.city || '').toLowerCase();
+
+                    shopData = `Name: ${addr.name}\nStreet: ${addr.street}\nCity: ${addr.city}`;
+
+                    const matchingShop = TARGET_SHOPS.find(shop =>
+                        name.includes(shop) || street.includes(shop)
+                    );
+
+                    if (matchingShop) match = `YES (${matchingShop})`;
+                }
+
+                Alert.alert(
+                    "🛒 Shopping Debug",
+                    `List Count (Stored): ${countStr || 'NULL'}\n\n` +
+                    `Permissions: FG=${status}, BG=${bgStatus}\n\n` +
+                    `Location: ${match}\n` +
+                    `----------------\n` +
+                    shopData
+                );
+
+            } catch (e: any) {
+                Alert.alert("Debug Error", e.message);
+            }
+        },
+        getExpoPushToken: () => expoPushToken
     };
 
     return (

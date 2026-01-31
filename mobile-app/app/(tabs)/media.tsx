@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useHomeAssistant } from '../../contexts/HomeAssistantContext';
 import {
     Play, Pause, SkipBack, SkipForward, Volume2,
-    Music, Tv, Speaker, WifiOff, Disc, Power, Smartphone,
+    Music, WifiOff, Disc, Power, Smartphone, Speaker,
     ListMusic, Cast, Radio
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -12,21 +12,7 @@ import { useSpotifyAuth, saveSpotifyToken, getSpotifyToken, logoutSpotify, excha
 import { spotifyApi, SpotifyDevice } from '../../services/spotifyApi';
 import { OptimisticVolumeSlider } from '../../components/OptimisticVolumeSlider';
 
-// Whitelisted media players
-const MEDIA_PLAYER_CONFIG: Record<string, { name: string; type: 'speaker' | 'tv'; icon: any }> = {
-    'media_player.haus_4': { name: '🏠 Haus', type: 'speaker', icon: Speaker },
-    'media_player.ma_wohnung': { name: '🎵 Wohnung', type: 'speaker', icon: Speaker },
-    'media_player.kuche_2': { name: '🍳 Küche', type: 'speaker', icon: Speaker },
-    'media_player.nest_terrasse': { name: '🌳 Terrasse', type: 'speaker', icon: Speaker },
-    'media_player.nest_buro': { name: '💼 Büro', type: 'speaker', icon: Speaker },
-    'media_player.hub_levin': { name: '👦 Levin', type: 'speaker', icon: Speaker },
-    'media_player.hub_lina': { name: '👧 Lina', type: 'speaker', icon: Speaker },
-    'media_player.nest_schlafzimmer': { name: '🛏️ Schlafzimmer', type: 'speaker', icon: Speaker },
-    'media_player.fernseher_im_wohnzimmer_2': { name: '📺 Wohnzimmer TV', type: 'tv', icon: Tv },
-    'media_player.shield_schlafzimmer': { name: '📺 Schlafzimmer TV', type: 'tv', icon: Tv },
-};
-
-const WHITELISTED_PLAYERS = Object.keys(MEDIA_PLAYER_CONFIG);
+import { MEDIA_PLAYER_CONFIG, WHITELISTED_PLAYERS } from '../../config/mediaPlayers';
 
 export default function Media() {
     const { entities, isConnected, isConnecting, callService, getEntityPictureUrl, browseMedia } = useHomeAssistant();

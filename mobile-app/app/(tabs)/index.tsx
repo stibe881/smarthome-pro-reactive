@@ -5,16 +5,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useHomeAssistant } from '../../contexts/HomeAssistantContext';
-import {
-    Wifi, WifiOff, Bot, RefreshCw,
-    Play, Moon, Tv, ChevronRight, Power, Zap,
-    LucideIcon,
-    BedDouble,
-    Thermometer, Sun, CloudRain, Lock, Unlock, Loader2, X, Fan,
-    Lightbulb, Blinds, Music, Battery, Shirt, Wind, UtensilsCrossed,
-    Calendar, PlayCircle, Home, Map, PartyPopper, DoorOpen, DoorClosed, Clock, MapPin, ShoppingCart, Clapperboard,
-    AlertTriangle, Droplets
-} from 'lucide-react-native';
+import { Lightbulb, Blinds, Thermometer, Droplets, Wind, Lock, Unlock, Zap, Music, Play, Pause, SkipForward, SkipBack, Bot, PartyPopper, Calendar, CloudRain, Cloud, Sun, Moon, ShoppingCart, Info, Loader2, UtensilsCrossed, Shirt, Clapperboard, BedDouble, ChevronRight, Shield, LucideIcon, DoorOpen, DoorClosed, WifiOff, Tv, X, Wifi, RefreshCw, Power, Battery, PlayCircle, Home, Map, MapPin, Fan, Clock, Video } from 'lucide-react-native';
+import SecurityModal from '../../components/SecurityModal';
+import { WHITELISTED_PLAYERS } from '../../config/mediaPlayers';
+import { filterSecurityEntities } from '../../utils/securityHelpers';
+import CamerasModal from '../../components/CamerasModal';
 // LinearGradient removed to fix compatibility issue
 
 // =====================================================
@@ -25,6 +20,7 @@ import CalendarModal from '../../components/CalendarModal';
 import ShoppingListModal from '../../components/ShoppingListModal';
 import WeatherForecastModal from '../../components/WeatherForecastModal';
 import HeaderClock from '../../components/HeaderClock';
+import ActionFeedbackModal from '../../components/ActionFeedbackModal';
 
 interface HeroStatCardProps {
     icon: LucideIcon;
@@ -37,6 +33,7 @@ interface HeroStatCardProps {
     cardWidth: number;
     onPress?: () => void;
     onLongPress?: () => void;
+    statusText?: string;
 }
 
 const HeroStatCard = memo(({
@@ -49,7 +46,8 @@ const HeroStatCard = memo(({
     isActive,
     cardWidth,
     onPress,
-    onLongPress
+    onLongPress,
+    statusText
 }: HeroStatCardProps) => (
     <Pressable
         onPress={onPress}
@@ -68,8 +66,14 @@ const HeroStatCard = memo(({
 
             <View style={styles.heroCardContent}>
                 <View style={styles.valueRow}>
-                    <Text style={styles.heroValue}>{value}</Text>
-                    <Text style={styles.heroTotal}>/{total}</Text>
+                    {statusText ? (
+                        <Text style={[styles.heroValue, { fontSize: 18 }]} numberOfLines={1}>{statusText}</Text>
+                    ) : (
+                        <>
+                            <Text style={styles.heroValue}>{value}</Text>
+                            <Text style={styles.heroTotal}>/{total}</Text>
+                        </>
+                    )}
                 </View>
                 <Text style={[styles.heroLabel, { color: isActive ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.5)' }]}>
                     {label}
@@ -78,7 +82,7 @@ const HeroStatCard = memo(({
 
             <View style={styles.progressContainer}>
                 <View style={[styles.progressBar, {
-                    width: `${total > 0 ? (value / total) * 100 : 0}%`,
+                    width: statusText ? (isActive ? '100%' : '0%') : `${total > 0 ? (value / total) * 100 : 0}%`,
                     backgroundColor: isActive ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.1)'
                 }]} />
             </View>
@@ -334,69 +338,28 @@ const LockTile = ({ lock, callService, entities }: { lock: any, callService: any
     )
 };
 
-const DoorOpenerTile = ({ entity, callService }: { entity: any, callService: any }) => {
-    const friendlyName = "Haustüre"; // Hardcoded specific name for this specific button
+const SecuritySensorTile = ({ entity }: { entity: any }) => {
+    let friendlyName = entity.attributes.friendly_name || "Sensor";
+    // Clean up names
+    friendlyName = friendlyName.replace(' Kontakt', '').replace(' Sensor', '');
 
-    const pressOpener = () => {
-        Alert.alert('Tür öffnen', `Möchtest du die ${friendlyName} öffnen?`, [
-            { text: 'Abbrechen', style: 'cancel' },
-            {
-                text: 'ÖFFNEN',
-                style: 'destructive',
-                onPress: async () => {
-                    callService('button', 'press', entity.entity_id);
-
-                    // Local notification confirmation
-                    try {
-                        const settingsJson = await AsyncStorage.getItem('notification_settings');
-                        const settings = settingsJson ? JSON.parse(settingsJson) : { enabled: true, security: true };
-
-                        if (settings.enabled && settings.security) {
-                            await Notifications.scheduleNotificationAsync({
-                                content: {
-                                    title: "Security Center",
-                                    body: "Die Haustüre wurde geöffnet",
-                                    sound: 'default',
-                                },
-                                trigger: null, // immediate
-                            });
-                        }
-                    } catch (e) {
-                        console.error("Failed to send notification", e);
-                    }
-                }
-            }
-        ]);
-    };
-
-    // Find the corresponding sensor for status (e.g. binary_sensor.hausture_contact)
-    const { entities } = useHomeAssistant();
-    const doorSensor = entities.find(e => e.entity_id === 'binary_sensor.hausture_contact');
-    const isDoorOpen = doorSensor?.state === 'on';
+    const isDoorOpen = entity.state === 'on';
 
     return (
         <View style={styles.lockCard}>
             <View style={styles.lockMainAction}>
-                <View style={[styles.lockIcon, { backgroundColor: isDoorOpen ? '#EF4444' : '#3B82F6' }]}>
+                <View style={[styles.lockIcon, { backgroundColor: isDoorOpen ? '#EF4444' : '#10B981' }]}>
                     {isDoorOpen ? <DoorOpen size={24} color="#fff" /> : <DoorClosed size={24} color="#fff" />}
                 </View>
-                <View style={styles.lockInfo}>
-                    <Text style={styles.lockTitle}>
+                <View style={[styles.lockInfo, { justifyContent: 'center', flex: 1 }]}>
+                    <Text style={[styles.lockTitle, isDoorOpen && { color: '#EF4444' }]} numberOfLines={1}>
                         {friendlyName}
                     </Text>
                     <Text style={[styles.lockState, { color: isDoorOpen ? '#EF4444' : '#64748B' }]}>
-                        {isDoorOpen ? 'OFFEN' : ''}
+                        {isDoorOpen ? 'OFFEN' : 'GESCHLOSSEN'}
                     </Text>
                 </View>
             </View>
-
-            {/* OPEN Button */}
-            <Pressable onPress={pressOpener} style={[styles.openDoorBtn, isDoorOpen && { backgroundColor: '#FEE2E2' }]}>
-                {isDoorOpen ? <DoorClosed size={20} color="#EF4444" /> : <DoorOpen size={20} color="#3B82F6" />}
-                <Text style={[styles.openDoorText, isDoorOpen && { color: '#EF4444' }]}>
-                    {isDoorOpen ? 'Schliessen' : 'Öffnen'}
-                </Text>
-            </Pressable>
         </View>
     );
 };
@@ -451,6 +414,7 @@ export default function Dashboard() {
     const [calendarModal, setCalendarModal] = useState<{ visible: boolean, entityId: string, title: string, color: string }>({ visible: false, entityId: '', title: '', color: '' });
     const [showShoppingList, setShowShoppingList] = useState(false);
     const [showWeatherForecast, setShowWeatherForecast] = useState(false);
+    const [activeFeedback, setActiveFeedback] = useState<'sleep' | 'morning' | 'movie' | 'covers_open' | 'covers_close' | 'vacuum' | 'shop_debug' | null>(null);
 
     const handleCalendarPress = (calendar: any) => {
         // Logic: if birthday (geburtstage_2), else use the clicked calendar's ID
@@ -486,7 +450,8 @@ export default function Dashboard() {
         getEntityPictureUrl,
         shoppingListVisible,
         setShoppingListVisible,
-        startShoppingGeofencing
+        startShoppingGeofencing,
+        debugShoppingLogic
     } = useHomeAssistant();
 
     // Start Shopping Geofencing on Mount
@@ -495,7 +460,7 @@ export default function Dashboard() {
     }, []);
 
     // Modal states
-    const [activeModal, setActiveModal] = useState<'lights' | 'covers' | 'robi' | null>(null);
+    const [activeModal, setActiveModal] = useState<'lights' | 'covers' | 'robi' | 'security' | 'cameras' | null>(null);
 
     // Filter entities
     const lights = useMemo(() => {
@@ -561,17 +526,11 @@ export default function Dashboard() {
         }).filter(Boolean) as any[];
     }, [entities]);
     const vacuums = useMemo(() => entities.filter(e => e.entity_id.startsWith('vacuum.')), [entities]);
-    const mediaPlayers = useMemo(() => entities.filter(e => e.entity_id.startsWith('media_player.')), [entities]);
-    const climate = useMemo(() => entities.filter(e => e.entity_id.startsWith('climate.')), [entities]);
-    const securityEntities = useMemo(() => {
-        const locks = entities.filter(e => e.entity_id.startsWith('lock.'));
-        const haustuerButton = entities.find(e => e.entity_id === 'button.hausture_tur_offnen');
-
-        // Combine them
-        const result = [...locks];
-        if (haustuerButton) result.push(haustuerButton);
-        return result;
+    const mediaPlayers = useMemo(() => {
+        return entities.filter(e => e.entity_id.startsWith('media_player.') && WHITELISTED_PLAYERS.includes(e.entity_id));
     }, [entities]);
+    const climate = useMemo(() => entities.filter(e => e.entity_id.startsWith('climate.')), [entities]);
+    // securityEntities is now defined later using the helper
     const calendars = useMemo(() => entities.filter(e => e.entity_id.startsWith('calendar.')).filter(c => c.state === 'on' || c.attributes.message), [entities]);
     const shoppingList = useMemo(() => entities.find(e => e.entity_id === 'todo.google_keep_einkaufsliste'), [entities]);
 
@@ -671,7 +630,7 @@ export default function Dashboard() {
     const bedTimeScript = useMemo(() => entities.find(e => e.entity_id === 'script.bed_time' || e.entity_id.includes('bed_time') || e.entity_id.includes('gute_nacht') || e.entity_id.includes('schlafen')), [entities]);
 
     const lightsOn = useMemo(() => lights.filter(l => l.state === 'on').length, [lights]);
-    const coversOpen = useMemo(() => covers.filter(c => c.state === 'open' || (c.attributes.current_position && c.attributes.current_position > 0)).length, [covers]);
+    const coversOpen = useMemo(() => covers.filter(c => (c.attributes.friendly_name !== 'Alle Storen') && (c.state === 'open' || (c.attributes.current_position && c.attributes.current_position > 0))).length, [covers]);
     const activeVacuums = useMemo(() => vacuums.filter(v => v.state === 'cleaning').length, [vacuums]);
     const playingMedia = useMemo(() => mediaPlayers.filter(m => m.state === 'playing').length, [mediaPlayers]);
     const shoppingListCount = useMemo(() => {
@@ -679,20 +638,55 @@ export default function Dashboard() {
         return parseInt(shoppingList.state);
     }, [shoppingList]);
 
+    const securityEntities = useMemo(() => {
+        return filterSecurityEntities(entities);
+    }, [entities]);
+
+    const doorsOpen = useMemo(() => {
+        return securityEntities.filter(e => e.state === 'on').length;
+    }, [securityEntities]);
+
+    const camerasCount = useMemo(() => {
+        return entities.filter(e => {
+            if (!e.entity_id.startsWith('camera.') || e.attributes.hidden) return false;
+            // Exclude Map and Röbi cameras
+            const id = e.entity_id.toLowerCase();
+            const name = (e.attributes.friendly_name || '').toLowerCase();
+            return !id.includes('map') && !id.includes('robi') && !name.includes('map') && !name.includes('röbi');
+        }).length;
+    }, [entities]);
+
+    // Find Alarm Entity
+    const alarmEntity = useMemo(() => {
+        return entities.find(e => e.entity_id.startsWith('alarm_control_panel.')) || null;
+    }, [entities]);
+
+    const alarmStatusText = useMemo(() => {
+        if (!alarmEntity) return 'N/A';
+        switch (alarmEntity.state) {
+            case 'armed_home': return 'Scharf (Home)';
+            case 'armed_away': return 'Scharf (Away)';
+            case 'disarmed': return 'Unscharf';
+            case 'triggered': return 'ALARM!';
+            case 'arming': return 'Aktivierung...';
+            case 'pending': return 'Verzögerung...';
+            default: return 'Unbekannt';
+        }
+    }, [alarmEntity]);
+
     const weatherStationTemp = useMemo(() => entities.find(e => e.entity_id === 'sensor.wetterstation_actual_temperature'), [entities]);
     const weatherZell = useMemo(() => entities.find(e => e.entity_id === 'weather.zell_lu' || e.attributes.friendly_name?.toLowerCase().includes('zell')), [entities]);
     const meteoAlarm = useMemo(() => entities.find(e => e.entity_id === 'binary_sensor.meteoalarm' || e.entity_id.includes('meteoalarm')), [entities]);
 
     // Use weather.familie_gross for forecast data (user requested)
     const weatherFamilieGross = useMemo(() => entities.find(e => e.entity_id === 'weather.familie_gross'), [entities]);
+    const weatherMeteo = useMemo(() => entities.find(e => e.entity_id === 'weather.meteo'), [entities]);
 
     // Composite Weather Entity: Use Zell for current state, Familie Gross for Forecast
     const weatherComposite = useMemo(() => {
-        // Prefer Familie Gross for forecast, fallback to Zell
-        const forecastEntity = weatherFamilieGross || weatherZell;
-        if (!forecastEntity) return weatherZell;
-        return forecastEntity;
-    }, [weatherZell, weatherFamilieGross]);
+        // Prefer Meteo, then Familie Gross, fallback to Zell
+        return weatherMeteo || weatherFamilieGross || weatherZell;
+    }, [weatherZell, weatherFamilieGross, weatherMeteo]);
 
     // Format Weather Status (German)
     const getWeatherText = (state: string) => {
@@ -731,15 +725,18 @@ export default function Dashboard() {
         }
     };
 
-    const WeatherIcon = weatherZell ? getWeatherIcon(weatherZell.state) : Sun;
+    const WeatherIcon = weatherComposite ? getWeatherIcon(weatherComposite.state) : Sun;
 
-    const isWeatherWarning = weatherZell?.state?.toLowerCase() === 'exceptional' || meteoAlarm?.state === 'on';
+    const isWeatherWarning = weatherComposite?.state?.toLowerCase() === 'exceptional' || meteoAlarm?.state === 'on';
 
     // Callbacks
     const openLightsModal = useCallback(() => setActiveModal('lights'), []);
-    const openCoversModal = useCallback(() => setActiveModal('covers'), []);
-    const openRobiModal = useCallback(() => setActiveModal('robi'), []);
-    const closeModal = useCallback(() => setActiveModal(null), []);
+    const openCoversModal = () => setActiveModal('covers');
+    const openRobiModal = () => setActiveModal('robi');
+
+    const openSecurityModal = () => setActiveModal('security');
+    const openCamerasModal = () => setActiveModal('cameras');
+    const closeModal = () => setActiveModal(null);
 
     const handleAllLightsOff = useCallback(() => {
         lights.filter(l => l.state === 'on').forEach(l => callService('light', 'turn_off', l.entity_id));
@@ -749,10 +746,25 @@ export default function Dashboard() {
         lights.forEach(l => callService('light', 'turn_on', l.entity_id));
     }, [lights, callService]);
 
-    const handleAllCoversClose = useCallback(() => covers.forEach(c => closeCover(c.entity_id)), [covers, closeCover]);
-    const handleAllCoversOpen = useCallback(() => covers.forEach(c => openCover(c.entity_id)), [covers, openCover]);
+    const handleAllCoversClose = useCallback(() => {
+        covers.forEach(c => closeCover(c.entity_id));
+        setActiveFeedback('covers_close');
+    }, [covers, closeCover]);
+
+    const handleAllCoversOpen = useCallback(() => {
+        covers.forEach(c => openCover(c.entity_id));
+        setActiveFeedback('covers_open');
+    }, [covers, openCover]);
+
     const handleAllVacuumsHome = useCallback(() => vacuums.forEach(v => returnVacuum(v.entity_id)), [vacuums, returnVacuum]);
-    const handleRobiStart = useCallback(() => robi && startVacuum(robi.entity_id), [robi, startVacuum]);
+
+    const handleRobiStart = useCallback(() => {
+        if (robi) {
+            startVacuum(robi.entity_id);
+            setActiveFeedback('vacuum');
+        }
+    }, [robi, startVacuum]);
+
     const handleRobiHome = useCallback(() => robi && returnVacuum(robi.entity_id), [robi, returnVacuum]);
 
     const handleRunScript = useCallback((entityId: string) => {
@@ -762,17 +774,17 @@ export default function Dashboard() {
     const handleSleep = useCallback(() => {
         // Direct call to script.bed_time as requested
         callService('script', 'turn_on', 'script.bed_time');
-        Alert.alert('Gute Nacht', 'Schlafmodus (script.bed_time) aktiviert.');
+        setActiveFeedback('sleep');
     }, [callService]);
 
     const handleMorning = useCallback(() => {
         callService('script', 'turn_on', 'script.morgenroutine');
-        Alert.alert('Guten Morgen', 'Morgenroutine (script.morgenroutine) gestartet.');
+        setActiveFeedback('morning');
     }, [callService]);
 
     const handleMovieNight = useCallback(() => {
         callService('script', 'turn_on', 'script.movie_night');
-        Alert.alert('Film ab!', 'Kino-Modus (script.movie_night) aktiviert.');
+        setActiveFeedback('movie');
     }, [callService]);
 
     const getGreeting = () => {
@@ -846,8 +858,8 @@ export default function Dashboard() {
                             >
                                 <WeatherIcon size={14} color={isWeatherWarning ? '#EF4444' : '#10B981'} />
                                 <Text style={[styles.tempText, isWeatherWarning ? { color: '#EF4444' } : { color: '#10B981' }]}>
-                                    {weatherStationTemp.state}°
-                                    {weatherZell && <Text style={{ fontWeight: '400', opacity: 0.8 }}> {getWeatherText(weatherZell.state)}</Text>}
+                                    {weatherComposite?.attributes?.temperature || weatherStationTemp?.state}°
+                                    {weatherComposite && <Text style={{ fontWeight: '400', opacity: 0.8 }}> {getWeatherText(weatherComposite.state)}</Text>}
                                 </Text>
                             </Pressable>
                         )}
@@ -901,6 +913,7 @@ export default function Dashboard() {
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Schnellaktionen</Text>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickActionsRow}>
+                        <QuickAction icon={ShoppingCart} iconColor="#EF4444" label="Debug Shop" onPress={() => { debugShoppingLogic(); setActiveFeedback('shop_debug'); }} gradient={['rgba(239, 68, 68, 0.15)', 'rgba(239, 68, 68, 0.05)']} />
 
                         <QuickAction icon={Sun} iconColor="#F59E0B" label="Morgen" onPress={handleMorning} gradient={['rgba(245, 158, 11, 0.15)', 'rgba(245, 158, 11, 0.05)']} />
                         <QuickAction icon={Clapperboard} iconColor="#EC4899" label="Kino" onPress={handleMovieNight} gradient={['rgba(236, 72, 153, 0.15)', 'rgba(236, 72, 153, 0.05)']} />
@@ -911,28 +924,61 @@ export default function Dashboard() {
                     </ScrollView>
                 </View>
 
+                {/* Main Lights Shortcuts */}
+                <View style={styles.section}>
+                    <View style={{ flexDirection: 'row', gap: 12 }}>
+                        {['light.kuche', 'light.essbereich', 'light.wohnzimmer'].map(id => {
+                            const light = entities.find(e => e.entity_id === id);
+                            // Fallback if entity not found, just don't render or render placeholder
+                            if (!light) return null;
+
+                            // Custom labels
+                            let label = 'Unbekannt';
+                            if (id === 'light.kuche') label = 'Küche';
+                            if (id === 'light.essbereich') label = 'Essbereich';
+                            if (id === 'light.wohnzimmer') label = 'Wohnzimmer';
+
+                            const isOn = light.state === 'on';
+
+                            return (
+                                <View key={id} style={{ flex: 1 }}>
+                                    <Pressable
+                                        onPress={() => toggleLight(id)}
+                                        style={[
+                                            styles.tile,
+                                            {
+                                                minHeight: 60,
+                                                padding: 12,
+                                                justifyContent: 'center',
+                                                marginBottom: 0
+                                            },
+                                            isOn && { backgroundColor: 'rgba(251, 191, 36, 0.15)', borderColor: 'rgba(251, 191, 36, 0.5)' }
+                                        ]}
+                                    >
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                                            <View style={[
+                                                styles.tileIcon,
+                                                { width: 32, height: 32 },
+                                                isOn && { backgroundColor: '#FBBF24' }
+                                            ]}>
+                                                <Lightbulb size={18} color={isOn ? "#FFF" : "#64748B"} />
+                                            </View>
+                                            <View style={{ flex: 1 }}>
+                                                <Text style={[styles.tileName, { marginTop: 0, fontSize: 13 }, isOn && { color: '#FFF' }]} numberOfLines={1}>{label}</Text>
+                                            </View>
+                                        </View>
+                                    </Pressable>
+                                </View>
+                            );
+                        })}
+                    </View>
+                </View>
+
 
 
 
                 {/* --- EXTRA INFOS (Security: Locks & Haustüre) --- */}
-                {(securityEntities.length > 0 || calendars.length > 0) && (
-                    <View style={styles.infoRow}>
-                        {/* Security Section */}
-                        {securityEntities.length > 0 && (
-                            <View style={{ flexDirection: 'row', gap: 8 }}>
-                                {securityEntities.map(item => (
-                                    <View key={item.entity_id} style={{ flex: 1 }}>
-                                        {item.entity_id.startsWith('lock.') ? (
-                                            <LockTile lock={item} callService={callService} entities={entities} />
-                                        ) : (
-                                            <DoorOpenerTile entity={item} callService={callService} />
-                                        )}
-                                    </View>
-                                ))}
-                            </View>
-                        )}
-                    </View>
-                )}
+
 
                 {calendars.length > 0 && (
                     <View style={styles.section}>
@@ -966,7 +1012,7 @@ export default function Dashboard() {
                             icon={Blinds}
                             iconColor="#60A5FA"
                             value={coversOpen}
-                            total={covers.length}
+                            total={covers.filter(c => c.attributes.friendly_name !== 'Alle Storen').length}
                             label="Rollläden offen"
                             gradient={['#3B82F6', '#1D4ED8']}
                             isActive={coversOpen > 0}
@@ -1026,6 +1072,29 @@ export default function Dashboard() {
                             isActive={playingMedia > 0}
                             cardWidth={cardWidth}
                             onPress={() => router.push('/media')}
+                        />
+                        <HeroStatCard
+                            icon={Shield}
+                            iconColor="#EF4444"
+                            value={0}
+                            total={0}
+                            label="Alarmanlage"
+                            statusText={alarmStatusText}
+                            gradient={['#DC2626', '#991B1B']}
+                            isActive={alarmEntity?.state !== 'disarmed'}
+                            cardWidth={cardWidth}
+                            onPress={openSecurityModal}
+                        />
+                        <HeroStatCard
+                            icon={Video}
+                            iconColor="#3B82F6"
+                            value={camerasCount}
+                            total={camerasCount}
+                            label="Kameras"
+                            gradient={['#2563EB', '#1D4ED8']}
+                            isActive={camerasCount > 0}
+                            cardWidth={cardWidth}
+                            onPress={openCamerasModal}
                         />
                     </View>
                 </View>
@@ -1120,11 +1189,27 @@ export default function Dashboard() {
                 }}
             />
 
+            <SecurityModal
+                visible={activeModal === 'security'}
+                onClose={closeModal}
+            />
+
+            <CamerasModal
+                visible={activeModal === 'cameras'}
+                onClose={closeModal}
+            />
+
             <WeatherForecastModal
                 visible={showWeatherForecast}
                 onClose={() => setShowWeatherForecast(false)}
                 weatherEntity={weatherComposite}
                 meteoAlarm={meteoAlarm}
+            />
+
+            <ActionFeedbackModal
+                visible={!!activeFeedback}
+                onClose={() => setActiveFeedback(null)} // This was missing in the state definition below, need to add it
+                type={activeFeedback || 'sleep'}
             />
         </SafeAreaView >
     );

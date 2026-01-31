@@ -71,6 +71,7 @@ export class HomeAssistantService {
                  console.log('Connecting to:', wsUrl);
 
                 // Set connection timeout (30 seconds)
+                this.token = token;
                 this.connectionTimeout = setTimeout(() => {
                     console.log('⚠️ HA connection timeout (auto-retry)');
                     if (this.socket) {
@@ -191,7 +192,7 @@ export class HomeAssistantService {
 
     private send(data: any, callback?: (data: any) => void) {
         if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
-            console.warn('Cannot send - WebSocket not open');
+            // console.debug('Cannot send - WebSocket not open'); // Silencing noise
             return;
         }
 
@@ -232,6 +233,7 @@ export class HomeAssistantService {
         });
     }
 
+    public token: string | null = null;
     private onEventCallback: ((event: any) => void) | null = null;
 
     setEventCallback(callback: (event: any) => void) {
