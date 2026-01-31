@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, Modal, StyleSheet, Pressable, ScrollView, ActivityIndicator } from 'react-native';
-import { X, Sun, CloudRain, Moon, Wind, Cloud } from 'lucide-react-native';
+import { X, Sun, CloudRain, Moon, Wind, Cloud, AlertTriangle } from 'lucide-react-native';
 import { useHomeAssistant } from '../contexts/HomeAssistantContext';
 
 interface WeatherForecastModalProps {
     visible: boolean;
     onClose: () => void;
     weatherEntity: any;
+    meteoAlarm?: any;
 }
 
-export default function WeatherForecastModal({ visible, onClose, weatherEntity }: WeatherForecastModalProps) {
+export default function WeatherForecastModal({ visible, onClose, weatherEntity, meteoAlarm }: WeatherForecastModalProps) {
     const { fetchWeatherForecast } = useHomeAssistant();
     const [forecast, setForecast] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
@@ -20,7 +21,7 @@ export default function WeatherForecastModal({ visible, onClose, weatherEntity }
             setLoading(true);
             fetchWeatherForecast(weatherEntity.entity_id, 'daily')
                 .then((data) => {
-                    console.log('Fetched forecast:', data);
+                    // console.log('Fetched forecast:', data);
                     setForecast(data || []);
                 })
                 .catch((err) => {
@@ -80,6 +81,40 @@ export default function WeatherForecastModal({ visible, onClose, weatherEntity }
         return mapping[state] || state;
     };
 
+    // Translate weather warning text to German
+    const translateWeather = (text: string): string => {
+        if (!text) return '';
+        let t = text;
+        // Colors & Levels
+        t = t.replace(/Yellow/gi, 'Gelbe');
+        t = t.replace(/Orange/gi, 'Orange');
+        t = t.replace(/Red/gi, 'Rote');
+        t = t.replace(/Warning/gi, 'Warnung');
+        t = t.replace(/Watch/gi, 'Vorwarnung');
+        t = t.replace(/Alert/gi, 'Alarm');
+        // Types
+        t = t.replace(/Wind/gi, 'Wind');
+        t = t.replace(/Rain/gi, 'Regen');
+        t = t.replace(/Snow/gi, 'Schnee');
+        t = t.replace(/Ice/gi, 'Eis');
+        t = t.replace(/Thunderstorm/gi, 'Gewitter');
+        t = t.replace(/Fog/gi, 'Nebel');
+        t = t.replace(/Temperature/gi, 'Temperatur');
+        t = t.replace(/Heat/gi, 'Hitze');
+        t = t.replace(/Cold/gi, 'Kälte');
+        t = t.replace(/Flood/gi, 'Flut');
+        t = t.replace(/Forest Fire/gi, 'Waldbrand');
+        t = t.replace(/Avalanche/gi, 'Lawinen');
+        // Time phrases
+        t = t.replace(/is effective on/gi, 'gültig ab');
+        t = t.replace(/effective from/gi, 'gültig von');
+        t = t.replace(/from/gi, 'von');
+        t = t.replace(/to/gi, 'bis');
+        t = t.replace(/until/gi, 'bis');
+        t = t.replace(/valid/gi, 'gültig');
+        return t;
+    };
+
 
     return (
         <Modal visible={visible} animationType="slide" transparent>
@@ -93,9 +128,26 @@ export default function WeatherForecastModal({ visible, onClose, weatherEntity }
                         <Pressable onPress={onClose} style={styles.closeBtn}>
                             <X size={24} color="#fff" />
                         </Pressable>
+
                     </View>
 
                     <ScrollView style={styles.modalBody}>
+                        {(weatherEntity.state?.toLowerCase() === 'exceptional' || meteoAlarm?.state === 'on') && (
+                            <View style={styles.warningCard}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                                    <AlertTriangle size={32} color="#EF4444" />
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={styles.warningTitle}>
+                                            {translateWeather(meteoAlarm?.attributes?.headline || "WETTERWARNUNG")}
+                                        </Text>
+                                        <Text style={styles.warningText}>
+                                            {translateWeather(meteoAlarm?.attributes?.description || weatherEntity.attributes.description || weatherEntity.attributes.message || "Es liegt eine amtliche Wetterwarnung vor.")}
+                                        </Text>
+                                    </View>
+                                </View>
+                            </View>
+                        )}
+
                         <View style={styles.currentWeatherCard}>
                             {(() => {
                                 const CurrentIcon = getIcon(weatherEntity.state);
@@ -165,7 +217,7 @@ export default function WeatherForecastModal({ visible, onClose, weatherEntity }
                     </ScrollView>
                 </View>
             </View>
-        </Modal>
+        </Modal >
     );
 }
 
@@ -227,5 +279,16 @@ const styles = StyleSheet.create({
 
     tempCol: { alignItems: 'flex-end', width: 60 },
     highTemp: { fontSize: 16, fontWeight: '600', color: '#fff' },
-    lowTemp: { fontSize: 14, color: '#64748B' }
+    lowTemp: { fontSize: 14, color: '#64748B' },
+
+    warningCard: {
+        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+        borderWidth: 1,
+        borderColor: '#EF4444',
+        borderRadius: 16,
+        padding: 16,
+        marginBottom: 24
+    },
+    warningTitle: { color: '#EF4444', fontWeight: 'bold', fontSize: 14, marginBottom: 4, letterSpacing: 1 },
+    warningText: { color: '#FECACA', fontSize: 13, lineHeight: 18 }
 });

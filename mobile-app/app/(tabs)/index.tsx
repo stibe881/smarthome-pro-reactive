@@ -1,3 +1,4 @@
+import { useRouter } from 'expo-router';
 import React, { useMemo, useState, useCallback, memo, useEffect } from 'react';
 import { View, Text, ScrollView, Pressable, useWindowDimensions, Modal, StyleSheet, Image, ActivityIndicator, Alert, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -11,7 +12,8 @@ import {
     BedDouble,
     Thermometer, Sun, CloudRain, Lock, Unlock, Loader2, X, Fan,
     Lightbulb, Blinds, Music, Battery, Shirt, Wind, UtensilsCrossed,
-    Calendar, PlayCircle, Home, Map, PartyPopper, DoorOpen, DoorClosed, Clock, MapPin, ShoppingCart
+    Calendar, PlayCircle, Home, Map, PartyPopper, DoorOpen, DoorClosed, Clock, MapPin, ShoppingCart, Clapperboard,
+    AlertTriangle, Droplets
 } from 'lucide-react-native';
 // LinearGradient removed to fix compatibility issue
 
@@ -22,6 +24,7 @@ import RobiVacuumModal from '../../components/RobiVacuumModal';
 import CalendarModal from '../../components/CalendarModal';
 import ShoppingListModal from '../../components/ShoppingListModal';
 import WeatherForecastModal from '../../components/WeatherForecastModal';
+import HeaderClock from '../../components/HeaderClock';
 
 interface HeroStatCardProps {
     icon: LucideIcon;
@@ -443,6 +446,7 @@ const EventTile = ({ calendar, onPress }: { calendar: any, onPress?: () => void 
 // =====================================================
 
 export default function Dashboard() {
+    const router = useRouter();
     // --- Calendar Modal Logic ---
     const [calendarModal, setCalendarModal] = useState<{ visible: boolean, entityId: string, title: string, color: string }>({ visible: false, entityId: '', title: '', color: '' });
     const [showShoppingList, setShowShoppingList] = useState(false);
@@ -463,7 +467,8 @@ export default function Dashboard() {
 
     const { width } = useWindowDimensions();
     const isTablet = width >= 768;
-    const cardWidth = isTablet ? (width - 72) / 4 : (width - 48) / 2;
+    // Fix: Tablet calculation needs to account for 3 gaps of 12px (36) + 48px padding = 84px total deduction
+    const cardWidth = isTablet ? (width - 84) / 4 : (width - 48) / 2;
     const tileWidth = isTablet ? (width - 64 - 24) / 3 : (width - 32 - 12) / 2;
 
     const {
@@ -676,6 +681,7 @@ export default function Dashboard() {
 
     const weatherStationTemp = useMemo(() => entities.find(e => e.entity_id === 'sensor.wetterstation_actual_temperature'), [entities]);
     const weatherZell = useMemo(() => entities.find(e => e.entity_id === 'weather.zell_lu' || e.attributes.friendly_name?.toLowerCase().includes('zell')), [entities]);
+    const meteoAlarm = useMemo(() => entities.find(e => e.entity_id === 'binary_sensor.meteoalarm' || e.entity_id.includes('meteoalarm')), [entities]);
 
     // Use weather.familie_gross for forecast data (user requested)
     const weatherFamilieGross = useMemo(() => entities.find(e => e.entity_id === 'weather.familie_gross'), [entities]);
@@ -727,6 +733,8 @@ export default function Dashboard() {
 
     const WeatherIcon = weatherZell ? getWeatherIcon(weatherZell.state) : Sun;
 
+    const isWeatherWarning = weatherZell?.state?.toLowerCase() === 'exceptional' || meteoAlarm?.state === 'on';
+
     // Callbacks
     const openLightsModal = useCallback(() => setActiveModal('lights'), []);
     const openCoversModal = useCallback(() => setActiveModal('covers'), []);
@@ -760,6 +768,11 @@ export default function Dashboard() {
     const handleMorning = useCallback(() => {
         callService('script', 'turn_on', 'script.morgenroutine');
         Alert.alert('Guten Morgen', 'Morgenroutine (script.morgenroutine) gestartet.');
+    }, [callService]);
+
+    const handleMovieNight = useCallback(() => {
+        callService('script', 'turn_on', 'script.movie_night');
+        Alert.alert('Film ab!', 'Kino-Modus (script.movie_night) aktiviert.');
     }, [callService]);
 
     const getGreeting = () => {
@@ -814,22 +827,43 @@ export default function Dashboard() {
                             })}
                         </Text>
                     </View>
+                    {isTablet && (
+                        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+                            <HeaderClock />
+                        </View>
+                    )}
+
                     <View style={styles.headerRight}>
                         {weatherStationTemp && (
-                            <Pressable onPress={() => setShowWeatherForecast(true)} style={styles.tempBadge}>
-                                <WeatherIcon size={14} color="#F59E0B" />
-                                <Text style={styles.tempText}>
+                            <Pressable
+                                onPress={() => setShowWeatherForecast(true)}
+                                style={[
+                                    styles.tempBadge,
+                                    isWeatherWarning
+                                        ? { backgroundColor: 'rgba(239, 68, 68, 0.2)', borderWidth: 1, borderColor: '#EF4444' }
+                                        : { backgroundColor: 'rgba(16, 185, 129, 0.15)', borderWidth: 0 }
+                                ]}
+                            >
+                                <WeatherIcon size={14} color={isWeatherWarning ? '#EF4444' : '#10B981'} />
+                                <Text style={[styles.tempText, isWeatherWarning ? { color: '#EF4444' } : { color: '#10B981' }]}>
                                     {weatherStationTemp.state}°
                                     {weatherZell && <Text style={{ fontWeight: '400', opacity: 0.8 }}> {getWeatherText(weatherZell.state)}</Text>}
                                 </Text>
                             </Pressable>
                         )}
-                        <Pressable onPress={() => setShowShoppingList(true)} style={[styles.tempBadge, { backgroundColor: 'rgba(59, 130, 246, 0.15)' }]}>
-                            <ShoppingCart size={14} color="#3B82F6" />
-                            {shoppingList && shoppingList.state !== '0' && shoppingList.state !== 'unknown' && (
-                                <Text style={[styles.tempText, { color: '#3B82F6' }]}>{shoppingList.state}</Text>
-                            )}
-                        </Pressable>
+                        {(() => {
+                            const hasItems = shoppingList && shoppingList.state !== '0' && shoppingList.state !== 'unknown';
+                            const badgeColor = hasItems ? '#F59E0B' : '#3B82F6';
+                            const badgeBg = hasItems ? 'rgba(245, 158, 11, 0.15)' : 'rgba(59, 130, 246, 0.15)';
+                            return (
+                                <Pressable onPress={() => setShowShoppingList(true)} style={[styles.tempBadge, { backgroundColor: badgeBg, borderColor: hasItems ? badgeColor : 'transparent', borderWidth: hasItems ? 1 : 0 }]}>
+                                    <ShoppingCart size={14} color={badgeColor} />
+                                    {hasItems && (
+                                        <Text style={[styles.tempText, { color: badgeColor }]}>{shoppingList.state}</Text>
+                                    )}
+                                </Pressable>
+                            );
+                        })()}
                         <View style={[styles.statusDot, { backgroundColor: isConnected ? '#22C55E' : '#EF4444' }]} />
                     </View>
                 </View>
@@ -869,6 +903,7 @@ export default function Dashboard() {
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickActionsRow}>
 
                         <QuickAction icon={Sun} iconColor="#F59E0B" label="Morgen" onPress={handleMorning} gradient={['rgba(245, 158, 11, 0.15)', 'rgba(245, 158, 11, 0.05)']} />
+                        <QuickAction icon={Clapperboard} iconColor="#EC4899" label="Kino" onPress={handleMovieNight} gradient={['rgba(236, 72, 153, 0.15)', 'rgba(236, 72, 153, 0.05)']} />
                         <QuickAction icon={Blinds} iconColor="#60A5FA" label="Rollläden auf" onPress={handleAllCoversOpen} gradient={['rgba(96, 165, 250,0.15)', 'rgba(96, 165, 250,0.05)']} />
                         <QuickAction icon={Blinds} iconColor="#3B82F6" label="Rollläden zu" onPress={handleAllCoversClose} gradient={['rgba(59,130,246,0.15)', 'rgba(59,130,246,0.05)']} />
                         <QuickAction icon={Bot} iconColor="#22C55E" label="Röbi Start" onPress={handleRobiStart} gradient={['rgba(34,197,94,0.15)', 'rgba(34,197,94,0.05)']} />
@@ -990,6 +1025,7 @@ export default function Dashboard() {
                             gradient={['#8B5CF6', '#6D28D9']}
                             isActive={playingMedia > 0}
                             cardWidth={cardWidth}
+                            onPress={() => router.push('/media')}
                         />
                     </View>
                 </View>
@@ -1088,6 +1124,7 @@ export default function Dashboard() {
                 visible={showWeatherForecast}
                 onClose={() => setShowWeatherForecast(false)}
                 weatherEntity={weatherComposite}
+                meteoAlarm={meteoAlarm}
             />
         </SafeAreaView >
     );

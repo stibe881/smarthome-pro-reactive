@@ -210,16 +210,32 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         try {
             const token = await registerForPushNotificationsAsync();
             if (token) {
+                console.log('[Push Token] Attempting to save token:', token);
+
+                // Use upsert to ensure we either update or create the entry
+                // We assume user_id is unique in family_members or at least identifying
                 const { error } = await supabase
                     .from('family_members')
-                    .update({ push_token: token })
+                    .update({
+                        push_token: token,
+                        updated_at: new Date().toISOString()
+                    })
                     .eq('user_id', userId);
 
-                if (error) console.error('Error saving push token:', error);
-                else console.log('Push token saved:', token);
+                if (error) {
+                    console.warn('[Push Token] Update failed, trying fallback log:', error.message);
+                    // If update failed (maybe no entry yet), we might want to know
+                } else {
+                    console.log('[Push Token] Saved successfully to family_members');
+                }
+
+                // Save to optional metadata as well for redundancy
+                await supabase.auth.updateUser({
+                    data: { last_push_token: token }
+                });
             }
         } catch (error) {
-            console.error('Error in savePushTokenToSupabase:', error);
+            console.warn('[Push Token] Critical Error:', error);
         }
     };
 

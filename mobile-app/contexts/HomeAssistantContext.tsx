@@ -1,7 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
+import { Alert, AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { HomeAssistantService } from '../services/homeAssistant';
 import * as Notifications from 'expo-notifications';
+import * as Device from 'expo-device';
+import Constants from 'expo-constants';
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import { supabase } from '../lib/supabase';
@@ -225,6 +228,14 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
     });
     const [isGeofencingActive, setIsGeofencingActive] = useState(false);
     const [shoppingListVisible, setShoppingListVisible] = useState(false);
+    const disconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    useEffect(() => {
+        console.log("🔵 HomeAssistantProvider MOUNTED");
+        return () => {
+            console.log("🔴 HomeAssistantProvider UNMOUNTED - This causes disconnect!");
+        };
+    }, []);
 
     // Notification Response Listener
     useEffect(() => {
@@ -349,6 +360,28 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
     useEffect(() => {
         serviceRef.current = new HomeAssistantService(handleStateChange);
 
+        // Register connection listener to update state in real-time
+        serviceRef.current.setConnectionCallback((connected) => {
+            // console.log(`🔌 Connection Status Update: ${connected ? 'Connected' : 'Disconnected'}`);
+
+            if (connected) {
+                if (disconnectTimer.current) {
+                    clearTimeout(disconnectTimer.current);
+                    disconnectTimer.current = null;
+                }
+                setIsConnected(true);
+            } else {
+                // Debounce disconnect (2s)
+                if (!disconnectTimer.current) {
+                    disconnectTimer.current = setTimeout(() => {
+                        setIsConnected(false);
+                        disconnectTimer.current = null;
+                        console.log('🔌 Connection confirmed LOST after delay');
+                    }, 2000);
+                }
+            }
+        });
+
         // Define notification handler
         Notifications.setNotificationHandler({
             handleNotification: async () => ({
@@ -416,24 +449,55 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
             } catch (e) { console.warn('Failed search notif settings', e); }
         })();
 
-        // Request permissions
+        // Request notification permissions (token saving is handled by AuthContext)
         (async () => {
-            const { status } = await Notifications.requestPermissionsAsync();
-            if (status !== 'granted') {
-                console.log('Notification permissions not granted');
+            if (Device.isDevice) {
+                const { status: existingStatus } = await Notifications.getPermissionsAsync();
+                if (existingStatus !== 'granted') {
+                    const { status } = await Notifications.requestPermissionsAsync();
+                    if (status !== 'granted') {
+                        console.log('Push notification permission not granted');
+                    }
+                }
             }
         })();
 
-        // Try to auto-connect with saved credentials
+        // CRITICAL: Listen for Supabase Auth Changes to trigger HA Connect
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+            // console.log(`[HA Context] Auth Event: ${event}`);
+
+            if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+                if (session?.user) {
+                    // console.log(`[HA Context] User is logged in (${session.user.email}). Attempting to fetch HA credentials...`);
+                    const creds = await getCredentials();
+                    if (creds) {
+                        // console.log(`[HA Context] Credentials found. Connecting to ${creds.url}...`);
+                        await connect();
+                    } else {
+                        // console.log('[HA Context] No HA credentials found in DB for this user.');
+                    }
+                }
+            } else if (event === 'SIGNED_OUT') {
+                // console.log('[HA Context] User signed out. Disconnecting HA.');
+                disconnect();
+            }
+        });
+
+        // Initial check in case listener missed it (race condition)
         (async () => {
-            const creds = await getCredentials();
-            if (creds) {
-                connect();
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.user) {
+                // console.log('[HA Context] Initial session check: User logged in. Checking credentials...');
+                const creds = await getCredentials();
+                if (creds) {
+                    connect();
+                }
             }
         })();
 
         return () => {
             serviceRef.current?.disconnect();
+            subscription.unsubscribe();
         };
     }, []);
 
@@ -567,6 +631,12 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
             });
             console.log("🛒 Shopping Geofencing (Background Task) started");
         } catch (e: any) {
+            // Suppress error in Expo Go client (expected due to missing background update permissions)
+            if (Constants.appOwnership === 'expo') {
+                console.log("Shopping Geofence skipped in Expo Go:", e.message);
+                return;
+            }
+
             console.error("Failed to start shopping geofence", e);
             if (e?.message && e.message.includes('NSLocation')) {
                 // Inform user about the need for a rebuild
@@ -646,33 +716,43 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
         try {
             // Get current user
             const { data: { user } } = await supabase.auth.getUser();
+            // console.log('[getCredentials] User:', user?.email || 'NOT LOGGED IN');
+
             if (!user) {
                 // Not logged in, try local storage
                 const url = await AsyncStorage.getItem('@smarthome_ha_url');
                 const token = await AsyncStorage.getItem('@smarthome_ha_token');
+                // console.log('[getCredentials] No user, checking local storage:', url ? 'URL found' : 'No URL');
                 if (url && token) return { url, token };
                 return null;
             }
 
             // Get user's household via family_members table
-            const { data: memberData } = await supabase
+            const { data: memberData, error: memberError } = await supabase
                 .from('family_members')
                 .select('household_id')
                 .eq('user_id', user.id)
                 .single();
 
+            // console.log('[getCredentials] family_members lookup:', memberData, memberError?.message);
+
             if (memberData?.household_id) {
                 // Get household HA credentials
-                const { data: householdData } = await supabase
+                const { data: householdData, error: householdError } = await supabase
                     .from('households')
                     .select('ha_url, ha_token')
                     .eq('id', memberData.household_id)
                     .single();
 
+                // console.log('[getCredentials] households lookup:', householdData?.ha_url ? 'URL found' : 'No URL', householdError?.message);
+
                 if (householdData?.ha_url && householdData?.ha_token) {
-                    console.log('✅ Loaded HA credentials from household');
+                    // console.log('✅ Loaded HA credentials from household via family_members');
                     return { url: householdData.ha_url, token: householdData.ha_token };
                 }
+            } else {
+                // No family_members entry - will fallback to AsyncStorage
+                // console.log('[getCredentials] No family_members entry, trying fallbacks...');
             }
 
             // Fallback: try to get from any household
@@ -684,7 +764,7 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
                 .single();
 
             if (householdData?.ha_url && householdData?.ha_token) {
-                console.log('✅ Loaded HA credentials from default household');
+                // console.log('✅ Loaded HA credentials from default household');
                 return { url: householdData.ha_url, token: householdData.ha_token };
             }
 
@@ -692,7 +772,7 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
             const url = await AsyncStorage.getItem('@smarthome_ha_url');
             const token = await AsyncStorage.getItem('@smarthome_ha_token');
             if (url && token) {
-                console.log('⚠️ Loaded HA credentials from local storage');
+                // console.log('⚠️ Loaded HA credentials from local storage');
                 return { url, token };
             }
 
@@ -739,6 +819,34 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
             setIsConnecting(false);
         }
     };
+
+    // Auto-Sync on Auth Change & App State Change
+    useEffect(() => {
+        // 1. Auth Change
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+            if (event === 'SIGNED_IN') {
+                console.log('🔄 User signed in. Connecting...');
+                connect();
+            }
+        });
+
+        // 2. App State Change (Reconnect on resume)
+        const subscriptionAppState = AppState.addEventListener('change', nextAppState => {
+            if (nextAppState === 'active') {
+                console.log('📱 App came to foreground. Checking connection...');
+                if (!serviceRef.current?.isConnected()) {
+                    console.log('🔌 Reconnecting to Home Assistant...');
+                    setIsConnecting(true); // Prevent "Not Connected" flash
+                    connect();
+                }
+            }
+        });
+
+        return () => {
+            subscription.unsubscribe();
+            subscriptionAppState.remove();
+        };
+    }, []);
 
 
     const disconnect = () => {
@@ -792,7 +900,7 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
     };
 
     const callService = (domain: string, service: string, entityId: string, data?: any) => {
-        serviceRef.current?.callService(domain, service, entityId, data);
+        return serviceRef.current?.callService(domain, service, entityId, data);
     };
 
     const setClimateTemperature = (entityId: string, temperature: number) => {

@@ -3,13 +3,55 @@ export class HomeAssistantService {
     private messageId = 1;
     private handlers: Map<number, (data: any) => void> = new Map();
     private onStateChange: (entities: any[]) => void;
+    private credentials: { url: string; token: string } | null = null;
+    private shouldReconnect = false;
+    private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    private onConnectionChange: ((isConnected: boolean) => void) | null = null;
     private connectionTimeout: ReturnType<typeof setTimeout> | null = null;
+    private pingInterval: ReturnType<typeof setInterval> | null = null;
 
     constructor(onStateChange: (entities: any[]) => void) {
         this.onStateChange = onStateChange;
     }
 
+    setConnectionCallback(callback: (isConnected: boolean) => void) {
+        this.onConnectionChange = callback;
+    }
+
+    // Ping logic to keep connection alive
+    private startPingInterval() {
+        if (this.pingInterval) clearInterval(this.pingInterval);
+        
+        // Ping every 10 seconds (Aggressive Keep-Alive)
+        this.pingInterval = setInterval(() => {
+            if (this.isConnected()) {
+                const id = this.messageId++;
+                // console.log(`Sending PING (id: ${id})`);
+                this.socket?.send(JSON.stringify({ id, type: 'ping' }));
+            }
+        }, 10000);
+    }
+
+    private stopPingInterval() {
+        if (this.pingInterval) {
+            clearInterval(this.pingInterval);
+            this.pingInterval = null;
+        }
+    }
+
     async connect(baseUrl: string, token: string): Promise<boolean> {
+        this.stopPingInterval();
+        
+        // ... (rest of connect)
+        // Clear any pending reconnect
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
+
+        this.credentials = { url: baseUrl, token };
+        this.shouldReconnect = true;
+
         return new Promise((resolve) => {
             try {
                 // Clean and validate URL
@@ -26,45 +68,54 @@ export class HomeAssistantService {
                 // Create WebSocket URL
                 const wsUrl = cleanUrl.replace(/^http/, 'ws').replace(/^https/, 'wss') + '/api/websocket';
 
-                console.log('Connecting to:', wsUrl);
+                 console.log('Connecting to:', wsUrl);
 
-                // Set connection timeout (10 seconds)
+                // Set connection timeout (30 seconds)
                 this.connectionTimeout = setTimeout(() => {
-                    console.error('HA connection timeout');
+                    console.log('⚠️ HA connection timeout (auto-retry)');
                     if (this.socket) {
                         this.socket.close();
                     }
                     resolve(false);
-                }, 10000);
+                }, 30000);
+
+                if (this.socket) {
+                    // Close existing socket cleanly before new one
+                    try { this.socket.close(); } catch(e) {}
+                }
 
                 this.socket = new WebSocket(wsUrl);
 
                 this.socket.onopen = () => {
-                    console.log("WebSocket opened, waiting for auth_required...");
+                   console.log("WebSocket opened, waiting for auth_required...");
                 };
 
                 this.socket.onmessage = (event) => {
                     // In React Native, event.data is string
                     const data = JSON.parse(event.data as string);
-                    console.log('HA Message:', data.type);
+                    // console.log('HA Message:', data.type);
 
                     if (data.type === 'auth_required') {
-                        console.log('Sending auth token...');
+                        // console.log('Sending auth token...');
                         this.send({ type: 'auth', access_token: token });
                     } else if (data.type === 'auth_ok') {
-                        console.log('✅ HA Auth erfolgreich');
+                         console.log('✅ HA Auth erfolgreich (Version: ' + data.ha_version + ')');
                         if (this.connectionTimeout) {
                             clearTimeout(this.connectionTimeout);
                             this.connectionTimeout = null;
                         }
+                        this.startPingInterval();
                         this.subscribeToStates();
+                        if (this.onConnectionChange) this.onConnectionChange(true);
                         resolve(true);
                     } else if (data.type === 'auth_invalid') {
                         console.error('❌ HA Auth fehlgeschlagen - Token ungültig');
+                        this.shouldReconnect = false; // Stop reconnecting if auth is bad
                         if (this.connectionTimeout) {
                             clearTimeout(this.connectionTimeout);
                             this.connectionTimeout = null;
                         }
+                        if (this.onConnectionChange) this.onConnectionChange(false);
                         resolve(false);
                     } else if (data.id && this.handlers.has(data.id)) {
                         this.handlers.get(data.id)!(data);
@@ -72,23 +123,39 @@ export class HomeAssistantService {
                 };
 
                 this.socket.onerror = (err) => {
-                    console.error("❌ WebSocket Error:", err);
+                    console.log("⚠️ WebSocket Connection warning:", err); 
                     if (this.connectionTimeout) {
                         clearTimeout(this.connectionTimeout);
                         this.connectionTimeout = null;
                     }
-                    resolve(false);
+                    // Don't resolve(false) here immediately, wait for close
                 };
 
                 this.socket.onclose = (event) => {
                     console.log("WebSocket closed:", event.code, event.reason);
+                    this.stopPingInterval();
                     if (this.connectionTimeout) {
                         clearTimeout(this.connectionTimeout);
                         this.connectionTimeout = null;
                     }
+                    
+                    if (this.onConnectionChange) this.onConnectionChange(false);
+
+                    if (this.shouldReconnect && this.credentials) {
+                        console.log("🔄 Auto-Reconnecting in 5s...");
+                        this.reconnectTimer = setTimeout(() => {
+                            if (this.shouldReconnect && this.credentials) {
+                                this.connect(this.credentials.url, this.credentials.token);
+                            }
+                        }, 5000);
+                    }
+                    
+                    // Only resolve false if we are in the initial connection phase
+                    // If we were already connected, this promise effectively does nothing (it was already resolved)
+                    resolve(false); 
                 };
             } catch (e) {
-                console.error("❌ Connection Error:", e);
+                console.log("⚠️ Connection Setup Warning:", e);
                 if (this.connectionTimeout) {
                     clearTimeout(this.connectionTimeout);
                     this.connectionTimeout = null;
@@ -99,6 +166,12 @@ export class HomeAssistantService {
     }
 
     disconnect() {
+        this.shouldReconnect = false;
+        this.stopPingInterval();
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
         if (this.socket) {
             this.socket.close();
             this.socket = null;
@@ -109,6 +182,7 @@ export class HomeAssistantService {
         }
         this.handlers.clear();
         this.messageId = 1;
+        if (this.onConnectionChange) this.onConnectionChange(false);
     }
 
     isConnected(): boolean {
@@ -123,7 +197,7 @@ export class HomeAssistantService {
 
         // Special handling for auth message - NO ID ALLOWED per HA WebSocket API spec
         if (data.type === 'auth') {
-            console.log('Sending auth without ID (as per HA spec)');
+            // console.log('Sending auth without ID (as per HA spec)');
             this.socket.send(JSON.stringify(data));
             return;
         }
@@ -136,7 +210,7 @@ export class HomeAssistantService {
     private subscribeToStates() {
         this.send({ type: 'get_states' }, (response) => {
             if (response.success) {
-                console.log(`✅ Loaded ${response.result.length} entities`);
+                // console.log(`✅ Loaded ${response.result.length} entities`);
                 this.onStateChange(response.result);
             }
         });
@@ -164,25 +238,29 @@ export class HomeAssistantService {
         this.onEventCallback = callback;
     }
 
-    async callService(domain: string, service: string, entityId: string, data: any = {}) {
+    callService(domain: string, service: string, entityId: string, data: any = {}): Promise<any> {
         if (!this.isConnected()) {
-            console.error('Cannot call service - not connected to HA');
-            return;
+            console.warn('Cannot call service - not connected to HA');
+            return Promise.reject(new Error('Not connected'));
         }
 
         console.log(`📤 Calling service: ${domain}.${service} for ${entityId}`, data);
 
-        this.send({
-            type: 'call_service',
-            domain,
-            service,
-            service_data: { entity_id: entityId, ...data }
-        }, (response) => {
-            if (response.success) {
-                console.log(`✅ Service ${domain}.${service} executed successfully for ${entityId}`);
-            } else {
-                console.error(`❌ Service ${domain}.${service} failed for ${entityId}:`, response.error);
-            }
+        return new Promise((resolve, reject) => {
+            this.send({
+                type: 'call_service',
+                domain,
+                service,
+                service_data: { entity_id: entityId, ...data }
+            }, (response) => {
+                if (response.success) {
+                    console.log(`✅ Service ${domain}.${service} executed successfully for ${entityId}`);
+                    resolve(response.result);
+                } else {
+                    console.warn(`❌ Service ${domain}.${service} failed for ${entityId}:`, response.error);
+                    reject(response.error);
+                }
+            });
         });
     }
 
@@ -311,7 +389,10 @@ export class HomeAssistantService {
         });
     }
     async browseMedia(entityId: string, mediaContentId?: string, mediaContentType?: string): Promise<any> {
-        if (!this.isConnected()) return null;
+        if (!this.isConnected()) {
+            console.warn('Browse Media aborted: Not connected');
+            return null;
+        }
 
         console.log(`🔍 Browsing Media for ${entityId}`, { mediaContentId, mediaContentType });
 
@@ -327,7 +408,7 @@ export class HomeAssistantService {
                 },
                 return_response: true
             }, (response) => {
-                console.log('📦 Browse Response:', JSON.stringify(response, null, 2));
+                // console.log('📦 Browse Response:', JSON.stringify(response, null, 2));
 
                 if (response.success && response.result) {
                     let result = response.result;
@@ -490,7 +571,7 @@ export class HomeAssistantService {
     }
 
     async fetchWeatherForecast(entityId: string, forecastType: 'daily' | 'hourly' = 'daily'): Promise<any[]> {
-        console.log(`Fetching weather forecast for ${entityId} (${forecastType})`);
+
         return new Promise((resolve) => {
             if (!this.isConnected()) {
                 console.warn('Cannot fetch forecast - not connected');
@@ -513,7 +594,7 @@ export class HomeAssistantService {
                 return_response: true
             };
 
-            console.log('Sending Weather Forecast Request:', JSON.stringify(message));
+
 
             this.socket!.send(JSON.stringify(message));
 
@@ -527,7 +608,7 @@ export class HomeAssistantService {
 
             this.handlers.set(id, (response: any) => {
                 clearTimeout(timeout);
-                console.log('Raw Weather Forecast Response:', JSON.stringify(response));
+                // console.log('Raw Weather Forecast Response:', JSON.stringify(response));
 
                 if (response.success && response.result) {
                     let forecast: any[] = [];
@@ -536,12 +617,12 @@ export class HomeAssistantService {
                     // 1. Try Direct Path (res.response[entityId].forecast)
                     if (res.response && res.response[entityId] && Array.isArray(res.response[entityId].forecast)) {
                         forecast = res.response[entityId].forecast;
-                        console.log(`✅ Found ${forecast.length} forecast entries via res.response path`);
+
                     }
                     // 2. Try res[entityId].forecast
                     else if (res[entityId] && Array.isArray(res[entityId].forecast)) {
                         forecast = res[entityId].forecast;
-                        console.log(`✅ Found ${forecast.length} forecast entries via res[entityId] path`);
+
                     }
                     // 3. Try Recursive Fallback
                     else {
@@ -556,7 +637,7 @@ export class HomeAssistantService {
                             return null;
                         };
                         forecast = findForecast(res) || [];
-                        console.log(`⚠️ Used recursive search, found ${forecast.length} forecast entries`);
+
                     }
 
                     resolve(forecast);

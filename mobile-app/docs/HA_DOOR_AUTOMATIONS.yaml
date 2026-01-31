@@ -1,0 +1,32 @@
+# Automation für die Highlight-Türe
+# Füge dies in deine automations.yaml ein
+
+- alias: "Push: Highlight Türe geöffnet"
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.highlighttur
+      to: "on"
+  action:
+    - service: rest_command.send_push_notification
+      data:
+        title: "Türe geöffnet"
+        message: "Die Highlight-Türe wurde geöffnet!"
+        data: { "screen": "rooms", "room": "Highlight" }
+
+# Optional: Automation für ALLE Türen (generisch)
+# Das deckt Highlight, Balkon, Waschküche und Terrasse ab
+- alias: "Push: Irgendeine Türe geöffnet"
+  trigger:
+    - platform: state
+      entity_id:
+        - binary_sensor.highlighttur
+        - binary_sensor.balkonture
+        - binary_sensor.waschkuchenture
+        - binary_sensor.terrassenture_tur
+      to: "on"
+  action:
+    - service: rest_command.send_push_notification
+      data:
+        title: "Türe geöffnet"
+        message: "{{ trigger.to_state.attributes.friendly_name }} wurde geöffnet."
+        data: { "screen": "rooms" }

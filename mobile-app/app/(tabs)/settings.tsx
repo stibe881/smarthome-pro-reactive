@@ -6,37 +6,85 @@ import { useHomeAssistant } from '../../contexts/HomeAssistantContext';
 import { Wifi, WifiOff, Save, LogOut, User, Server, Key, CheckCircle, XCircle, Shield, Bell, Palette, ChevronRight, LucideIcon, X, ScanFace, MapPin, Smartphone, Search } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 
 const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onClose: () => void }) => {
-    const [settings, setSettings] = useState({
+    const [config, setConfig] = useState({
         enabled: true,
         security: true,
         appliances: true,
         updates: false
     });
+    const [token, setToken] = useState<string | null>(null);
+    const [isTesting, setIsTesting] = useState(false);
 
     useEffect(() => {
         loadSettings();
+        loadToken();
     }, []);
+
+    const loadToken = async () => {
+        try {
+            const { status } = await Notifications.getPermissionsAsync();
+            if (status === 'granted') {
+                const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
+                if (projectId) {
+                    const t = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+                    setToken(t);
+                }
+            }
+        } catch (e) { console.warn('Failed to load token for settings display', e); }
+    };
 
     const loadSettings = async () => {
         try {
             const saved = await AsyncStorage.getItem('notification_settings');
             if (saved) {
-                setSettings(JSON.parse(saved));
+                setConfig(JSON.parse(saved));
             }
         } catch (e) {
             console.error("Failed to load generic notification settings", e);
         }
     };
 
-    const toggleSetting = async (key: keyof typeof settings) => {
-        const newSettings = { ...settings, [key]: !settings[key] };
-        setSettings(newSettings);
+    const toggleSetting = async (key: keyof typeof config) => {
+        const newSettings = { ...config, [key]: !config[key] };
+        setConfig(newSettings);
         try {
             await AsyncStorage.setItem('notification_settings', JSON.stringify(newSettings));
         } catch (e) {
             console.error("Failed to save notification settings", e);
+        }
+    };
+
+    const testPush = async () => {
+        if (!token) {
+            Alert.alert("Fehler", "Kein Push-Token vorhanden.");
+            return;
+        }
+        setIsTesting(true);
+        try {
+            // Trigger a local notification immediately to test if sound/banners work
+            await Notifications.scheduleNotificationAsync({
+                content: {
+                    title: "Test Nachricht",
+                    body: "Das ist eine lokale Test-Benachrichtigung.",
+                    sound: 'default',
+                },
+                trigger: null,
+            });
+
+            // Explain why server-side test is different
+            Alert.alert(
+                "Lokaler Test gesendet",
+                "Die lokale Nachricht wurde gesendet. Wenn diese ankommt, sind Sound und Banner korrekt konfiguriert.\n\n" +
+                "Kopiere deinen Token, um ihn im HA-Entwickler-Tool zu testen, falls die automatischen Nachrichten nicht kommen."
+            );
+        } catch (e) {
+            Alert.alert("Fehler", "Lokaler Test fehlgeschlagen.");
+        } finally {
+            setIsTesting(false);
         }
     };
 
@@ -58,7 +106,7 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
                                 <Text style={styles.settingDescription}>Generelle Erlaubnis für Push-Nachrichten</Text>
                             </View>
                             <Switch
-                                value={settings.enabled}
+                                value={config.enabled}
                                 onValueChange={() => toggleSetting('enabled')}
                                 trackColor={{ false: '#334155', true: '#3B82F6' }}
                                 thumbColor={'#fff'}
@@ -66,7 +114,7 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
                         </View>
                     </View>
 
-                    {settings.enabled && (
+                    {config.enabled && (
                         <View style={styles.settingGroup}>
                             <Text style={styles.groupTitle}>KATEGORIEN</Text>
 
@@ -79,7 +127,7 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
                                     <Text style={styles.settingDescription}>Haustüre, Alarme, Schlösser</Text>
                                 </View>
                                 <Switch
-                                    value={settings.security}
+                                    value={config.security}
                                     onValueChange={() => toggleSetting('security')}
                                     trackColor={{ false: '#334155', true: '#3B82F6' }}
                                     thumbColor={'#fff'}
@@ -95,24 +143,8 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
                                     <Text style={styles.settingDescription}>Waschmaschine, Tumbler, Geschirrspüler</Text>
                                 </View>
                                 <Switch
-                                    value={settings.appliances}
+                                    value={config.appliances}
                                     onValueChange={() => toggleSetting('appliances')}
-                                    trackColor={{ false: '#334155', true: '#3B82F6' }}
-                                    thumbColor={'#fff'}
-                                />
-                            </View>
-
-                            <View style={styles.settingRow}>
-                                <View style={[styles.iconBadge, { backgroundColor: 'rgba(16, 185, 129, 0.15)' }]}>
-                                    <CheckCircle size={20} color="#10B981" />
-                                </View>
-                                <View style={{ flex: 1, marginLeft: 12 }}>
-                                    <Text style={styles.settingLabel}>Updates & Infos</Text>
-                                    <Text style={styles.settingDescription}>App Updates, Server Status</Text>
-                                </View>
-                                <Switch
-                                    value={settings.updates}
-                                    onValueChange={() => toggleSetting('updates')}
                                     trackColor={{ false: '#334155', true: '#3B82F6' }}
                                     thumbColor={'#fff'}
                                 />
@@ -120,9 +152,28 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
                         </View>
                     )}
 
+                    <View style={styles.settingGroup}>
+                        <Text style={styles.groupTitle}>DIAGNOSE</Text>
+                        <View style={{ marginBottom: 16 }}>
+                            <Text style={styles.settingLabel}>Push Token</Text>
+                            <Text style={[styles.settingDescription, { fontSize: 11, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' }]} numberOfLines={2}>
+                                {token || "Wird geladen..."}
+                            </Text>
+                        </View>
+
+                        <Pressable
+                            style={[styles.saveButton, { backgroundColor: '#334155' }]}
+                            onPress={testPush}
+                            disabled={isTesting}
+                        >
+                            <Bell size={20} color="#fff" />
+                            <Text style={styles.saveButtonText}>Lokalen Test senden</Text>
+                        </Pressable>
+                    </View>
+
                     <View style={styles.infoBox}>
                         <Text style={styles.infoText}>
-                            Hinweis: Einige kritische Warnungen können möglicherweise nicht deaktiviert werden.
+                            Hinweis: Wenn Benachrichtigungen im Standby nicht ankommen, prüfe ob die App "Hintergrundaktualisierung" erlaubt hat.
                         </Text>
                     </View>
                 </ScrollView>

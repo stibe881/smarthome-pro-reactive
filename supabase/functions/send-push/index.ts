@@ -43,6 +43,7 @@ Deno.serve(async (req) => {
       title: title || 'Es hat geklingelt!',
       body: body || 'Jemand steht vor der Tür',
       data: data || { screen: 'doorbell' },
+      priority: 'high',
     }))
 
     const expoResponse = await fetch('https://exp.host/--/api/v2/push/send', {

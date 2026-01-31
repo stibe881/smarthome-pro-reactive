@@ -9,11 +9,37 @@ import {
     Thermometer, Gamepad2, BookOpen, Armchair, DoorOpen, ChevronUp,
     ParkingSquare, Flower2, Sun, Moon, LucideIcon,
     Wind, Fan, Play, Pause, Square, Volume2, Tv, Timer, Heart, Music, Coffee, Zap, Camera,
-    SkipBack, SkipForward, Palette, DoorClosed
+    SkipBack, SkipForward, Palette, DoorClosed, Rocket, Sparkles, Star, Crown
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Slider from '@react-native-community/slider';
 import LightControlModal from '../../components/LightControlModal';
+
+// Theme Types
+type RoomTheme = {
+    backgroundColors: [string, string, string];
+    textColor: string;
+    iconColor: string;
+    accentColor: string;
+    isDark: boolean;
+};
+
+const THEMES: Record<string, RoomTheme> = {
+    'levin': {
+        backgroundColors: ['#0B1026', '#1E1B4B', '#312E81'], // Space Dark Blue
+        textColor: '#F8FAFC',
+        iconColor: '#FFF',
+        accentColor: '#818CF8',
+        isDark: true
+    },
+    'lina': {
+        backgroundColors: ['#FDF2F8', '#FCE7F3', '#FBCFE8'], // Very light pink
+        textColor: '#831843', // Dark pink text
+        iconColor: '#DB2777',
+        accentColor: '#EC4899',
+        isDark: false
+    }
+};
 
 // Script/Scene Tile Component
 // Script/Scene Tile Component
@@ -218,20 +244,21 @@ const SectionHeader = memo(({ title, actionIcon: ActionIcon, onAction }: { title
     </View>
 ));
 
-const LightTile = memo(({ light, toggleLight, setBrightness, width, onLongPress }: any) => {
+const LightTile = memo(({ light, toggleLight, setBrightness, width, onLongPress, theme }: any) => {
     const isOn = light.state === 'on';
     const brightness = light.attributes.brightness || 0;
+    const activeColor = theme ? theme.accentColor : '#FBBF24';
 
     return (
         <View style={[styles.tile, { width }]}>
             <Pressable
                 onPress={() => toggleLight(light.entity_id)}
                 onLongPress={() => onLongPress && onLongPress(light)}
-                style={[styles.tileContent, isOn && styles.tileActive]}
+                style={[styles.tileContent, isOn && { backgroundColor: activeColor + '20', borderColor: activeColor + '50' }]}
             >
                 <View style={[styles.tileHeader]}>
-                    <View style={[styles.tileIcon, isOn && { backgroundColor: '#FBBF24' }]}>
-                        <Lightbulb size={24} color={isOn ? "#FFF" : "#FBBF24"} />
+                    <View style={[styles.tileIcon, isOn && { backgroundColor: activeColor }]}>
+                        <Lightbulb size={24} color={isOn ? "#FFF" : activeColor} />
                     </View>
                     {onLongPress && (
                         <Pressable
@@ -261,7 +288,8 @@ const LightTile = memo(({ light, toggleLight, setBrightness, width, onLongPress 
                         onSlidingComplete={(val) => setBrightness(light.entity_id, Math.round(val * 255))}
                         minimumValue={0}
                         maximumValue={1}
-                        minimumTrackTintColor="#FBBF24"
+                        maximumValue={1}
+                        minimumTrackTintColor={activeColor}
                         maximumTrackTintColor="rgba(255,255,255,0.1)"
                         thumbTintColor="#FFF"
                     />
@@ -271,16 +299,17 @@ const LightTile = memo(({ light, toggleLight, setBrightness, width, onLongPress 
     );
 });
 
-const CoverTile = memo(({ cover, openCover, closeCover, stopCover, width }: any) => {
+const CoverTile = memo(({ cover, openCover, closeCover, stopCover, width, theme }: any) => {
     const isOpen = cover.state === 'open' || (cover.attributes.current_position && cover.attributes.current_position > 0);
     const position = cover.attributes.current_position;
+    const activeColor = theme ? theme.accentColor : '#3B82F6';
 
     return (
         <View style={[styles.tile, { width }]}>
-            <View style={[styles.tileContent, isOpen && styles.tileActiveCover]}>
+            <View style={[styles.tileContent, isOpen && { backgroundColor: activeColor + '20', borderColor: activeColor + '50' }]}>
                 <View style={styles.tileHeader}>
-                    <View style={[styles.tileIcon, isOpen && { backgroundColor: '#3B82F6' }]}>
-                        <Blinds size={24} color={isOpen ? "#FFF" : "#3B82F6"} />
+                    <View style={[styles.tileIcon, isOpen && { backgroundColor: activeColor }]}>
+                        <Blinds size={24} color={isOpen ? "#FFF" : activeColor} />
                     </View>
                     <Text style={[styles.tileState, isOpen && styles.textActive]}>
                         {position !== undefined ? `${position}%` : cover.state}
@@ -303,16 +332,17 @@ const CoverTile = memo(({ cover, openCover, closeCover, stopCover, width }: any)
     );
 });
 
-const ClimateTile = memo(({ climate, setTemp, width }: any) => {
+const ClimateTile = memo(({ climate, setTemp, width, theme }: any) => {
     const currentTemp = climate.attributes.current_temperature;
     const targetTemp = climate.attributes.temperature;
     const label = climate.attributes.friendly_name;
+    const activeColor = theme ? theme.accentColor : '#F97316';
 
     return (
         <View style={[styles.tile, { width }]}>
             <View style={[styles.tileContent, styles.tileActiveClimate]}>
                 <View style={styles.tileHeader}>
-                    <View style={[styles.tileIcon, { backgroundColor: '#F97316' }]}>
+                    <View style={[styles.tileIcon, { backgroundColor: activeColor }]}>
                         <Thermometer size={24} color="#FFF" />
                     </View>
                     <Text style={[styles.tileState, styles.textActive]}>
@@ -331,8 +361,9 @@ const ClimateTile = memo(({ climate, setTemp, width }: any) => {
                         onSlidingComplete={(val) => setTemp(climate.entity_id, Math.round(val))}
                         minimumValue={16}
                         maximumValue={30}
+                        maximumValue={30}
                         step={0.5}
-                        minimumTrackTintColor="#F97316"
+                        minimumTrackTintColor={activeColor}
                         maximumTrackTintColor="rgba(255,255,255,0.2)"
                         thumbTintColor="#FFF"
                     />
@@ -342,7 +373,7 @@ const ClimateTile = memo(({ climate, setTemp, width }: any) => {
     );
 });
 
-const MediaTile = memo(({ player, api, width }: any) => {
+const MediaTile = memo(({ player, api, width, theme }: any) => {
     const { getEntityPictureUrl } = useHomeAssistant();
     const isPlaying = player.state === 'playing';
     const volume = player.attributes.volume_level || 0;
@@ -591,6 +622,16 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState }: 
         return lightsOff && mediaOff && coversClosed;
     }, [room]);
 
+    // Theme Logic
+    const roomNameLower = room?.name.toLowerCase() || '';
+    let theme = null;
+    if (roomNameLower.includes('levin')) theme = THEMES['levin'];
+    if (roomNameLower.includes('lina')) theme = THEMES['lina'];
+
+    // Icon Overrides for themes
+    const MoonIcon = theme ? (theme.isDark ? Moon : Star) : Moon;
+    const CloseIcon = theme ? X : X;
+
     if (!room) return null;
 
     return (
@@ -601,68 +642,88 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState }: 
             onRequestClose={onClose}
         >
             <View style={styles.modalOverlay}>
-                <View style={[styles.modalContainer, room.name === "Levins Zimmer" && { backgroundColor: '#0B1026' }]}>
-                    {/* Background Effect for Levin */}
-                    {room.name === "Levins Zimmer" && (
+                <View style={[styles.modalContainer, theme && { backgroundColor: theme.backgroundColors[0] }]}>
+
+                    {/* Background Effect for Levin (Space) */}
+                    {roomNameLower.includes('levin') && (
                         <View style={StyleSheet.absoluteFill}>
                             <LinearGradient
-                                colors={['#0F172A', '#1E1B4B', '#312E81']}
+                                colors={theme!.backgroundColors}
                                 style={StyleSheet.absoluteFill}
                                 start={{ x: 0, y: 0 }}
                                 end={{ x: 1, y: 1 }}
                             />
-                            {/* Simple Stars dotting */}
-                            <View style={{ position: 'absolute', top: 50, left: 50, width: 2, height: 2, backgroundColor: '#FFF', borderRadius: 1, opacity: 0.7 }} />
-                            <View style={{ position: 'absolute', top: 120, right: 80, width: 3, height: 3, backgroundColor: '#FFF', borderRadius: 1.5, opacity: 0.5 }} />
-                            <View style={{ position: 'absolute', bottom: 200, left: 100, width: 4, height: 4, backgroundColor: '#A78BFA', borderRadius: 2, opacity: 0.6 }} />
-                            <View style={{ position: 'absolute', top: '40%', right: '20%', width: 2, height: 2, backgroundColor: '#FFF', borderRadius: 1, opacity: 0.4 }} />
+                            {/* Stars */}
+                            <Star size={10} color="#FFF" style={{ position: 'absolute', top: 60, left: 40, opacity: 0.6 }} />
+                            <Star size={6} color="#FFF" style={{ position: 'absolute', top: 150, right: 60, opacity: 0.4 }} />
+                            <Star size={8} color="#818CF8" style={{ position: 'absolute', bottom: 100, left: 80, opacity: 0.5 }} />
+                            <Rocket size={400} color="rgba(255,255,255,0.03)" style={{ position: 'absolute', bottom: -50, right: -50, transform: [{ rotate: '-15deg' }] }} />
                         </View>
                     )}
 
-                    {/* Background Effect for Lina */}
-                    {room.name === "Linas Zimmer" && (
+                    {/* Background Effect for Lina (Princess) */}
+                    {roomNameLower.includes('lina') && (
                         <View style={StyleSheet.absoluteFill}>
                             <LinearGradient
-                                colors={['#4A044E', '#831843', '#BE185D']} // Dark Pink/Magents
+                                colors={theme!.backgroundColors}
                                 style={StyleSheet.absoluteFill}
                                 start={{ x: 0, y: 0 }}
                                 end={{ x: 1, y: 1 }}
                             />
-                            {/* Sparkles/Polka dots */}
-                            <View style={{ position: 'absolute', top: 60, left: 40, width: 6, height: 6, backgroundColor: '#FBCFE8', borderRadius: 3, opacity: 0.4 }} />
-                            <View style={{ position: 'absolute', top: 150, right: 60, width: 4, height: 4, backgroundColor: '#FFF', borderRadius: 2, opacity: 0.6 }} />
-                            <View style={{ position: 'absolute', bottom: 100, left: 80, width: 8, height: 8, backgroundColor: '#F472B6', borderRadius: 4, opacity: 0.3 }} />
-                            <View style={{ position: 'absolute', top: '30%', right: '40%', width: 3, height: 3, backgroundColor: '#FFF', borderRadius: 1.5, opacity: 0.5 }} />
+                            {/* Sparkles/Flowers */}
+                            <Sparkles size={24} color="#F472B6" style={{ position: 'absolute', top: 80, left: 30, opacity: 0.3 }} />
+                            <Heart size={16} color="#DB2777" style={{ position: 'absolute', top: 180, right: 50, opacity: 0.2 }} />
+                            <Crown size={300} color="rgba(236, 72, 153, 0.05)" style={{ position: 'absolute', top: 100, left: -50, transform: [{ rotate: '15deg' }] }} />
+                            <Flower2 size={200} color="rgba(236, 72, 153, 0.05)" style={{ position: 'absolute', bottom: -20, right: -20 }} />
                         </View>
                     )}
 
                     {/* Header */}
-                    <LinearGradient
-                        colors={room.gradient}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 0 }}
-                        style={styles.modalHeader}
-                    >
-                        <View style={styles.modalTitleRow}>
-                            <View style={styles.titleIconBubble}>
-                                <room.icon size={24} color="#fff" />
+                    {!theme ? (
+                        <LinearGradient
+                            colors={room.gradient}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 0 }}
+                            style={styles.modalHeader}
+                        >
+                            <View style={styles.modalTitleRow}>
+                                <View style={styles.titleIconBubble}>
+                                    <room.icon size={24} color="#fff" />
+                                </View>
+                                <Text style={styles.modalTitleText}>{room.name}</Text>
                             </View>
-                            <Text style={styles.modalTitleText}>{room.name}</Text>
+                            <View style={{ flexDirection: 'row', gap: 12 }}>
+                                <Pressable onPress={shutdownRoom} style={[styles.closeButton, { backgroundColor: 'rgba(255,255,255,0.15)' }]}>
+                                    <Moon size={24} color={isRoomQuiet ? "#FDB813" : "#FFF"} fill={isRoomQuiet ? "#FDB813" : "transparent"} />
+                                </Pressable>
+                                <Pressable onPress={onClose} style={styles.closeButton}>
+                                    <X size={24} color="#fff" />
+                                </Pressable>
+                            </View>
+                        </LinearGradient>
+                    ) : (
+                        // Custom Themed Header
+                        <View style={[styles.modalHeader, { backgroundColor: 'transparent' }]}>
+                            <View style={styles.modalTitleRow}>
+                                {/* Custom Icon Bubble */}
+                                <View style={[styles.titleIconBubble, { backgroundColor: theme.isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.5)' }]}>
+                                    {roomNameLower.includes('levin') ? <Rocket size={24} color={theme.iconColor} /> :
+                                        roomNameLower.includes('lina') ? <Crown size={24} color={theme.iconColor} /> :
+                                            <room.icon size={24} color={theme.iconColor} />
+                                    }
+                                </View>
+                                <Text style={[styles.modalTitleText, { color: theme.textColor }]}>{room.name}</Text>
+                            </View>
+                            <View style={{ flexDirection: 'row', gap: 12 }}>
+                                <Pressable onPress={shutdownRoom} style={[styles.closeButton, { backgroundColor: theme.isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}>
+                                    <MoonIcon size={24} color={theme.iconColor} />
+                                </Pressable>
+                                <Pressable onPress={onClose} style={[styles.closeButton, { backgroundColor: theme.isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}>
+                                    <CloseIcon size={24} color={theme.iconColor} />
+                                </Pressable>
+                            </View>
                         </View>
-                        <View style={{ flexDirection: 'row', gap: 12 }}>
-                            {/* Shutdown Button */}
-                            <Pressable onPress={shutdownRoom} style={[styles.closeButton, { backgroundColor: 'rgba(255,255,255,0.15)' }]}>
-                                <Moon
-                                    size={24}
-                                    color={isRoomQuiet ? "#FDB813" : "#FFF"}
-                                    fill={isRoomQuiet ? "#FDB813" : "transparent"}
-                                />
-                            </Pressable>
-                            <Pressable onPress={onClose} style={styles.closeButton}>
-                                <X size={24} color="#fff" />
-                            </Pressable>
-                        </View>
-                    </LinearGradient>
+                    )}
 
                     <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
                         {/* Sensors Section (Moved to TOP per user request) - Subtle display */}
@@ -724,6 +785,7 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState }: 
                                             climate={c}
                                             setTemp={api.setClimateTemperature}
                                             width={isTablet ? tileWidth : '100%'} // Full width for climate on mobile
+                                            theme={theme}
                                         />
                                     ))}
                                 </View>
@@ -743,6 +805,7 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState }: 
                                             setBrightness={api.setLightBrightness}
                                             width={l.fullWidth ? '100%' : tileWidth}
                                             onLongPress={setSelectedLight}
+                                            theme={theme}
                                         />
                                     ))}
                                 </View>
@@ -768,6 +831,7 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState }: 
                                             openCover={api.openCover}
                                             closeCover={api.closeCover}
                                             width={tileWidth}
+                                            theme={theme}
                                         />
                                     ))}
                                 </View>
@@ -785,6 +849,7 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState }: 
                                             player={m}
                                             api={api}
                                             width={isTablet ? tileWidth : '100%'}
+                                            theme={theme}
                                         />
                                     ))}
                                 </View>
@@ -1537,7 +1602,26 @@ export default function Rooms() {
                                     const Icon = room.icon;
                                     const lightsOn = room.lights.filter((l: any) => l.state === 'on').length;
                                     const hasActive = lightsOn > 0 || room.mediaPlayers.some((m: any) => m.state === 'playing');
-                                    const temp = room.climates[0]?.attributes.current_temperature || room.sensors[0]?.state;
+
+                                    // Check if room has door sensor and is one of the special rooms
+                                    const doorRooms = ['Highlight', 'Waschküche', 'Terrasse', 'Balkon'];
+                                    const isDoorRoom = doorRooms.includes(room.name);
+                                    const doorSensor = room.sensors?.find((s: any) =>
+                                        s.entity_id.includes('tur') || s.entity_id.includes('door') ||
+                                        s.attributes?.device_class === 'door'
+                                    );
+
+                                    // For door rooms, show door status; otherwise show temperature
+                                    let secondaryInfo = null;
+                                    let secondaryLabel = '';
+                                    if (isDoorRoom && doorSensor) {
+                                        secondaryLabel = doorSensor.state === 'on' ? 'geöffnet' : 'geschlossen';
+                                        secondaryInfo = secondaryLabel;
+                                    } else {
+                                        const temp = room.climates[0]?.attributes.current_temperature ||
+                                            (room.sensors[0]?.attributes?.unit_of_measurement === '°C' ? room.sensors[0]?.state : null);
+                                        if (temp) secondaryInfo = `${temp}°`;
+                                    }
 
                                     return (
                                         <Pressable
@@ -1561,8 +1645,8 @@ export default function Rooms() {
                                                         <Text style={styles.statsText}>
                                                             {lightsOn > 0 ? `${lightsOn} an` : 'Aus'}
                                                         </Text>
-                                                        {temp && (
-                                                            <Text style={styles.statsText}>• {temp}°</Text>
+                                                        {secondaryInfo && (
+                                                            <Text style={styles.statsText}>• {secondaryInfo}</Text>
                                                         )}
                                                     </View>
                                                 </View>
