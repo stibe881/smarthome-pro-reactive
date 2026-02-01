@@ -3,12 +3,15 @@ import { View, Text, StyleSheet, Pressable, useWindowDimensions, Platform } from
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useTheme } from '../contexts/ThemeContext';
+
 export default function ResponsiveTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
+    const { colors } = useTheme();
     const insets = useSafeAreaInsets();
 
     // Always use bottom bar for all devices (including tablet)
     return (
-        <View style={[styles.bottomBar, { height: 60 + insets.bottom, paddingBottom: insets.bottom }]}>
+        <View style={[styles.bottomBar, { height: 60 + insets.bottom, paddingBottom: insets.bottom, backgroundColor: colors.tabBar, borderTopColor: colors.border }]}>
             {state.routes.map((route, index) => {
                 const { options } = descriptors[route.key];
                 const label = options.title !== undefined
@@ -38,7 +41,7 @@ export default function ResponsiveTabBar({ state, descriptors, navigation }: Bot
                     });
                 };
 
-                const color = isFocused ? '#3b82f6' : '#6b7280';
+                const color = isFocused ? colors.accent : colors.subtext;
 
                 return (
                     <Pressable

@@ -2,6 +2,7 @@ import React, { useMemo, useState, memo, useCallback, useEffect } from 'react';
 import { View, Text, ScrollView, Pressable, useWindowDimensions, Modal, StyleSheet, ActivityIndicator, Image, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useHomeAssistant } from '../../contexts/HomeAssistantContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import {
     Home, Bed, Sofa, UtensilsCrossed, Bath, Warehouse, Building2,
     Lightbulb, Blinds, ChevronRight, WifiOff, X,
@@ -24,7 +25,7 @@ type RoomTheme = {
     isDark: boolean;
 };
 
-const THEMES: Record<string, RoomTheme> = {
+const KIDS_THEMES: Record<string, RoomTheme> = {
     'levin': {
         backgroundColors: ['#0B1026', '#1E1B4B', '#312E81'], // Space Dark Blue
         textColor: '#F8FAFC',
@@ -45,6 +46,7 @@ const THEMES: Record<string, RoomTheme> = {
 // Script/Scene Tile Component
 // Script/Scene Tile Component (Compact & Visual)
 const SceneTile = memo(({ scene, activateScene, width }: any) => {
+    const { colors } = useTheme();
     const getSceneStyle = (entityId: string, name: string) => {
         const id = entityId.toLowerCase();
         const n = name.toLowerCase();
@@ -126,9 +128,9 @@ const SceneTile = memo(({ scene, activateScene, width }: any) => {
 
         // Default
         return {
-            colors: ['#1E293B', '#334155'] as const, // Slate
+            colors: [colors.card, colors.border] as const, // Theme aware
             icon: Zap,
-            iconColor: '#CBD5E1'
+            iconColor: colors.subtext
         };
     };
 
@@ -144,7 +146,7 @@ const SceneTile = memo(({ scene, activateScene, width }: any) => {
     else if (displayName?.toLowerCase().startsWith('levins')) displayName = 'Spielen';
 
     return (
-        <View style={[styles.tile, { width, height: 72, borderRadius: 20, overflow: 'hidden', borderWidth: 0 }]}>
+        <View style={[styles.tile, { width, height: 72, borderRadius: 20, overflow: 'hidden', borderWidth: 0, backgroundColor: 'transparent' }]}>
             <Pressable
                 onPress={() => activateScene(scene.entity_id)}
                 style={{ flex: 1 }}
@@ -244,21 +246,22 @@ const SectionHeader = memo(({ title, actionIcon: ActionIcon, onAction }: { title
     </View>
 ));
 
-const LightTile = memo(({ light, toggleLight, setBrightness, width, onLongPress, theme }: any) => {
+const LightTile = memo(({ light, toggleLight, setBrightness, width, onLongPress, theme: roomTheme }: any) => {
+    const { colors } = useTheme();
     const isOn = light.state === 'on';
     const brightness = light.attributes.brightness || 0;
-    const activeColor = theme ? theme.accentColor : '#FBBF24';
+    const activeColor = roomTheme ? roomTheme.accentColor : colors.accent;
 
     return (
-        <View style={[styles.tile, { width }]}>
+        <View style={[styles.tile, { width, backgroundColor: roomTheme ? 'rgba(255,255,255,0.1)' : colors.card, borderColor: roomTheme ? 'rgba(255,255,255,0.1)' : colors.border }]}>
             <Pressable
                 onPress={() => toggleLight(light.entity_id)}
                 onLongPress={() => onLongPress && onLongPress(light)}
                 style={[styles.tileContent, isOn && { backgroundColor: activeColor + '20', borderColor: activeColor + '50' }]}
             >
                 <View style={[styles.tileHeader]}>
-                    <View style={[styles.tileIcon, isOn && { backgroundColor: activeColor }]}>
-                        <Lightbulb size={24} color={isOn ? "#FFF" : "#94A3B8"} />
+                    <View style={[styles.tileIcon, { backgroundColor: isOn ? activeColor : (roomTheme ? 'rgba(255,255,255,0.1)' : colors.background) }]}>
+                        <Lightbulb size={24} color={isOn ? "#FFF" : colors.subtext} />
                     </View>
                     {onLongPress && (
                         <Pressable
@@ -271,10 +274,10 @@ const LightTile = memo(({ light, toggleLight, setBrightness, width, onLongPress,
                     )}
                 </View>
                 <View style={{ marginTop: 8 }}>
-                    <Text numberOfLines={1} style={[styles.tileName, isOn && styles.textActive]}>
+                    <Text numberOfLines={1} style={[styles.tileName, { color: roomTheme ? '#FFF' : colors.text }, isOn && styles.textActive]}>
                         {light.attributes.friendly_name}
                     </Text>
-                    <Text style={[styles.tileState, isOn && styles.textActive, { marginTop: 2, fontSize: 11 }]}>
+                    <Text style={[styles.tileState, { color: roomTheme ? 'rgba(255,255,255,0.6)' : colors.subtext }, isOn && styles.textActive, { marginTop: 2, fontSize: 11 }]}>
                         {isOn ? `${Math.round(brightness / 255 * 100)}%` : 'Aus'}
                     </Text>
                 </View>
@@ -298,23 +301,24 @@ const LightTile = memo(({ light, toggleLight, setBrightness, width, onLongPress,
     );
 });
 
-const CoverTile = memo(({ cover, openCover, closeCover, stopCover, width, theme }: any) => {
+const CoverTile = memo(({ cover, openCover, closeCover, stopCover, width, theme: roomTheme }: any) => {
+    const { colors } = useTheme();
     const isOpen = cover.state === 'open' || (cover.attributes.current_position && cover.attributes.current_position > 0);
     const position = cover.attributes.current_position;
-    const activeColor = theme ? theme.accentColor : '#3B82F6';
+    const activeColor = roomTheme ? roomTheme.accentColor : colors.accent;
 
     return (
-        <View style={[styles.tile, { width }]}>
+        <View style={[styles.tile, { width, backgroundColor: roomTheme ? 'rgba(255,255,255,0.1)' : colors.card, borderColor: roomTheme ? 'rgba(255,255,255,0.1)' : colors.border }]}>
             <View style={[styles.tileContent, isOpen && { backgroundColor: activeColor + '20', borderColor: activeColor + '50' }]}>
                 <View style={styles.tileHeader}>
-                    <View style={[styles.tileIcon, isOpen && { backgroundColor: activeColor }]}>
+                    <View style={[styles.tileIcon, { backgroundColor: isOpen ? activeColor : (roomTheme ? 'rgba(255,255,255,0.1)' : colors.background) }]}>
                         <Blinds size={24} color={isOpen ? "#FFF" : activeColor} />
                     </View>
-                    <Text style={[styles.tileState, isOpen && styles.textActive]}>
+                    <Text style={[styles.tileState, { color: roomTheme ? 'rgba(255,255,255,0.6)' : colors.subtext }, isOpen && styles.textActive]}>
                         {position !== undefined ? `${position}%` : cover.state}
                     </Text>
                 </View>
-                <Text numberOfLines={2} style={[styles.tileName, isOpen && styles.textActive]}>
+                <Text numberOfLines={2} style={[styles.tileName, { color: roomTheme ? '#FFF' : colors.text }, isOpen && styles.textActive]}>
                     {cover.attributes.friendly_name}
                 </Text>
 
@@ -331,14 +335,15 @@ const CoverTile = memo(({ cover, openCover, closeCover, stopCover, width, theme 
     );
 });
 
-const ClimateTile = memo(({ climate, setTemp, width, theme }: any) => {
+const ClimateTile = memo(({ climate, setTemp, width, theme: roomTheme }: any) => {
+    const { colors } = useTheme();
     const currentTemp = climate.attributes.current_temperature;
     const targetTemp = climate.attributes.temperature;
     const label = climate.attributes.friendly_name;
-    const activeColor = theme ? theme.accentColor : '#F97316';
+    const activeColor = roomTheme ? roomTheme.accentColor : colors.warning; // Default to warning (Orange) for Climate
 
     return (
-        <View style={[styles.tile, { width }]}>
+        <View style={[styles.tile, { width, backgroundColor: roomTheme ? 'rgba(255,255,255,0.1)' : colors.card }]}>
             <View style={[styles.tileContent, styles.tileActiveClimate]}>
                 <View style={styles.tileHeader}>
                     <View style={[styles.tileIcon, { backgroundColor: activeColor }]}>
@@ -372,6 +377,7 @@ const ClimateTile = memo(({ climate, setTemp, width, theme }: any) => {
 });
 
 const MediaTile = memo(({ player, api, width, theme }: any) => {
+    const { colors } = useTheme();
     const { getEntityPictureUrl } = useHomeAssistant();
     const isPlaying = player.state === 'playing';
     const isOff = player.state === 'off' || player.state === 'unavailable';
@@ -401,14 +407,14 @@ const MediaTile = memo(({ player, api, width, theme }: any) => {
     const setVolume = (val: number) => api.callService('media_player', 'volume_set', player.entity_id, { volume_level: val });
 
     const imageUrl = player.attributes.entity_picture ? getEntityPictureUrl(player.attributes.entity_picture) : null;
-    const activeColor = theme ? theme.accentColor : '#3B82F6';
+    const activeColor = theme ? theme.accentColor : colors.accent;
 
     // Layout calculation - Adjust height based on whether controls fit
     // Standard tile height is usually ~150-180. We make this one slightly taller to fit everything nicely if needed.
     const TILE_HEIGHT = 200;
 
     return (
-        <View style={[styles.tile, { width, height: TILE_HEIGHT, padding: 0, overflow: 'hidden', borderWidth: 0, borderRadius: 24, backgroundColor: '#1E293B' }]}>
+        <View style={[styles.tile, { width, height: TILE_HEIGHT, padding: 0, overflow: 'hidden', borderWidth: 0, borderRadius: 24, backgroundColor: colors.card }]}>
             {/* Background Layer */}
             {imageUrl && !isOff ? (
                 <Image
@@ -526,6 +532,7 @@ const MediaTile = memo(({ player, api, width, theme }: any) => {
 });
 
 const SensorTile = memo(({ sensor, width }: any) => {
+    const { colors } = useTheme();
     const isBinary = sensor.entity_id.startsWith('binary_sensor.');
     const isOn = sensor.state === 'on';
 
@@ -576,10 +583,10 @@ const SensorTile = memo(({ sensor, width }: any) => {
     }
 
     // Determine final styles
-    const activeColor = specialColor || (isBinary && isOn ? "#60A5FA" : "#94A3B8");
-    const bgColor = specialColor ? `${specialColor}33` : (isBinary && isOn ? 'rgba(59, 130, 246, 0.2)' : 'rgba(255,255,255,0.08)');
-    const borderColor = specialColor ? `${specialColor}66` : (isBinary && isOn ? 'rgba(59, 130, 246, 0.4)' : 'rgba(255,255,255,0.05)');
-    const textColor = specialColor ? '#FFF' : (isBinary && isOn ? '#FFF' : '#E2E8F0');
+    const activeColor = specialColor || (isBinary && isOn ? "#60A5FA" : colors.subtext);
+    const bgColor = specialColor ? `${specialColor}33` : (isBinary && isOn ? 'rgba(59, 130, 246, 0.2)' : colors.background);
+    const borderColor = specialColor ? `${specialColor}66` : (isBinary && isOn ? 'rgba(59, 130, 246, 0.4)' : colors.border);
+    const textColor = specialColor ? '#FFF' : (isBinary && isOn ? '#FFF' : colors.text);
 
     // Override Icon if special
     if (SpecialIcon) Icon = SpecialIcon;
@@ -606,7 +613,7 @@ const SensorTile = memo(({ sensor, width }: any) => {
 
                 {/* Hide secondary info for Wetterstation (Terrasse) as requested */}
                 {!isWetterstation && (
-                    <Text numberOfLines={1} style={{ fontSize: 11, color: '#94A3B8' }}>
+                    <Text numberOfLines={1} style={{ fontSize: 11, color: colors.subtext }}>
                         {name}
                     </Text>
                 )}
@@ -619,6 +626,7 @@ const SensorTile = memo(({ sensor, width }: any) => {
 
 
 const CameraTile = memo(({ camera, width, api }: any) => {
+    const { colors } = useTheme();
     const { haBaseUrl, getCredentials } = useHomeAssistant();
     const [streamUrl, setStreamUrl] = useState<string | null>(null);
     const [headers, setHeaders] = useState<any>(null);
@@ -657,9 +665,9 @@ const CameraTile = memo(({ camera, width, api }: any) => {
                         resizeMode="cover"
                     />
                 ) : (
-                    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#334155' }}>
-                        <Camera size={32} color="#94A3B8" />
-                        <ActivityIndicator size="small" color="#94A3B8" style={{ marginTop: 8 }} />
+                    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background }}>
+                        <Camera size={32} color={colors.subtext} />
+                        <ActivityIndicator size="small" color={colors.subtext} style={{ marginTop: 8 }} />
                     </View>
                 )}
 
@@ -733,6 +741,7 @@ const HelperTile = memo(({ entity, api, width, theme }: any) => {
 
 const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState }: any) => {
     const { width } = useWindowDimensions();
+    const { colors } = useTheme();
     const isTablet = width >= 768;
     const tileWidth = isTablet ? (width - 64 - 24) / 3 : (width - 32 - 12) / 2;
     const [selectedLight, setSelectedLight] = useState<any>(null);
@@ -759,8 +768,8 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState }: 
     // Theme Logic
     const roomNameLower = room?.name.toLowerCase() || '';
     let theme = null;
-    if (roomNameLower.includes('levin')) theme = THEMES['levin'];
-    if (roomNameLower.includes('lina')) theme = THEMES['lina'];
+    if (roomNameLower.includes('levin')) theme = KIDS_THEMES['levin'];
+    if (roomNameLower.includes('lina')) theme = KIDS_THEMES['lina'];
 
     // Icon Overrides for themes
     const MoonIcon = theme ? (theme.isDark ? Moon : Star) : Moon;
@@ -776,7 +785,7 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState }: 
             onRequestClose={onClose}
         >
             <View style={styles.modalOverlay}>
-                <View style={[styles.modalContainer, theme && { backgroundColor: theme.backgroundColors[0] }]}>
+                <View style={[styles.modalContainer, { backgroundColor: colors.background }, theme && { backgroundColor: theme.backgroundColors[0] }]}>
 
                     {/* Background Effect for Levin (Space) */}
                     {roomNameLower.includes('levin') && (
@@ -1047,6 +1056,7 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState }: 
 
 export default function Rooms() {
     const { width } = useWindowDimensions();
+    const { colors } = useTheme();
     const isTablet = width >= 768;
 
     const {
@@ -1691,11 +1701,11 @@ export default function Rooms() {
 
     if (!isConnected && !isConnecting) {
         return (
-            <SafeAreaView style={styles.container}>
-                <View style={styles.emptyState}>
-                    <WifiOff size={48} color="#64748B" />
-                    <Text style={styles.emptyTitle}>Nicht verbunden</Text>
-                    <Pressable onPress={connect} style={styles.connectBtn}>
+            <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+                <View style={[styles.emptyState, { backgroundColor: colors.background }]}>
+                    <WifiOff size={48} color={colors.subtext} />
+                    <Text style={[styles.emptyTitle, { color: colors.text }]}>Nicht verbunden</Text>
+                    <Pressable onPress={connect} style={[styles.connectBtn, { backgroundColor: colors.accent }]}>
                         <Text style={styles.connectBtnText}>Verbinden</Text>
                     </Pressable>
                 </View>
@@ -1704,16 +1714,26 @@ export default function Rooms() {
     }
 
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+            {/* Background Image Layer */}
+            {colors.backgroundImage && (
+                <View style={StyleSheet.absoluteFill}>
+                    <Image
+                        source={colors.backgroundImage}
+                        style={{ width: '100%', height: '100%', resizeMode: 'cover', opacity: 1 }}
+                        blurRadius={0}
+                    />
+                </View>
+            )}
             <ScrollView
-                style={styles.scrollView}
+                style={[styles.scrollView, { backgroundColor: 'transparent' }]}
                 contentContainerStyle={[styles.scrollContent, { paddingHorizontal: isTablet ? 24 : 16 }]}
                 showsVerticalScrollIndicator={false}
             >
                 {/* Header */}
                 <View style={styles.header}>
-                    <Text style={styles.title}>Räume</Text>
-                    <Text style={styles.subtitle}>
+                    <Text style={[styles.title, { color: colors.text }]}>Räume</Text>
+                    <Text style={[styles.subtitle, { color: colors.subtext }]}>
                         {rooms.length} Bereiche • {rooms.reduce((acc, r) => acc + r.lights.length, 0)} Lichter
                     </Text>
                 </View>
@@ -1725,7 +1745,7 @@ export default function Rooms() {
 
                     return (
                         <View key={category.title} style={{ marginBottom: 24 }}>
-                            <Text style={{ fontSize: 20, fontWeight: '600', color: '#E2E8F0', marginBottom: 12, marginLeft: 4 }}>
+                            <Text style={{ fontSize: 20, fontWeight: '600', color: colors.subtext, marginBottom: 12, marginLeft: 4 }}>
                                 {category.title}
                             </Text>
                             <View style={styles.roomsGrid}>
@@ -1758,10 +1778,10 @@ export default function Rooms() {
                                         <Pressable
                                             key={room.name}
                                             onPress={() => setSelectedRoom(room.name)}
-                                            style={[styles.roomCard, { width: isTablet ? '32%' : '48%' }]}
+                                            style={[styles.roomCard, { width: isTablet ? '32%' : '48%', backgroundColor: colors.card }]}
                                         >
                                             <LinearGradient
-                                                colors={hasActive ? room.gradient : ['#1E293B', '#0F172A']}
+                                                colors={hasActive ? room.gradient : [colors.card, colors.background]} // Theme aware inactive state
                                                 start={{ x: 0, y: 0 }}
                                                 end={{ x: 1, y: 1 }}
                                                 style={styles.cardGradient}
@@ -1771,13 +1791,13 @@ export default function Rooms() {
                                                 </View>
 
                                                 <View style={styles.cardContent}>
-                                                    <Text numberOfLines={1} style={styles.roomName}>{room.name}</Text>
+                                                    <Text numberOfLines={1} style={[styles.roomName, { color: colors.text }]}>{room.name}</Text>
                                                     <View style={styles.cardStats}>
-                                                        <Text style={styles.statsText}>
+                                                        <Text style={[styles.statsText, { color: colors.subtext }]}>
                                                             {lightsOn > 0 ? `${lightsOn} an` : 'Aus'}
                                                         </Text>
                                                         {secondaryInfo && (
-                                                            <Text style={styles.statsText}>• {secondaryInfo}</Text>
+                                                            <Text style={[styles.statsText, { color: colors.subtext }]}>• {secondaryInfo}</Text>
                                                         )}
                                                     </View>
                                                 </View>

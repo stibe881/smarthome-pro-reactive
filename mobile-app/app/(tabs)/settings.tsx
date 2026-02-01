@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import * as Clipboard from 'expo-clipboard';
-import { View, Text, TextInput, Pressable, Alert, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform, useWindowDimensions, StyleSheet, Switch, Linking, Modal } from 'react-native';
+import { View, Text, TextInput, Pressable, Alert, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform, useWindowDimensions, StyleSheet, Switch, Linking, Modal, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { useHomeAssistant } from '../../contexts/HomeAssistantContext';
+import { useTheme, THEMES, ThemeType } from '../../contexts/ThemeContext';
 import { Wifi, WifiOff, Save, LogOut, User, Server, Key, CheckCircle, XCircle, Shield, Bell, Palette, ChevronRight, LucideIcon, X, ScanFace, MapPin, Smartphone, Search } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -11,55 +12,17 @@ import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 
 const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onClose: () => void }) => {
-    const { user } = useAuth();
-    const { entities, callService, isConnected } = useHomeAssistant();
-
-    // Derive user slug (e.g. stefan_gross from stefan.gross@hotmail.ch)
-    const userSlug = useMemo(() => {
-        if (!user?.email) return 'user';
-        return user.email.split('@')[0].replace(/\./g, '_').toLowerCase();
-    }, [user]);
-
-    // Define Entity IDs
-    const entityIds = {
-        security: `input_boolean.notify_${userSlug}_security`,
-        appliances: `input_boolean.notify_${userSlug}_appliances`,
-        updates: `input_boolean.notify_${userSlug}_updates`,
-        all_push: `input_boolean.notify_${userSlug}_global`
-    };
-
-    const [config, setConfig] = useState({
-        enabled: true,
-        security: true,
-        appliances: true,
-        updates: false
-    });
+    const { notificationSettings, updateNotificationSettings } = useHomeAssistant();
+    const { theme, setTheme, colors } = useTheme();
     const [token, setToken] = useState<string | null>(null);
     const [isTesting, setIsTesting] = useState(false);
 
-    // Sync with HA on Open
+    // Load Token for display
     useEffect(() => {
         if (visible) {
             loadToken();
-            loadSettings();
-
-            if (isConnected) {
-                // Try to read from HA entities if they exist
-                const sec = entities.find(e => e.entity_id === entityIds.security);
-                const app = entities.find(e => e.entity_id === entityIds.appliances);
-                const up = entities.find(e => e.entity_id === entityIds.updates);
-                const glob = entities.find(e => e.entity_id === entityIds.all_push);
-
-                setConfig(prev => ({
-                    ...prev,
-                    security: sec ? sec.state === 'on' : prev.security,
-                    appliances: app ? app.state === 'on' : prev.appliances,
-                    updates: up ? up.state === 'on' : prev.updates,
-                    enabled: glob ? glob.state === 'on' : prev.enabled
-                }));
-            }
         }
-    }, [visible, isConnected, entities]);
+    }, [visible]);
 
     const loadToken = async () => {
         try {
@@ -74,43 +37,24 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
         } catch (e) { console.warn('Failed to load token for settings display', e); }
     };
 
-    const loadSettings = async () => {
-        try {
-            const saved = await AsyncStorage.getItem('notification_settings');
-            if (saved) {
-                setConfig(prev => ({ ...prev, ...JSON.parse(saved) }));
-            }
-        } catch (e) {
-            console.error("Failed to load generic notification settings", e);
-        }
+    const toggleSetting = async (category: 'security' | 'household' | 'home' | 'weather' | 'baby', key: string) => {
+        // Deep copy to prevent mutation of existing state causing comparison failure
+        let newSettings = JSON.parse(JSON.stringify(notificationSettings));
+
+        // Ensure category exists (migration safety)
+        if (!newSettings[category]) newSettings[category] = {} as any;
+
+        // Toggle
+        // @ts-ignore - Dynamic access is safe here given our structure
+        newSettings[category][key] = !newSettings[category][key];
+
+        await updateNotificationSettings(newSettings);
     };
 
-    const toggleSetting = async (key: keyof typeof config) => {
-        const newValue = !config[key];
-        const newSettings = { ...config, [key]: newValue };
-        setConfig(newSettings);
-
-        // 1. Save Local
-        try {
-            await AsyncStorage.setItem('notification_settings', JSON.stringify(newSettings));
-        } catch (e) { console.error("Failed to save notification settings", e); }
-
-        // 2. Sync to HA
-        if (isConnected) {
-            let entityId = '';
-            if (key === 'security') entityId = entityIds.security;
-            if (key === 'appliances') entityId = entityIds.appliances;
-            if (key === 'updates') entityId = entityIds.updates;
-            if (key === 'enabled') entityId = entityIds.all_push;
-
-            if (entityId) {
-                // Fire and forget - optimistically updated UI
-                callService('input_boolean', newValue ? 'turn_on' : 'turn_off', entityId).catch(e => {
-                    console.warn(`Failed to toggle ${entityId}`, e);
-                    // Don't alert, just log. 
-                });
-            }
-        }
+    const toggleEnabled = async () => {
+        let newSettings = { ...notificationSettings };
+        newSettings.enabled = !newSettings.enabled;
+        await updateNotificationSettings(newSettings);
     };
 
     const testPush = async () => {
@@ -143,25 +87,17 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
         <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
             <View style={styles.modalContainer}>
                 <View style={styles.modalHeader}>
-                    <Text style={styles.modalTitle}>Benachrichtigungen ({userSlug})</Text>
+                    <Text style={styles.modalTitle}>Benachrichtigungen</Text>
                     <Pressable onPress={onClose} style={styles.closeButton}>
                         <X size={24} color="#94A3B8" />
                     </Pressable>
                 </View>
 
-                <ScrollView style={styles.modalContent}>
-                    {/* INFO BOX ABOUT HA SYNC */}
-                    <View style={{ backgroundColor: '#1E293B', padding: 12, borderRadius: 12, marginBottom: 24, borderWidth: 1, borderColor: '#334155' }}>
-                        <Text style={{ color: '#60A5FA', fontWeight: 'bold', marginBottom: 4, fontSize: 13 }}>💡 Home Assistant Setup nötig</Text>
-                        <Text style={{ color: '#94A3B8', fontSize: 12, lineHeight: 18 }}>
-                            Damit diese Schalter funktionieren, erstelle bitte folgende "Helfer" (Umschalter) in Home Assistant:
-                        </Text>
-                        <View style={{ marginTop: 8, gap: 4 }}>
-                            <Text style={{ fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', fontSize: 11, color: '#E2E8F0' }}>• {entityIds.all_push}</Text>
-                            <Text style={{ fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', fontSize: 11, color: '#E2E8F0' }}>• {entityIds.security}</Text>
-                            <Text style={{ fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', fontSize: 11, color: '#E2E8F0' }}>• {entityIds.appliances}</Text>
-                        </View>
-                    </View>
+                <ScrollView style={[styles.modalContent, { backgroundColor: colors.background }]}>
+
+                    {/* DESIGN SELECTOR - MOVED TO MAIN SETTINGS */}
+
+                    {/* INFO BOX REMOVED - NO LONGER NEEDED */}
 
                     <View style={styles.settingGroup}>
                         <View style={styles.settingRow}>
@@ -170,51 +106,134 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
                                 <Text style={styles.settingDescription}>Globaler Schalter für dieses Gerät</Text>
                             </View>
                             <Switch
-                                value={config.enabled}
-                                onValueChange={() => toggleSetting('enabled')}
+                                value={notificationSettings.enabled}
+                                onValueChange={toggleEnabled}
                                 trackColor={{ false: '#334155', true: '#3B82F6' }}
                                 thumbColor={'#fff'}
                             />
                         </View>
                     </View>
 
-                    {config.enabled && (
-                        <View style={styles.settingGroup}>
-                            <Text style={styles.groupTitle}>KATEGORIEN</Text>
-
-                            <View style={styles.settingRow}>
-                                <View style={styles.iconBadge}>
-                                    <Shield size={20} color="#EF4444" />
+                    {notificationSettings.enabled && (
+                        <>
+                            {/* SICHERHEIT */}
+                            <View style={styles.settingGroup}>
+                                <Text style={styles.groupTitle}>SICHERHEIT</Text>
+                                <View style={styles.settingRow}>
+                                    <View style={styles.iconBadge}>
+                                        <Shield size={20} color="#EF4444" />
+                                    </View>
+                                    <View style={{ flex: 1, marginLeft: 12 }}>
+                                        <Text style={styles.settingLabel}>Türen UG</Text>
+                                        <Text style={styles.settingDescription}>Waschküche & Highlight</Text>
+                                    </View>
+                                    <Switch
+                                        value={notificationSettings.security?.doors_ug ?? true}
+                                        onValueChange={() => toggleSetting('security', 'doors_ug')}
+                                        trackColor={{ false: '#334155', true: '#3B82F6' }}
+                                        thumbColor={'#fff'}
+                                    />
                                 </View>
-                                <View style={{ flex: 1, marginLeft: 12 }}>
-                                    <Text style={styles.settingLabel}>Sicherheit</Text>
-                                    <Text style={styles.settingDescription}>Haustüre, Alarme, Schlösser</Text>
-                                </View>
-                                <Switch
-                                    value={config.security}
-                                    onValueChange={() => toggleSetting('security')}
-                                    trackColor={{ false: '#334155', true: '#3B82F6' }}
-                                    thumbColor={'#fff'}
-                                />
                             </View>
 
-                            <View style={styles.settingRow}>
-                                <View style={[styles.iconBadge, { backgroundColor: 'rgba(59, 130, 246, 0.15)' }]}>
-                                    <Bell size={20} color="#3B82F6" />
+                            {/* HAUSHALT */}
+                            <View style={styles.settingGroup}>
+                                <Text style={styles.groupTitle}>HAUSHALT</Text>
+                                <View style={styles.settingRow}>
+                                    <View style={[styles.iconBadge, { backgroundColor: 'rgba(16, 185, 129, 0.15)' }]}>
+                                        <CheckCircle size={20} color="#10B981" />
+                                    </View>
+                                    <View style={{ flex: 1, marginLeft: 12 }}>
+                                        <Text style={styles.settingLabel}>Einkaufs-Erinnerung</Text>
+                                        <Text style={styles.settingDescription}>Wenn du im Laden bist</Text>
+                                    </View>
+                                    <Switch
+                                        value={notificationSettings.household?.shopping ?? true}
+                                        onValueChange={() => toggleSetting('household', 'shopping')}
+                                        trackColor={{ false: '#334155', true: '#3B82F6' }}
+                                        thumbColor={'#fff'}
+                                    />
                                 </View>
-                                <View style={{ flex: 1, marginLeft: 12 }}>
-                                    <Text style={styles.settingLabel}>Haushaltsgeräte</Text>
-                                    <Text style={styles.settingDescription}>Waschmaschine, Tumbler, etc.</Text>
-                                </View>
-                                <Switch
-                                    value={config.appliances}
-                                    onValueChange={() => toggleSetting('appliances')}
-                                    trackColor={{ false: '#334155', true: '#3B82F6' }}
-                                    thumbColor={'#fff'}
-                                />
                             </View>
-                        </View>
-                    )}
+
+                            {/* ZUHAUSE */}
+                            <View style={styles.settingGroup}>
+                                <Text style={styles.groupTitle}>ZUHAUSE</Text>
+                                <View style={styles.settingRow}>
+                                    <View style={[styles.iconBadge, { backgroundColor: 'rgba(59, 130, 246, 0.15)' }]}>
+                                        <MapPin size={20} color="#3B82F6" />
+                                    </View>
+                                    <View style={{ flex: 1, marginLeft: 12 }}>
+                                        <Text style={styles.settingLabel}>Willkommen Zuhause</Text>
+                                        <Text style={styles.settingDescription}>Geofencing (100m Radius)</Text>
+                                    </View>
+                                    <Switch
+                                        value={notificationSettings.home?.welcome ?? true}
+                                        onValueChange={() => toggleSetting('home', 'welcome')}
+                                        trackColor={{ false: '#334155', true: '#3B82F6' }}
+                                        thumbColor={'#fff'}
+                                    />
+                                </View>
+
+                                <View style={[styles.settingRow, { borderTopWidth: 1, borderTopColor: '#1E293B' }]}>
+                                    <View style={[styles.iconBadge, { backgroundColor: 'rgba(245, 158, 11, 0.15)' }]}>
+                                        <Bell size={20} color="#F59E0B" />
+                                    </View>
+                                    <View style={{ flex: 1, marginLeft: 12 }}>
+                                        <Text style={styles.settingLabel}>Türklingel</Text>
+                                        <Text style={styles.settingDescription}>Wenn jemand klingelt</Text>
+                                    </View>
+                                    <Switch
+                                        value={notificationSettings.home?.doorbell ?? true}
+                                        onValueChange={() => toggleSetting('home', 'doorbell')}
+                                        trackColor={{ false: '#334155', true: '#3B82F6' }}
+                                        thumbColor={'#fff'}
+                                    />
+                                </View>
+                            </View>
+
+                            {/* WETTER */}
+                            <View style={styles.settingGroup}>
+                                <Text style={styles.groupTitle}>WETTER</Text>
+                                <View style={styles.settingRow}>
+                                    <View style={[styles.iconBadge, { backgroundColor: 'rgba(99, 102, 241, 0.15)' }]}>
+                                        <Shield size={20} color="#6366F1" />
+                                    </View>
+                                    <View style={{ flex: 1, marginLeft: 12 }}>
+                                        <Text style={styles.settingLabel}>Wetterwarnung</Text>
+                                        <Text style={styles.settingDescription}>Sturm, Gewitter, etc.</Text>
+                                    </View>
+                                    <Switch
+                                        value={notificationSettings.weather?.warning ?? true}
+                                        onValueChange={() => toggleSetting('weather', 'warning')}
+                                        trackColor={{ false: '#334155', true: '#3B82F6' }}
+                                        thumbColor={'#fff'}
+                                    />
+                                </View>
+                            </View>
+
+                            {/* BABY */}
+                            <View style={styles.settingGroup}>
+                                <Text style={styles.groupTitle}>BABYPHONE</Text>
+                                <View style={styles.settingRow}>
+                                    <View style={[styles.iconBadge, { backgroundColor: 'rgba(236, 72, 153, 0.15)' }]}>
+                                        <ScanFace size={20} color="#EC4899" />
+                                    </View>
+                                    <View style={{ flex: 1, marginLeft: 12 }}>
+                                        <Text style={styles.settingLabel}>Baby Weint</Text>
+                                        <Text style={styles.settingDescription}>Benachrichtigung bei Schreien</Text>
+                                    </View>
+                                    <Switch
+                                        value={notificationSettings.baby?.cry ?? true}
+                                        onValueChange={() => toggleSetting('baby', 'cry')}
+                                        trackColor={{ false: '#334155', true: '#3B82F6' }}
+                                        thumbColor={'#fff'}
+                                    />
+                                </View>
+                            </View>
+                        </>
+                    )
+                    }
 
                     <View style={styles.settingGroup}>
                         <Text style={styles.groupTitle}>DIAGNOSE</Text>
@@ -244,12 +263,12 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
 
                     <View style={styles.infoBox}>
                         <Text style={styles.infoText}>
-                            Hinweis: Diese Einstellungen steuern "Helper" in Home Assistant. Deine Automatisierungen müssen diese prüfen.
+                            Hinweis: Diese Einstellungen gelten nur für dieses Gerät.
                         </Text>
                     </View>
-                </ScrollView>
-            </View>
-        </Modal>
+                </ScrollView >
+            </View >
+        </Modal >
     );
 };
 
@@ -260,14 +279,15 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
 interface SettingsSectionProps {
     title: string;
     children: React.ReactNode;
+    colors: any; // Using explicit prop for colors
 }
 
-const SettingsSection = ({ title, children }: SettingsSectionProps) => (
+const SettingsSection = ({ title, children, colors }: SettingsSectionProps) => (
     <View style={styles.section}>
-        <Text style={styles.sectionTitle}>
+        <Text style={[styles.sectionTitle, { color: colors.subtext }]}>
             {title}
         </Text>
-        <View style={styles.sectionContent}>
+        <View style={[styles.sectionContent, { backgroundColor: colors.card, borderColor: colors.border }]}>
             {children}
         </View>
     </View>
@@ -281,6 +301,7 @@ interface SettingsRowProps {
     onPress?: () => void;
     showChevron?: boolean;
     isLast?: boolean;
+    colors: any; // Using explicit prop for colors 
 }
 
 const SettingsRow = ({
@@ -290,20 +311,21 @@ const SettingsRow = ({
     value,
     onPress,
     showChevron = false,
-    isLast = false
+    isLast = false,
+    colors
 }: SettingsRowProps) => (
     <Pressable
         onPress={onPress}
-        style={[styles.row, !isLast && styles.rowBorder]}
+        style={[styles.row, !isLast && { borderBottomWidth: 1, borderBottomColor: colors.border }, { backgroundColor: colors.card }]}
     >
         <View style={[styles.iconContainer, { backgroundColor: iconColor + '20' }]}>
             {icon}
         </View>
         <View style={styles.rowContent}>
-            <Text style={styles.rowLabel}>{label}</Text>
-            {value && <Text style={styles.rowValue}>{value}</Text>}
+            <Text style={[styles.rowLabel, { color: colors.text }]}>{label}</Text>
+            {value && <Text style={[styles.rowValue, { color: colors.subtext }]}>{value}</Text>}
         </View>
-        {showChevron && <ChevronRight size={16} color="#64748B" />}
+        {showChevron && <ChevronRight size={16} color={colors.subtext} />}
     </Pressable>
 );
 
@@ -330,12 +352,19 @@ export default function Settings() {
         entities,
         isConnecting
     } = useHomeAssistant();
+    const { theme, setTheme, colors } = useTheme();
 
     const [haUrl, setHaUrl] = useState('');
     const [haToken, setHaToken] = useState('');
     const [isSaving, setIsSaving] = useState(false);
     const [testResult, setTestResult] = useState<'success' | 'error' | null>(null);
     const [notificationModalVisible, setNotificationModalVisible] = useState(false);
+    const [isHAExpanded, setIsHAExpanded] = useState(false);
+
+    // Effect to update status bar style based on theme
+    useEffect(() => {
+        // This side effect is handled in ThemeProvider, but we can double check logic here if needed.
+    }, [theme]);
 
     // Load saved credentials on mount
     useEffect(() => {
@@ -364,6 +393,7 @@ export default function Settings() {
 
             if (success) {
                 Alert.alert('Erfolg', 'Verbindung zu Home Assistant hergestellt!');
+                setIsHAExpanded(false); // Auto-collapse on success
             } else {
                 Alert.alert('Fehler', 'Verbindung fehlgeschlagen. Überprüfe URL und Token.');
             }
@@ -393,230 +423,286 @@ export default function Settings() {
         );
     };
 
-    return (
-        <SafeAreaView style={styles.container}>
-            <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                style={styles.keyboardView}
-            >
-                <ScrollView
-                    style={styles.scrollView}
-                    contentContainerStyle={[styles.scrollContent, { paddingHorizontal: isTablet ? 24 : 16 }]}
-                    showsVerticalScrollIndicator={false}
-                >
-                    {/* Header */}
-                    <View style={styles.header}>
-                        <Text style={styles.title}>Optionen</Text>
-                    </View>
+    const ThemeCard = ({ itemTheme }: { itemTheme: ThemeType }) => {
+        const isActive = theme === itemTheme;
+        const themeConfig = THEMES[itemTheme];
 
-                    {/* User Profile Card */}
-                    <View style={styles.profileCard}>
-                        <LinearGradient
-                            colors={['#3B82F6', '#1D4ED8']}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 1 }}
-                            style={styles.profileGradient}
-                        >
-                            <View style={styles.profileContent}>
-                                <View style={styles.avatar}>
-                                    <User size={32} color="#fff" />
+        return (
+            <Pressable
+                onPress={() => setTheme(itemTheme)}
+                style={{
+                    marginRight: 12,
+                    width: 100,
+                    height: 140,
+                    borderRadius: 16,
+                    backgroundColor: themeConfig.card,
+                    borderWidth: isActive ? 2 : 1,
+                    borderColor: isActive ? colors.accent : themeConfig.border,
+                    overflow: 'hidden',
+                    position: 'relative',
+                    shadowColor: "#000",
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.2,
+                    shadowRadius: 4,
+                    elevation: 4,
+                }}
+            >
+                {/* Preview Header / Background */}
+                <View style={{ flex: 1, backgroundColor: themeConfig.background, alignItems: 'center', justifyContent: 'center' }}>
+                    {/* Mini UI Representation */}
+                    <View style={{ width: '80%', height: 8, borderRadius: 4, backgroundColor: themeConfig.card, marginBottom: 6 }} />
+                    <View style={{ flexDirection: 'row', gap: 4 }}>
+                        <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: themeConfig.accent }} />
+                        <View style={{ width: 40, height: 24, borderRadius: 6, backgroundColor: themeConfig.card }} />
+                    </View>
+                </View>
+
+                {/* Label */}
+                <View style={{ padding: 10, backgroundColor: themeConfig.card, borderTopWidth: 1, borderTopColor: themeConfig.border }}>
+                    <Text style={{
+                        color: themeConfig.text,
+                        fontSize: 12,
+                        fontWeight: '600',
+                        textAlign: 'center',
+                        textTransform: 'capitalize'
+                    }}>
+                        {itemTheme}
+                    </Text>
+                </View>
+
+                {isActive && (
+                    <View style={{ position: 'absolute', top: 6, right: 6, backgroundColor: colors.accent, borderRadius: 10, padding: 2 }}>
+                        <CheckCircle size={14} color="#fff" />
+                    </View>
+                )}
+            </Pressable>
+        );
+    };
+
+    return (
+        <View style={[styles.container, { backgroundColor: colors.background }]}>
+            {/* Background Image Layer */}
+            {colors.backgroundImage && (
+                <View style={StyleSheet.absoluteFill}>
+                    <Image
+                        source={colors.backgroundImage}
+                        style={{ width: '100%', height: '100%', resizeMode: 'cover', opacity: 1 }}
+                        blurRadius={0}
+                    />
+                    {/* Optional Gradient Overlay for readability if needed, currently managed by theme colors */}
+                </View>
+            )}
+
+            <SafeAreaView style={{ flex: 1 }}>
+                <KeyboardAvoidingView
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    style={styles.keyboardView}
+                >
+                    <ScrollView
+                        style={styles.scrollView}
+                        contentContainerStyle={[styles.scrollContent, { paddingHorizontal: isTablet ? 24 : 16 }]}
+                        showsVerticalScrollIndicator={false}
+                    >
+                        {/* Header */}
+                        <View style={styles.header}>
+                            <Text style={[styles.title, { color: colors.text }]}>Optionen</Text>
+                        </View>
+
+                        {/* User Profile Card */}
+                        <View style={[styles.profileCard, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }]}>
+                            <View style={[styles.profileContent, { padding: 20 }]}>
+                                <View style={[styles.avatar, { backgroundColor: colors.background }]}>
+                                    <User size={32} color={colors.accent} />
                                 </View>
                                 <View style={styles.profileInfo}>
-                                    <Text style={styles.profileLabel}>Angemeldet als</Text>
-                                    <Text style={styles.profileEmail}>{user?.email}</Text>
+                                    <Text style={[styles.profileLabel, { color: colors.subtext }]}>Angemeldet als</Text>
+                                    <Text style={[styles.profileEmail, { color: colors.text }]}>{user?.email}</Text>
                                 </View>
-                            </View>
-                        </LinearGradient>
-                    </View>
-
-                    {/* Connection Status */}
-                    <SettingsSection title="Home Assistant">
-                        <View style={styles.statusRow}>
-                            <View style={styles.statusInfo}>
-                                {isConnected ? (
-                                    <View style={[styles.statusIcon, styles.statusIconSuccess]}>
-                                        <Wifi size={20} color="#22C55E" />
-                                    </View>
-                                ) : (
-                                    <View style={[styles.statusIcon, styles.statusIconError]}>
-                                        <WifiOff size={20} color="#EF4444" />
-                                    </View>
-                                )}
-                                <View style={styles.statusTextContainer}>
-                                    <Text style={styles.statusTitle}>
-                                        {isConnected ? 'Verbunden' : 'Nicht verbunden'}
-                                    </Text>
-                                    {isConnected && (
-                                        <Text style={styles.statusSubtitle}>
-                                            {entities.length} Geräte geladen
-                                        </Text>
-                                    )}
-                                </View>
-                            </View>
-                            <View style={[styles.statusDot, isConnected ? styles.bgSuccess : styles.bgError]} />
-                        </View>
-
-                        {/* URL Input */}
-                        <View style={styles.inputContainer}>
-                            <Text style={styles.inputLabel}>Server URL</Text>
-                            <View style={styles.inputWrapper}>
-                                <View style={styles.inputIcon}>
-                                    <Server size={18} color="#64748B" />
-                                </View>
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="http://homeassistant.local:8123"
-                                    placeholderTextColor="#64748B"
-                                    value={haUrl}
-                                    onChangeText={setHaUrl}
-                                    autoCapitalize="none"
-                                    autoCorrect={false}
-                                    keyboardType="url"
-                                />
                             </View>
                         </View>
 
-                        {/* Token Input */}
-                        <View style={[styles.inputContainer, styles.lastInput]}>
-                            <Text style={styles.inputLabel}>Access Token</Text>
-                            <View style={styles.inputWrapper}>
-                                <View style={styles.inputIcon}>
-                                    <Key size={18} color="#64748B" />
-                                </View>
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="Long-Lived Access Token"
-                                    placeholderTextColor="#64748B"
-                                    value={haToken}
-                                    onChangeText={setHaToken}
-                                    autoCapitalize="none"
-                                    autoCorrect={false}
-                                    secureTextEntry
-                                />
-                            </View>
-                            <Text style={styles.helperText}>
-                                Profil → Sicherheit → Long-Lived Access Token
-                            </Text>
+                        {/* THEME SELECTION - MOVED TO MAIN SCREEN */}
+                        <View style={styles.section}>
+                            <Text style={[styles.sectionTitle, { color: colors.subtext }]}>DESIGN</Text>
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -4, paddingHorizontal: 4, paddingBottom: 8 }}>
+                                {(Object.keys(THEMES) as ThemeType[]).map((t) => (
+                                    <ThemeCard key={t} itemTheme={t} />
+                                ))}
+                            </ScrollView>
                         </View>
 
-                        {/* Test Result */}
-                        {testResult && (
-                            <View style={[
-                                styles.resultContainer,
-                                testResult === 'success' ? styles.resultSuccess : styles.resultError
-                            ]}>
-                                {testResult === 'success' ? (
-                                    <CheckCircle size={18} color="#22C55E" />
-                                ) : (
-                                    <XCircle size={18} color="#EF4444" />
-                                )}
-                                <Text style={[
-                                    styles.resultText,
-                                    testResult === 'success' ? styles.textSuccess : styles.textError
-                                ]}>
-                                    {testResult === 'success' ? 'Verbindung erfolgreich!' : 'Verbindung fehlgeschlagen'}
-                                </Text>
-                            </View>
-                        )}
-
-                        {/* Save Button */}
-                        <View style={styles.saveContainer}>
-                            <Pressable
-                                onPress={handleSaveAndConnect}
-                                disabled={isSaving || isConnecting}
-                                style={[
-                                    styles.saveButton,
-                                    (isSaving || isConnecting) && styles.saveButtonDisabled
-                                ]}
-                            >
-                                {isSaving || isConnecting ? (
-                                    <ActivityIndicator size="small" color="white" />
-                                ) : (
-                                    <>
-                                        <Save size={18} color="white" />
-                                        <Text style={styles.saveButtonText}>
-                                            Speichern & Verbinden
-                                        </Text>
-                                    </>
-                                )}
-                            </Pressable>
-                        </View>
-                    </SettingsSection>
-
-                    {/* App Settings */}
-                    <SettingsSection title="App">
-                        <SettingsRow
-                            icon={<Bell size={20} color={notificationSettings.enabled ? '#3B82F6' : '#94A3B8'} />}
-                            iconColor={notificationSettings.enabled ? '#3B82F6' : '#94A3B8'}
-                            label="Benachrichtigungen"
-                            showChevron
-                            onPress={() => setNotificationModalVisible(true)}
-                        />
-                        <SettingsRow
-                            icon={<Palette size={20} color="#8B5CF6" />}
-                            iconColor="#8B5CF6"
-                            label="Erscheinungsbild"
-                            value="Dunkel"
-                            showChevron
-                        />
-                    </SettingsSection>
-
-                    <SettingsSection title="Standort">
-                        <SettingsRow
-                            icon={<MapPin size={20} color={isGeofencingActive ? '#10B981' : '#94A3B8'} />}
-                            iconColor={isGeofencingActive ? '#10B981' : '#94A3B8'}
-                            label="Standort als Zuhause setzen"
-                            value={isGeofencingActive ? 'Aktiv' : 'Inaktiv'}
-                            onPress={setHomeLocation}
-                        />
-                    </SettingsSection>
-
-                    <SettingsSection title="Sicherheit">
-                        {isBiometricsSupported && (
+                        {/* App Settings */}
+                        {/* App Settings */}
+                        <SettingsSection title="App" colors={colors}>
                             <SettingsRow
-                                icon={<ScanFace size={20} color="#0EA5E9" />}
-                                iconColor="#0EA5E9"
-                                label="Face ID / Touch ID"
-                                value={isBiometricsEnabled ? 'Aktiv' : 'Inaktiv'}
-                                onPress={toggleBiometrics}
+                                icon={<Bell size={20} color={notificationSettings.enabled ? colors.accent : colors.subtext} />}
+                                iconColor={notificationSettings.enabled ? colors.accent : colors.subtext}
+                                label="Benachrichtigungen"
+                                showChevron
+                                onPress={() => setNotificationModalVisible(true)}
+                                isLast
+                                colors={colors}
                             />
-                        )}
-                        <SettingsRow
-                            icon={<Palette size={20} color="#8B5CF6" />}
-                            iconColor="#8B5CF6"
-                            label="Erscheinungsbild"
-                            value="Dunkel"
-                            showChevron
-                        />
-                        <SettingsRow
-                            icon={<Shield size={20} color="#22C55E" />}
-                            iconColor="#22C55E"
-                            label="Datenschutz"
-                            showChevron
-                            isLast
-                        />
-                    </SettingsSection>
+                        </SettingsSection>
 
-                    {/* Logout */}
-                    <Pressable
-                        onPress={handleLogout}
-                        style={styles.logoutButton}
-                    >
-                        <LogOut size={18} color="#EF4444" />
-                        <Text style={styles.logoutText}>Abmelden</Text>
-                    </Pressable>
+                        <SettingsSection title="Standort" colors={colors}>
+                            <SettingsRow
+                                icon={<MapPin size={20} color={isGeofencingActive ? colors.success : colors.subtext} />}
+                                iconColor={isGeofencingActive ? colors.success : colors.subtext}
+                                label="Standort als Zuhause setzen"
+                                value={isGeofencingActive ? 'Aktiv' : 'Inaktiv'}
+                                onPress={setHomeLocation}
+                                isLast
+                                colors={colors}
+                            />
+                        </SettingsSection>
 
-                    {/* Version Info */}
-                    <Text style={styles.versionText}>
-                        SmartHome Pro v1.0.0
-                    </Text>
-                </ScrollView>
-            </KeyboardAvoidingView>
-            <NotificationSettingsModal
-                visible={notificationModalVisible}
-                onClose={() => setNotificationModalVisible(false)}
-            />
-        </SafeAreaView>
+                        <SettingsSection title="Sicherheit" colors={colors}>
+                            {isBiometricsSupported && (
+                                <SettingsRow
+                                    icon={<ScanFace size={20} color={colors.accent} />}
+                                    iconColor={colors.accent}
+                                    label={Platform.OS === 'ios' ? 'Face ID / Touch ID' : 'Biometrie'}
+                                    value={isBiometricsEnabled ? 'Aktiv' : 'Inaktiv'}
+                                    onPress={toggleBiometrics}
+                                    colors={colors}
+                                />
+                            )}
+                            <SettingsRow
+                                icon={<Shield size={20} color={colors.success} />}
+                                iconColor={colors.success}
+                                label="Datenschutz"
+                                showChevron
+                                isLast
+                                colors={colors}
+                            />
+                        </SettingsSection>
+
+                        {/* HOME ASSISTANT - COLLAPSIBLE AT BOTTOM */}
+                        <View style={styles.section}>
+                            <Pressable
+                                onPress={() => setIsHAExpanded(!isHAExpanded)}
+                                style={[styles.sectionContent, {
+                                    backgroundColor: colors.card,
+                                    borderColor: colors.border,
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    padding: 16,
+                                    justifyContent: 'space-between'
+                                }]}
+                            >
+                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                    <View style={[styles.iconContainer, { backgroundColor: isConnected ? colors.success + '20' : colors.error + '20' }]}>
+                                        <Server size={20} color={isConnected ? colors.success : colors.error} />
+                                    </View>
+                                    <View>
+                                        <Text style={[styles.rowLabel, { color: colors.text }]}>Home Assistant</Text>
+                                        <Text style={[styles.rowValue, { color: isConnected ? colors.success : colors.error, marginTop: 2 }]}>
+                                            {isConnected ? 'Verbunden' : 'Nicht verbunden'}
+                                        </Text>
+                                    </View>
+                                </View>
+                                {isHAExpanded ? <ChevronRight size={20} color={colors.subtext} style={{ transform: [{ rotate: '90deg' }] }} /> : <ChevronRight size={20} color={colors.subtext} />}
+                            </Pressable>
+
+                            {isHAExpanded && (
+                                <View style={[styles.sectionContent, {
+                                    marginTop: 8,
+                                    backgroundColor: colors.card,
+                                    borderColor: colors.border,
+                                    padding: 16
+                                }]}>
+                                    {/* URL Input */}
+                                    <View style={styles.inputContainer}>
+                                        <Text style={[styles.inputLabel, { color: colors.subtext }]}>Server URL</Text>
+                                        <View style={[styles.inputWrapper, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                                            <View style={styles.inputIcon}>
+                                                <Server size={18} color={colors.subtext} />
+                                            </View>
+                                            <TextInput
+                                                style={[styles.input, { color: colors.text }]}
+                                                placeholder="http://homeassistant.local:8123"
+                                                placeholderTextColor={colors.subtext}
+                                                value={haUrl}
+                                                onChangeText={setHaUrl}
+                                                autoCapitalize="none"
+                                                autoCorrect={false}
+                                                keyboardType="url"
+                                            />
+                                        </View>
+                                    </View>
+
+                                    {/* Token Input */}
+                                    <View style={[styles.inputContainer, styles.lastInput]}>
+                                        <Text style={[styles.inputLabel, { color: colors.subtext }]}>Access Token</Text>
+                                        <View style={[styles.inputWrapper, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                                            <View style={styles.inputIcon}>
+                                                <Key size={18} color={colors.subtext} />
+                                            </View>
+                                            <TextInput
+                                                style={[styles.input, { color: colors.text }]}
+                                                placeholder="Long-Lived Access Token"
+                                                placeholderTextColor={colors.subtext}
+                                                value={haToken}
+                                                onChangeText={setHaToken}
+                                                autoCapitalize="none"
+                                                autoCorrect={false}
+                                                secureTextEntry
+                                            />
+                                        </View>
+                                        <Text style={[styles.helperText, { color: colors.subtext }]}>
+                                            Profil → Sicherheit → Long-Lived Access Token
+                                        </Text>
+                                    </View>
+
+                                    {/* Save Button */}
+                                    <View style={styles.saveContainer}>
+                                        <Pressable
+                                            onPress={handleSaveAndConnect}
+                                            disabled={isSaving || isConnecting}
+                                            style={[
+                                                styles.saveButton,
+                                                { backgroundColor: colors.accent },
+                                                (isSaving || isConnecting) && styles.saveButtonDisabled
+                                            ]}
+                                        >
+                                            {isSaving || isConnecting ? (
+                                                <ActivityIndicator size="small" color="white" />
+                                            ) : (
+                                                <>
+                                                    <Save size={18} color="white" />
+                                                    <Text style={styles.saveButtonText}>
+                                                        Speichern & Verbinden
+                                                    </Text>
+                                                </>
+                                            )}
+                                        </Pressable>
+                                    </View>
+                                </View>
+                            )}
+                        </View>
+
+                        {/* Logout */}
+                        <Pressable
+                            onPress={handleLogout}
+                            style={[styles.logoutButton, { marginTop: 8 }]}
+                        >
+                            <LogOut size={18} color={colors.error} />
+                            <Text style={[styles.logoutText, { color: colors.error }]}>Abmelden</Text>
+                        </Pressable>
+
+                        {/* Version Info */}
+                        <Text style={[styles.versionText, { color: colors.subtext }]}>
+                            SmartHome Pro v1.1.0 • Theme: {theme}
+                        </Text>
+                    </ScrollView>
+                </KeyboardAvoidingView>
+                <NotificationSettingsModal
+                    visible={notificationModalVisible}
+                    onClose={() => setNotificationModalVisible(false)}
+                />
+            </SafeAreaView>
+        </View>
     );
 }
 

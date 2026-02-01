@@ -5,6 +5,8 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { Users, UserPlus, Mail, Crown, X, Send, Lock, Eye, EyeOff } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useTheme } from '../../contexts/ThemeContext';
+import { Image } from 'react-native';
 
 interface FamilyMember {
     id: string;
@@ -22,6 +24,7 @@ interface Invitation {
 
 export default function Family() {
     const { width } = useWindowDimensions();
+    const { colors } = useTheme();
     const isTablet = width >= 768;
 
     const { user } = useAuth();
@@ -146,14 +149,22 @@ export default function Family() {
 
     if (isLoading) {
         return (
-            <SafeAreaView style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#3B82F6" />
+            <SafeAreaView style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+                <ActivityIndicator size="large" color={colors.accent} />
             </SafeAreaView>
         );
     }
 
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+            {colors.backgroundImage && (
+                <View style={[StyleSheet.absoluteFill, { zIndex: -1 }]}>
+                    <Image
+                        source={colors.backgroundImage}
+                        style={{ width: '100%', height: '100%', resizeMode: 'cover' }}
+                    />
+                </View>
+            )}
             <ScrollView
                 style={styles.flex1}
                 contentContainerStyle={{ padding: isTablet ? 24 : 16 }}
@@ -161,8 +172,8 @@ export default function Family() {
                 {/* Header */}
                 <View style={styles.header}>
                     <View>
-                        <Text style={styles.headerTitle}>Familie</Text>
-                        <Text style={styles.headerSubtitle}>
+                        <Text style={[styles.headerTitle, { color: colors.text }]}>Familie</Text>
+                        <Text style={[styles.headerSubtitle, { color: colors.subtext }]}>
                             {members.length} Mitglieder
                         </Text>
                     </View>
@@ -176,12 +187,12 @@ export default function Family() {
 
                 {/* Members Grid */}
                 {members.length === 0 ? (
-                    <View style={styles.emptyStateContainer}>
-                        <View style={styles.emptyStateIcon}>
-                            <Users size={36} color="#64748B" />
+                    <View style={[styles.emptyStateContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                        <View style={[styles.emptyStateIcon, { backgroundColor: colors.background }]}>
+                            <Users size={36} color={colors.subtext} />
                         </View>
-                        <Text style={styles.emptyStateTitle}>Keine Familienmitglieder</Text>
-                        <Text style={styles.emptyStateText}>
+                        <Text style={[styles.emptyStateTitle, { color: colors.text }]}>Keine Familienmitglieder</Text>
+                        <Text style={[styles.emptyStateText, { color: colors.subtext }]}>
                             Lade deine Familie ein, um gemeinsam das Smart Home zu steuern
                         </Text>
                     </View>
@@ -190,7 +201,7 @@ export default function Family() {
                         {members.map((member, index) => (
                             <View
                                 key={member.id}
-                                style={[styles.memberCard, isTablet && styles.width48]}
+                                style={[styles.memberCard, isTablet && styles.width48, { backgroundColor: colors.card, borderColor: colors.border }]}
                             >
                                 <View style={styles.memberCardContent}>
                                     <View style={styles.avatarContainer}>
@@ -205,7 +216,7 @@ export default function Family() {
                                     </View>
                                     <View style={styles.memberInfo}>
                                         <View style={styles.memberEmailRow}>
-                                            <Text style={styles.memberEmail} numberOfLines={1}>
+                                            <Text style={[styles.memberEmail, { color: colors.text }]} numberOfLines={1}>
                                                 {member.email}
                                             </Text>
                                             {member.email === user?.email && (
@@ -240,14 +251,14 @@ export default function Family() {
                             {invitations.map(invite => (
                                 <View
                                     key={invite.id}
-                                    style={styles.inviteCard}
+                                    style={[styles.inviteCard, { backgroundColor: colors.warning + '10', borderColor: colors.warning + '30' }]}
                                 >
-                                    <View style={styles.inviteIcon}>
-                                        <Mail size={18} color="#FBBF24" />
+                                    <View style={[styles.inviteIcon, { backgroundColor: colors.warning + '20' }]}>
+                                        <Mail size={18} color={colors.warning} />
                                     </View>
                                     <View style={styles.inviteInfo}>
-                                        <Text style={styles.inviteEmail}>{invite.email}</Text>
-                                        <Text style={styles.inviteStatus}>Einladung ausstehend</Text>
+                                        <Text style={[styles.inviteEmail, { color: colors.text }]}>{invite.email}</Text>
+                                        <Text style={[styles.inviteStatus, { color: colors.warning }]}>Einladung ausstehend</Text>
                                     </View>
                                 </View>
                             ))}
@@ -260,43 +271,42 @@ export default function Family() {
             <Modal visible={showInviteModal} animationType="slide" transparent>
                 <KeyboardAvoidingView
                     behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                    style={styles.modalOverlay}
                 >
-                    <View style={styles.modalContent}>
-                        <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>Mitglied einladen</Text>
+                    <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
+                        <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+                            <Text style={[styles.modalTitle, { color: colors.text }]}>Mitglied einladen</Text>
                             <Pressable
                                 onPress={() => setShowInviteModal(false)}
-                                style={styles.closeButton}
+                                style={[styles.closeButton, { backgroundColor: colors.background }]}
                             >
-                                <X size={20} color="#94A3B8" />
+                                <X size={20} color={colors.subtext} />
                             </Pressable>
                         </View>
                         <ScrollView style={styles.modalBody}>
-                            <Text style={styles.inputLabel}>E-Mail-Adresse</Text>
-                            <View style={styles.inputContainer}>
+                            <Text style={[styles.inputLabel, { color: colors.subtext }]}>E-Mail-Adresse</Text>
+                            <View style={[styles.inputContainer, { backgroundColor: colors.background, borderColor: colors.border }]}>
                                 <View style={styles.inputIcon}>
-                                    <Mail size={18} color="#64748B" />
+                                    <Mail size={18} color={colors.subtext} />
                                 </View>
                                 <TextInput
-                                    style={styles.textInput}
+                                    style={[styles.textInput, { color: colors.text }]}
                                     placeholder="email@example.com"
-                                    placeholderTextColor="#64748B"
+                                    placeholderTextColor={colors.subtext}
                                     value={inviteEmail}
                                     onChangeText={setInviteEmail}
                                     autoCapitalize="none"
                                     keyboardType="email-address"
                                 />
                             </View>
-                            <Text style={styles.inputLabel}>Initialpasswort</Text>
-                            <View style={styles.inputContainer}>
+                            <Text style={[styles.inputLabel, { color: colors.subtext }]}>Initialpasswort</Text>
+                            <View style={[styles.inputContainer, { backgroundColor: colors.background, borderColor: colors.border }]}>
                                 <View style={styles.inputIcon}>
-                                    <Lock size={18} color="#64748B" />
+                                    <Lock size={18} color={colors.subtext} />
                                 </View>
                                 <TextInput
-                                    style={styles.textInput}
+                                    style={[styles.textInput, { color: colors.text }]}
                                     placeholder="Mindestens 6 Zeichen"
-                                    placeholderTextColor="#64748B"
+                                    placeholderTextColor={colors.subtext}
                                     value={invitePassword}
                                     onChangeText={setInvitePassword}
                                     secureTextEntry={!showPassword}
@@ -306,15 +316,15 @@ export default function Family() {
                                     onPress={() => setShowPassword(!showPassword)}
                                     style={styles.inputIcon}
                                 >
-                                    {showPassword ? <EyeOff size={18} color="#64748B" /> : <Eye size={18} color="#64748B" />}
+                                    {showPassword ? <EyeOff size={18} color={colors.subtext} /> : <Eye size={18} color={colors.subtext} />}
                                 </Pressable>
                             </View>
-                            <Text style={styles.helperText}>
+                            <Text style={[styles.helperText, { color: colors.subtext }]}>
                                 Die Person muss das Passwort beim ersten Login ändern.
                             </Text>
                             <Pressable
                                 onPress={handleInvite}
-                                style={[styles.sendButton, isInviting && styles.sendButtonDisabled]}
+                                style={[styles.sendButton, isInviting && styles.sendButtonDisabled, { backgroundColor: colors.accent }]}
                                 disabled={isInviting}
                             >
                                 {isInviting ? (

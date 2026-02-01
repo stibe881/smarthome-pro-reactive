@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { View, Text, ScrollView, Pressable, Image, useWindowDimensions, StyleSheet, Alert, Modal, FlatList, Linking, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useHomeAssistant } from '../../contexts/HomeAssistantContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import {
     Play, Pause, SkipBack, SkipForward, Volume2,
     Music, WifiOff, Disc, Power, Smartphone, Speaker,
@@ -16,6 +17,7 @@ import { MEDIA_PLAYER_CONFIG, WHITELISTED_PLAYERS } from '../../config/mediaPlay
 
 export default function Media() {
     const { entities, isConnected, isConnecting, callService, getEntityPictureUrl, browseMedia } = useHomeAssistant();
+    const { colors } = useTheme();
     const { width } = useWindowDimensions();
 
     // Spotify Modal State
@@ -369,8 +371,17 @@ export default function Media() {
     const getPlayerName = (entityId: string) => MEDIA_PLAYER_CONFIG[entityId]?.name || 'Unbekannt';
 
     return (
-        <View style={styles.screen}>
-            <LinearGradient colors={['#0f172a', '#020617']} style={StyleSheet.absoluteFill} />
+        <View style={[styles.screen, { backgroundColor: colors.background }]}>
+            {/* Background Image Layer */}
+            {colors.backgroundImage && (
+                <View style={StyleSheet.absoluteFill}>
+                    <Image
+                        source={colors.backgroundImage}
+                        style={{ width: '100%', height: '100%', resizeMode: 'cover', opacity: 1 }}
+                        blurRadius={0}
+                    />
+                </View>
+            )}
 
             {/* Disconnected Overlay */}
             {(!isConnected && !isConnecting) && (
@@ -528,8 +539,10 @@ const HeroPlayer = ({ player, imageUrl, onSelect, onSpotify, onPlayPause, onNext
     onPrev: () => void,
     onPower: (on: boolean) => void,
     onVolume: (v: number) => void,
+
     spotifyActive: boolean
 }) => {
+    const { colors } = useTheme();
     if (!player) return null;
     const isPlaying = player.state === 'playing';
     const isOff = player.state === 'off';
@@ -538,18 +551,16 @@ const HeroPlayer = ({ player, imageUrl, onSelect, onSpotify, onPlayPause, onNext
     const artist = player.attributes.media_artist || player.attributes.media_series_title || (isOff ? 'Tippen zum Starten' : '');
 
     return (
-        <View style={styles.heroContainer}>
+        <View style={[styles.heroContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
             {imageUrl && !isOff ? (
                 <Image source={{ uri: imageUrl }} style={styles.heroBackground} blurRadius={40} />
             ) : (
-                <LinearGradient colors={['#1e293b', '#0f172a']} style={styles.heroBackground} />
+                <LinearGradient colors={[colors.card, colors.background]} style={styles.heroBackground} />
             )}
             <View style={styles.heroOverlay} />
-
             <View style={styles.heroContent}>
-                {/* Header: Dropdown hint */}
-                <Pressable style={styles.heroHeaderSelect} onPress={onSelect}>
-                    <Text style={styles.heroSourceText}>{MEDIA_PLAYER_CONFIG[player.entity_id]?.name || 'Unbekannt'} ▼</Text>
+                <Pressable style={[styles.heroHeaderSelect, { backgroundColor: 'rgba(0,0,0,0.5)' }]} onPress={onSelect}>
+                    <Text style={[styles.heroSourceText, { color: '#CBD5E1' }]}>{MEDIA_PLAYER_CONFIG[player.entity_id]?.name || 'Unbekannt'} ▼</Text>
                 </Pressable>
 
                 {/* Artwork */}
@@ -618,8 +629,10 @@ const ExpandedPlayerRow = ({ player, isSelected, imageUrl, onSelect, onSpotify, 
     onPlayPause: (playing: boolean) => void,
     onPower: (on: boolean) => void,
     onVolume: (v: number) => void,
+
     spotifyActive: boolean
 }) => {
+    const { colors } = useTheme();
     const isOff = player.state === 'off';
     const isPlaying = player.state === 'playing';
     const name = MEDIA_PLAYER_CONFIG[player.entity_id]?.name || 'Unbekannt';
@@ -628,19 +641,19 @@ const ExpandedPlayerRow = ({ player, isSelected, imageUrl, onSelect, onSpotify, 
     return (
         <Pressable
             onPress={onSelect}
-            style={[styles.expandedPlayer, isSelected && styles.expandedPlayerSelected, isOff && { opacity: 0.8 }]}
+            style={[styles.expandedPlayer, { backgroundColor: colors.card, borderColor: colors.border }, isSelected && { borderColor: colors.accent, backgroundColor: colors.card }, isOff && { opacity: 0.8 }]}
         >
             <View style={styles.expandedHeader}>
-                <View style={styles.miniIcon}>
+                <View style={[styles.miniIcon, { backgroundColor: colors.background }]}>
                     {imageUrl && !isOff ? (
                         <Image source={{ uri: imageUrl }} style={{ width: 48, height: 48, borderRadius: 8 }} />
                     ) : (
-                        <Speaker size={24} color="#94A3B8" />
+                        <Speaker size={24} color={colors.subtext} />
                     )}
                 </View>
                 <View style={{ flex: 1, paddingHorizontal: 12 }}>
-                    <Text style={[styles.miniName, isSelected && { color: '#60A5FA' }]}>{name}</Text>
-                    <Text style={styles.miniStatus} numberOfLines={1}>
+                    <Text style={[styles.miniName, { color: colors.text }, isSelected && { color: colors.accent }]}>{name}</Text>
+                    <Text style={[styles.miniStatus, { color: colors.subtext }]} numberOfLines={1}>
                         {isOff ? 'Aus' : (player.attributes.media_title || 'Bereit')}
                     </Text>
                 </View>

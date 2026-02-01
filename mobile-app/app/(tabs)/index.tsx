@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useHomeAssistant } from '../../contexts/HomeAssistantContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import { Lightbulb, Blinds, Thermometer, Droplets, Wind, Lock, Unlock, Zap, Music, Play, Pause, SkipForward, SkipBack, Bot, PartyPopper, Calendar, CloudRain, Cloud, Sun, Moon, ShoppingCart, Info, Loader2, UtensilsCrossed, Shirt, Clapperboard, BedDouble, ChevronRight, Shield, LucideIcon, DoorOpen, DoorClosed, WifiOff, Tv, X, Wifi, RefreshCw, Power, Battery, PlayCircle, Home, Map, MapPin, Fan, Clock, Video } from 'lucide-react-native';
 import SecurityModal from '../../components/SecurityModal';
 import { WHITELISTED_PLAYERS } from '../../config/mediaPlayers';
@@ -21,6 +22,7 @@ import ShoppingListModal from '../../components/ShoppingListModal';
 import WeatherForecastModal from '../../components/WeatherForecastModal';
 import HeaderClock from '../../components/HeaderClock';
 import ActionFeedbackModal from '../../components/ActionFeedbackModal';
+import QuickActionInfoModal, { QuickActionInfo } from '../../components/QuickActionInfoModal';
 
 interface HeroStatCardProps {
     icon: LucideIcon;
@@ -48,53 +50,57 @@ const HeroStatCard = memo(({
     onPress,
     onLongPress,
     statusText
-}: HeroStatCardProps) => (
-    <Pressable
-        onPress={onPress}
-        onLongPress={onLongPress}
-        style={[styles.heroCard, { width: cardWidth }]}
-    >
-        <View style={[styles.heroCardGradient, { backgroundColor: isActive ? gradient[0] : '#1E293B' }]}>
-            <View style={[styles.decorativeCircle, { backgroundColor: isActive ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.03)' }]} />
+}: HeroStatCardProps) => {
+    const { colors } = useTheme();
+    return (
+        <Pressable
+            onPress={onPress}
+            onLongPress={onLongPress}
+            style={[styles.heroCard, { width: cardWidth, backgroundColor: colors.card }]} // Override Logic
+        >
+            <View style={[styles.heroCardGradient, { backgroundColor: isActive ? gradient[0] : colors.card }]}>
+                <View style={[styles.decorativeCircle, { backgroundColor: isActive ? 'rgba(255,255,255,0.1)' : colors.border + '30' }]} />
 
-            <View style={styles.heroCardHeader}>
-                <View style={[styles.iconBubble, { backgroundColor: isActive ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.05)' }]}>
-                    <Icon size={22} color={isActive ? '#fff' : iconColor} />
+                <View style={styles.heroCardHeader}>
+                    <View style={[styles.iconBubble, { backgroundColor: isActive ? 'rgba(255,255,255,0.2)' : colors.background }]}>
+                        <Icon size={22} color={isActive ? '#fff' : iconColor} />
+                    </View>
+                    <ChevronRight size={16} color={isActive ? "rgba(255,255,255,0.3)" : colors.subtext} />
                 </View>
-                <ChevronRight size={16} color="rgba(255,255,255,0.3)" />
-            </View>
 
-            <View style={styles.heroCardContent}>
-                <View style={styles.valueRow}>
-                    {statusText ? (
-                        <Text style={[styles.heroValue, { fontSize: 18 }]} numberOfLines={1}>{statusText}</Text>
-                    ) : (
-                        <>
-                            <Text style={styles.heroValue}>{value}</Text>
-                            <Text style={styles.heroTotal}>/{total}</Text>
-                        </>
-                    )}
+                <View style={styles.heroCardContent}>
+                    <View style={styles.valueRow}>
+                        {statusText ? (
+                            <Text style={[styles.heroValue, { fontSize: 18, color: isActive ? '#fff' : colors.text }]} numberOfLines={1}>{statusText}</Text>
+                        ) : (
+                            <>
+                                <Text style={[styles.heroValue, { color: isActive ? '#fff' : colors.text }]}>{value}</Text>
+                                <Text style={[styles.heroTotal, { color: isActive ? 'rgba(255,255,255,0.5)' : colors.subtext }]}>/{total}</Text>
+                            </>
+                        )}
+                    </View>
+                    <Text style={[styles.heroLabel, { color: isActive ? 'rgba(255,255,255,0.8)' : colors.subtext }]}>
+                        {label}
+                    </Text>
                 </View>
-                <Text style={[styles.heroLabel, { color: isActive ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.5)' }]}>
-                    {label}
-                </Text>
-            </View>
 
-            <View style={styles.progressContainer}>
-                <View style={[styles.progressBar, {
-                    width: statusText ? (isActive ? '100%' : '0%') : `${total > 0 ? (value / total) * 100 : 0}%`,
-                    backgroundColor: isActive ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.1)'
-                }]} />
+                <View style={styles.progressContainer}>
+                    <View style={[styles.progressBar, {
+                        width: statusText ? (isActive ? '100%' : '0%') : `${total > 0 ? (value / total) * 100 : 0}%`,
+                        backgroundColor: isActive ? 'rgba(255,255,255,0.4)' : colors.border
+                    }]} />
+                </View>
             </View>
-        </View>
-    </Pressable>
-));
+        </Pressable>
+    )
+});
 
 interface QuickActionProps {
     icon: LucideIcon;
     iconColor: string;
     label: string;
     onPress: () => void;
+    onLongPress?: () => void;
     gradient: [string, string];
 }
 
@@ -103,37 +109,53 @@ const QuickAction = memo(({
     iconColor,
     label,
     onPress,
+    onLongPress,
     gradient
-}: QuickActionProps) => (
-    <Pressable onPress={onPress} style={styles.quickAction}>
-        <View style={[styles.quickActionGradient, { backgroundColor: gradient[0] }]}>
-            <Icon size={20} color={iconColor} />
-        </View>
-        <Text style={styles.quickActionLabel}>{label}</Text>
-    </Pressable>
-));
-
-const Tile = ({ label, subtext, icon: Icon, iconColor, activeColor, isActive, onPress, children, activeStyle }: any) => (
-    <Pressable
-        onPress={onPress}
-        style={[
-            styles.tile,
-            isActive && { backgroundColor: activeColor + '15', borderColor: activeColor + '50' },
-            activeStyle
-        ]}
-    >
-        <View style={styles.tileHeader}>
-            <View style={[styles.tileIcon, isActive && { backgroundColor: activeColor }]}>
-                <Icon size={20} color={isActive ? '#FFF' : iconColor} />
+}: QuickActionProps) => {
+    const { colors } = useTheme();
+    return (
+        <Pressable
+            onPress={onPress}
+            onLongPress={onLongPress}
+            delayLongPress={800}
+            style={({ pressed }) => [
+                styles.quickAction,
+                { opacity: pressed ? 0.7 : 1 }
+            ]}
+        >
+            <View style={[styles.quickActionGradient, { backgroundColor: gradient[0], borderColor: colors.border }]}>
+                <Icon size={20} color={iconColor} />
             </View>
-            <Text style={[styles.tileState, isActive && { color: activeColor }]}>
-                {subtext}
-            </Text>
-        </View>
-        <Text numberOfLines={1} style={[styles.tileName, isActive && { color: '#FFF' }]}>{label}</Text>
-        {children}
-    </Pressable>
-);
+            <Text style={[styles.quickActionLabel, { color: colors.subtext }]}>{label}</Text>
+        </Pressable>
+    )
+});
+
+const Tile = ({ label, subtext, icon: Icon, iconColor, activeColor, isActive, onPress, children, activeStyle }: any) => {
+    const { colors } = useTheme();
+    return (
+        <Pressable
+            onPress={onPress}
+            style={[
+                styles.tile,
+                { backgroundColor: colors.card, borderColor: colors.border },
+                isActive && { backgroundColor: activeColor + '15', borderColor: activeColor + '50' },
+                activeStyle
+            ]}
+        >
+            <View style={styles.tileHeader}>
+                <View style={[styles.tileIcon, { backgroundColor: isActive ? activeColor : colors.background }, isActive ? {} : {}]}>
+                    <Icon size={20} color={isActive ? '#FFF' : iconColor} />
+                </View>
+                <Text style={[styles.tileState, { color: colors.subtext }, isActive && { color: activeColor }]}>
+                    {subtext}
+                </Text>
+            </View>
+            <Text numberOfLines={1} style={[styles.tileName, { color: colors.text }, isActive && { color: '#FFF' }]}>{label}</Text>
+            {children}
+        </Pressable>
+    )
+};
 
 const SpecificApplianceTile = ({
     label,
@@ -339,6 +361,7 @@ const LockTile = ({ lock, callService, entities }: { lock: any, callService: any
 };
 
 const SecuritySensorTile = ({ entity }: { entity: any }) => {
+    const { colors } = useTheme();
     let friendlyName = entity.attributes.friendly_name || "Sensor";
     // Clean up names
     friendlyName = friendlyName.replace(' Kontakt', '').replace(' Sensor', '');
@@ -346,16 +369,16 @@ const SecuritySensorTile = ({ entity }: { entity: any }) => {
     const isDoorOpen = entity.state === 'on';
 
     return (
-        <View style={styles.lockCard}>
+        <View style={[styles.lockCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.lockMainAction}>
                 <View style={[styles.lockIcon, { backgroundColor: isDoorOpen ? '#EF4444' : '#10B981' }]}>
                     {isDoorOpen ? <DoorOpen size={24} color="#fff" /> : <DoorClosed size={24} color="#fff" />}
                 </View>
                 <View style={[styles.lockInfo, { justifyContent: 'center', flex: 1 }]}>
-                    <Text style={[styles.lockTitle, isDoorOpen && { color: '#EF4444' }]} numberOfLines={1}>
+                    <Text style={[styles.lockTitle, { color: colors.text }, isDoorOpen && { color: '#EF4444' }]} numberOfLines={1}>
                         {friendlyName}
                     </Text>
-                    <Text style={[styles.lockState, { color: isDoorOpen ? '#EF4444' : '#64748B' }]}>
+                    <Text style={[styles.lockState, { color: isDoorOpen ? '#EF4444' : colors.subtext }]}>
                         {isDoorOpen ? 'OFFEN' : 'GESCHLOSSEN'}
                     </Text>
                 </View>
@@ -367,6 +390,7 @@ const SecuritySensorTile = ({ entity }: { entity: any }) => {
 
 
 const EventTile = ({ calendar, onPress }: { calendar: any, onPress?: () => void }) => {
+    const { colors } = useTheme();
     if (!calendar.attributes.message && !calendar.attributes.all_day) return null;
 
     const isBirthday = calendar.entity_id.includes('birth') || calendar.entity_id.includes('geburt') || calendar.attributes.message?.toLowerCase().includes('geburtstag');
@@ -385,13 +409,13 @@ const EventTile = ({ calendar, onPress }: { calendar: any, onPress?: () => void 
 
     return (
         <Pressable onPress={onPress}>
-            <View style={styles.eventCard}>
+            <View style={[styles.eventCard, { backgroundColor: colors.card }]}>
                 <View style={[styles.eventIcon, isBirthday ? { backgroundColor: '#EC4899' } : { backgroundColor: '#8B5CF6' }]}>
                     {isBirthday ? <PartyPopper size={20} color="#fff" /> : <Calendar size={20} color="#fff" />}
                 </View>
                 <View style={styles.eventInfo}>
-                    <Text style={styles.eventTitle} numberOfLines={1}>{calendar.attributes.message || 'Termin'}</Text>
-                    <Text style={styles.eventTime}>
+                    <Text style={[styles.eventTitle, { color: colors.text }]} numberOfLines={1}>{calendar.attributes.message || 'Termin'}</Text>
+                    <Text style={[styles.eventTime, { color: colors.subtext }]}>
                         {isToday ? 'Heute' : startTime.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })} • {
                             isBirthday
                                 ? (isToday ? 'Heute' : `In ${diffDays} Tagen`)
@@ -410,11 +434,13 @@ const EventTile = ({ calendar, onPress }: { calendar: any, onPress?: () => void 
 
 export default function Dashboard() {
     const router = useRouter();
+    const { colors } = useTheme();
     // --- Calendar Modal Logic ---
     const [calendarModal, setCalendarModal] = useState<{ visible: boolean, entityId: string, title: string, color: string }>({ visible: false, entityId: '', title: '', color: '' });
     const [showShoppingList, setShowShoppingList] = useState(false);
     const [showWeatherForecast, setShowWeatherForecast] = useState(false);
     const [activeFeedback, setActiveFeedback] = useState<'sleep' | 'morning' | 'movie' | 'covers_open' | 'covers_close' | 'vacuum' | 'shop_debug' | null>(null);
+    const [quickActionInfo, setQuickActionInfo] = useState<QuickActionInfo | null>(null);
 
     const handleCalendarPress = (calendar: any) => {
         // Logic: if birthday (geburtstage_2), else use the clicked calendar's ID
@@ -796,14 +822,24 @@ export default function Dashboard() {
 
     if (!isConnected && !isConnecting) {
         return (
-            <SafeAreaView style={styles.container}>
-                <View style={styles.emptyState}>
-                    <View style={[styles.emptyStateCard, { backgroundColor: '#1E293B' }]}>
-                        <View style={styles.emptyStateIcon}>
-                            <WifiOff size={48} color="#64748B" />
+            <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+                {/* Background Image Layer */}
+                {colors.backgroundImage && (
+                    <View style={StyleSheet.absoluteFill}>
+                        <Image
+                            source={colors.backgroundImage}
+                            style={{ width: '100%', height: '100%', resizeMode: 'cover', opacity: 1 }}
+                            blurRadius={0}
+                        />
+                    </View>
+                )}
+                <View style={[styles.emptyState, { backgroundColor: 'transparent' }]}>
+                    <View style={[styles.emptyStateCard, { backgroundColor: colors.card }]}>
+                        <View style={[styles.emptyStateIcon, { backgroundColor: colors.background }]}>
+                            <WifiOff size={48} color={colors.subtext} />
                         </View>
-                        <Text style={styles.emptyStateTitle}>Smart Home nicht verbunden</Text>
-                        <Pressable onPress={connect} style={styles.connectButton}>
+                        <Text style={[styles.emptyStateTitle, { color: colors.text }]}>Smart Home nicht verbunden</Text>
+                        <Pressable onPress={connect} style={[styles.connectButton, { backgroundColor: colors.accent }]}>
                             <Text style={styles.connectButtonText}>Verbinden</Text>
                         </Pressable>
                     </View>
@@ -821,17 +857,28 @@ export default function Dashboard() {
     }
 
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+            {/* Background Image Layer */}
+            {colors.backgroundImage && (
+                <View style={StyleSheet.absoluteFill}>
+                    <Image
+                        source={colors.backgroundImage}
+                        style={{ width: '100%', height: '100%', resizeMode: 'cover', opacity: 1 }}
+                        blurRadius={0}
+                    />
+                </View>
+            )}
+
             <ScrollView
-                style={styles.scrollView}
+                style={[styles.scrollView, { backgroundColor: 'transparent' }]}
                 contentContainerStyle={[styles.scrollContent, { paddingHorizontal: isTablet ? 24 : 16 }]}
                 showsVerticalScrollIndicator={false}
             >
                 {/* Header */}
                 <View style={styles.header}>
                     <View>
-                        <Text style={styles.greeting}>{getGreeting()}</Text>
-                        <Text style={styles.dateText}>
+                        <Text style={[styles.greeting, { color: colors.text }]}>{getGreeting()}</Text>
+                        <Text style={[styles.dateText, { color: colors.subtext }]}>
                             {new Date().toLocaleDateString('de-DE', {
                                 weekday: 'long',
                                 day: 'numeric',
@@ -846,27 +893,27 @@ export default function Dashboard() {
                     )}
 
                     <View style={styles.headerRight}>
-                        {weatherStationTemp && (
+                        {weatherComposite && (
                             <Pressable
                                 onPress={() => setShowWeatherForecast(true)}
                                 style={[
                                     styles.tempBadge,
                                     isWeatherWarning
-                                        ? { backgroundColor: 'rgba(239, 68, 68, 0.2)', borderWidth: 1, borderColor: '#EF4444' }
-                                        : { backgroundColor: 'rgba(16, 185, 129, 0.15)', borderWidth: 0 }
+                                        ? { backgroundColor: colors.error + '33', borderWidth: 1, borderColor: colors.error }
+                                        : { backgroundColor: colors.success + '26', borderWidth: 0 }
                                 ]}
                             >
-                                <WeatherIcon size={14} color={isWeatherWarning ? '#EF4444' : '#10B981'} />
-                                <Text style={[styles.tempText, isWeatherWarning ? { color: '#EF4444' } : { color: '#10B981' }]}>
-                                    {weatherComposite?.attributes?.temperature || weatherStationTemp?.state}°
-                                    {weatherComposite && <Text style={{ fontWeight: '400', opacity: 0.8 }}> {getWeatherText(weatherComposite.state)}</Text>}
+                                <WeatherIcon size={14} color={isWeatherWarning ? colors.error : colors.success} />
+                                <Text style={[styles.tempText, isWeatherWarning ? { color: colors.error } : { color: colors.success }]}>
+                                    {weatherComposite.attributes.temperature}°
+                                    <Text style={{ fontWeight: '400', opacity: 0.8 }}> {getWeatherText(weatherComposite.state)}</Text>
                                 </Text>
                             </Pressable>
                         )}
                         {(() => {
                             const hasItems = shoppingList && shoppingList.state !== '0' && shoppingList.state !== 'unknown';
-                            const badgeColor = hasItems ? '#F59E0B' : '#3B82F6';
-                            const badgeBg = hasItems ? 'rgba(245, 158, 11, 0.15)' : 'rgba(59, 130, 246, 0.15)';
+                            const badgeColor = hasItems ? colors.warning : colors.accent;
+                            const badgeBg = hasItems ? colors.warning + '26' : colors.accent + '26';
                             return (
                                 <Pressable onPress={() => setShowShoppingList(true)} style={[styles.tempBadge, { backgroundColor: badgeBg, borderColor: hasItems ? badgeColor : 'transparent', borderWidth: hasItems ? 1 : 0 }]}>
                                     <ShoppingCart size={14} color={badgeColor} />
@@ -876,7 +923,7 @@ export default function Dashboard() {
                                 </Pressable>
                             );
                         })()}
-                        <View style={[styles.statusDot, { backgroundColor: isConnected ? '#22C55E' : '#EF4444' }]} />
+                        <View style={[styles.statusDot, { backgroundColor: isConnected ? colors.success : colors.error }]} />
                     </View>
                 </View>
 
@@ -911,16 +958,107 @@ export default function Dashboard() {
 
                 {/* Quick Actions (Moved below Appliances) */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Schnellaktionen</Text>
+                    <Text style={[styles.sectionTitle, { color: colors.subtext }]}>Schnellaktionen</Text>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickActionsRow}>
-                        <QuickAction icon={ShoppingCart} iconColor="#EF4444" label="Debug Shop" onPress={() => { debugShoppingLogic(); setActiveFeedback('shop_debug'); }} gradient={['rgba(239, 68, 68, 0.15)', 'rgba(239, 68, 68, 0.05)']} />
+                        <QuickAction
+                            icon={ShoppingCart}
+                            iconColor={colors.error}
+                            label="Debug Shop"
+                            onPress={() => { debugShoppingLogic(); setActiveFeedback('shop_debug'); }}
+                            onLongPress={() => setQuickActionInfo({
+                                title: "Debug Shop",
+                                description: "Prüft die Einkaufslisten-Logik und Geofencing-Status für Fehlerbehebung.",
+                                icon: ShoppingCart,
+                                iconColor: colors.error,
+                                gradient: [colors.error + '26', colors.error + '0D']
+                            })}
+                            gradient={[colors.error + '26', colors.error + '0D']}
+                        />
 
-                        <QuickAction icon={Sun} iconColor="#F59E0B" label="Morgen" onPress={handleMorning} gradient={['rgba(245, 158, 11, 0.15)', 'rgba(245, 158, 11, 0.05)']} />
-                        <QuickAction icon={Clapperboard} iconColor="#EC4899" label="Kino" onPress={handleMovieNight} gradient={['rgba(236, 72, 153, 0.15)', 'rgba(236, 72, 153, 0.05)']} />
-                        <QuickAction icon={Blinds} iconColor="#60A5FA" label="Rollläden auf" onPress={handleAllCoversOpen} gradient={['rgba(96, 165, 250,0.15)', 'rgba(96, 165, 250,0.05)']} />
-                        <QuickAction icon={Blinds} iconColor="#3B82F6" label="Rollläden zu" onPress={handleAllCoversClose} gradient={['rgba(59,130,246,0.15)', 'rgba(59,130,246,0.05)']} />
-                        <QuickAction icon={Bot} iconColor="#22C55E" label="Röbi Start" onPress={handleRobiStart} gradient={['rgba(34,197,94,0.15)', 'rgba(34,197,94,0.05)']} />
-                        <QuickAction icon={BedDouble} iconColor="#8B5CF6" label="Schlafen" onPress={handleSleep} gradient={['rgba(139, 92, 246,0.15)', 'rgba(139, 92, 246,0.05)']} />
+                        <QuickAction
+                            icon={Sun}
+                            iconColor={colors.warning}
+                            label="Morgen"
+                            onPress={handleMorning}
+                            onLongPress={() => setQuickActionInfo({
+                                title: "Guten Morgen",
+                                description: "Startet die Morgenroutine: Spielt Radio, öffnet Storen und schaltet Licht im Wohnbereich an.",
+                                icon: Sun,
+                                iconColor: colors.warning,
+                                gradient: [colors.warning + '26', colors.warning + '0D']
+                            })}
+                            gradient={[colors.warning + '26', colors.warning + '0D']}
+                        />
+                        <QuickAction
+                            icon={Clapperboard}
+                            iconColor={colors.accent} // Using accent as pink replacement if fits, else keep hardcoded or use custom property
+                            label="Kino"
+                            onPress={handleMovieNight}
+                            onLongPress={() => setQuickActionInfo({
+                                title: "Kino-Modus",
+                                description: "Aktiviert den Kino-Modus: Dimmt Lichter und sorgt für Atmosphäre.",
+                                icon: Clapperboard,
+                                iconColor: "#EC4899", // Keep distinct color for logical meaning
+                                gradient: ['rgba(236, 72, 153, 0.15)', 'rgba(236, 72, 153, 0.05)']
+                            })}
+                            gradient={['rgba(236, 72, 153, 0.15)', 'rgba(236, 72, 153, 0.05)']}
+                        />
+                        <QuickAction
+                            icon={Blinds}
+                            iconColor={colors.tint}
+                            label="Rollläden auf"
+                            onPress={handleAllCoversOpen}
+                            onLongPress={() => setQuickActionInfo({
+                                title: "Rollläden öffnen",
+                                description: "Öffnet alle Storen im Haus.",
+                                icon: Blinds,
+                                iconColor: "#60A5FA",
+                                gradient: ['rgba(96, 165, 250,0.15)', 'rgba(96, 165, 250,0.05)']
+                            })}
+                            gradient={['rgba(96, 165, 250,0.15)', 'rgba(96, 165, 250,0.05)']}
+                        />
+                        <QuickAction
+                            icon={Blinds}
+                            iconColor={colors.accent}
+                            label="Rollläden zu"
+                            onPress={handleAllCoversClose}
+                            onLongPress={() => setQuickActionInfo({
+                                title: "Rollläden schliessen",
+                                description: "Schliesst alle Storen im Haus für Privatsphäre.",
+                                icon: Blinds,
+                                iconColor: colors.accent,
+                                gradient: [colors.accent + '26', colors.accent + '0D']
+                            })}
+                            gradient={[colors.accent + '26', colors.accent + '0D']}
+                        />
+                        <QuickAction
+                            icon={Bot}
+                            iconColor={colors.success}
+                            label="Röbi Start"
+                            onPress={handleRobiStart}
+                            onLongPress={() => setQuickActionInfo({
+                                title: "Röbi starten",
+                                description: "Startet den Saugroboter für eine komplette Reinigung.",
+                                icon: Bot,
+                                iconColor: colors.success,
+                                gradient: [colors.success + '26', colors.success + '0D']
+                            })}
+                            gradient={[colors.success + '26', colors.success + '0D']}
+                        />
+                        <QuickAction
+                            icon={BedDouble}
+                            iconColor="#8B5CF6"
+                            label="Schlafen"
+                            onPress={handleSleep}
+                            onLongPress={() => setQuickActionInfo({
+                                title: "Gute Nacht",
+                                description: "Aktiviert den Schlafmodus: Schaltet alle Lichter aus und schliesst die Storen.",
+                                icon: BedDouble,
+                                iconColor: "#8B5CF6",
+                                gradient: ['rgba(139, 92, 246,0.15)', 'rgba(139, 92, 246,0.05)']
+                            })}
+                            gradient={['rgba(139, 92, 246,0.15)', 'rgba(139, 92, 246,0.05)']}
+                        />
                     </ScrollView>
                 </View>
 
@@ -946,25 +1084,26 @@ export default function Dashboard() {
                                         onPress={() => toggleLight(id)}
                                         style={[
                                             styles.tile,
+                                            { backgroundColor: colors.card, borderColor: colors.border },
                                             {
                                                 minHeight: 60,
                                                 padding: 12,
                                                 justifyContent: 'center',
                                                 marginBottom: 0
                                             },
-                                            isOn && { backgroundColor: 'rgba(251, 191, 36, 0.15)', borderColor: 'rgba(251, 191, 36, 0.5)' }
+                                            isOn && { backgroundColor: colors.warning + '26', borderColor: colors.warning + '80' }
                                         ]}
                                     >
                                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                                             <View style={[
                                                 styles.tileIcon,
-                                                { width: 32, height: 32 },
-                                                isOn && { backgroundColor: '#FBBF24' }
+                                                { width: 32, height: 32, backgroundColor: colors.background },
+                                                isOn && { backgroundColor: colors.warning }
                                             ]}>
-                                                <Lightbulb size={18} color={isOn ? "#FFF" : "#64748B"} />
+                                                <Lightbulb size={18} color={isOn ? "#FFF" : colors.subtext} />
                                             </View>
                                             <View style={{ flex: 1 }}>
-                                                <Text style={[styles.tileName, { marginTop: 0, fontSize: 13 }, isOn && { color: '#FFF' }]} numberOfLines={1}>{label}</Text>
+                                                <Text style={[styles.tileName, { marginTop: 0, fontSize: 13, color: colors.text }, isOn && { color: '#FFF' }]} numberOfLines={1}>{label}</Text>
                                             </View>
                                         </View>
                                     </Pressable>
@@ -994,15 +1133,15 @@ export default function Dashboard() {
 
                 {/* Hero Stats */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Übersicht</Text>
+                    <Text style={[styles.sectionTitle, { color: colors.subtext }]}>Übersicht</Text>
                     <View style={styles.heroGrid}>
                         <HeroStatCard
                             icon={Lightbulb}
-                            iconColor="#FCD34D"
+                            iconColor={colors.warning}
                             value={lightsOn}
                             total={lights.length}
                             label="Lichter aktiv"
-                            gradient={['#F59E0B', '#D97706']}
+                            gradient={[colors.warning, '#D97706']}
                             isActive={lightsOn > 0}
                             cardWidth={cardWidth}
                             onPress={openLightsModal}
@@ -1010,11 +1149,11 @@ export default function Dashboard() {
                         />
                         <HeroStatCard
                             icon={Blinds}
-                            iconColor="#60A5FA"
+                            iconColor={colors.accent}
                             value={coversOpen}
                             total={covers.filter(c => c.attributes.friendly_name !== 'Alle Storen').length}
                             label="Rollläden offen"
-                            gradient={['#3B82F6', '#1D4ED8']}
+                            gradient={[colors.accent, '#1D4ED8']}
                             isActive={coversOpen > 0}
                             cardWidth={cardWidth}
                             onPress={openCoversModal}
@@ -1023,21 +1162,21 @@ export default function Dashboard() {
                         <Pressable
                             onPress={openRobiModal}
                             onLongPress={handleAllVacuumsHome}
-                            style={[styles.heroCard, { width: cardWidth }]}
+                            style={[styles.heroCard, { width: cardWidth, backgroundColor: colors.card }]} // Override Logic
                         >
-                            <View style={[styles.heroCardGradient, { backgroundColor: activeVacuums > 0 ? '#10B981' : '#1E293B' }]}>
-                                <View style={[styles.decorativeCircle, { backgroundColor: activeVacuums > 0 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.03)' }]} />
+                            <View style={[styles.heroCardGradient, { backgroundColor: activeVacuums > 0 ? colors.success : colors.card }]}>
+                                <View style={[styles.decorativeCircle, { backgroundColor: activeVacuums > 0 ? 'rgba(255,255,255,0.1)' : colors.border + '30' }]} />
 
                                 <View style={styles.heroCardHeader}>
-                                    <View style={[styles.iconBubble, { backgroundColor: activeVacuums > 0 ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.05)' }]}>
-                                        <Bot size={22} color={activeVacuums > 0 ? '#fff' : '#34D399'} />
+                                    <View style={[styles.iconBubble, { backgroundColor: activeVacuums > 0 ? 'rgba(255,255,255,0.2)' : colors.background }]}>
+                                        <Bot size={22} color={activeVacuums > 0 ? '#fff' : colors.success} />
                                     </View>
-                                    <ChevronRight size={16} color="rgba(255,255,255,0.3)" />
+                                    <ChevronRight size={16} color={activeVacuums > 0 ? "rgba(255,255,255,0.3)" : colors.subtext} />
                                 </View>
 
                                 <View style={styles.heroCardContent}>
                                     <View style={styles.valueRow}>
-                                        <Text style={[styles.heroValue, { fontSize: 13 }]} numberOfLines={1}>
+                                        <Text style={[styles.heroValue, { fontSize: 13, color: activeVacuums > 0 ? '#fff' : colors.text }]} numberOfLines={1}>
                                             {robi ? (
                                                 robi.state === 'docked' ? 'Angedockt' :
                                                     robi.state === 'cleaning' ? 'Saugt' :
@@ -1049,7 +1188,7 @@ export default function Dashboard() {
                                             ) : 'n/a'}
                                         </Text>
                                     </View>
-                                    <Text style={[styles.heroLabel, { color: activeVacuums > 0 ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.5)' }]}>
+                                    <Text style={[styles.heroLabel, { color: activeVacuums > 0 ? 'rgba(255,255,255,0.8)' : colors.subtext }]}>
                                         {robi?.attributes?.friendly_name || 'Röbi'}
                                     </Text>
                                 </View>
@@ -1057,7 +1196,7 @@ export default function Dashboard() {
                                 <View style={styles.progressContainer}>
                                     <View style={[styles.progressBar, {
                                         width: '100%',
-                                        backgroundColor: robi?.state === 'cleaning' ? '#34D399' : (activeVacuums > 0 ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.1)')
+                                        backgroundColor: robi?.state === 'cleaning' ? colors.success : (activeVacuums > 0 ? 'rgba(255,255,255,0.4)' : colors.border)
                                     }]} />
                                 </View>
                             </View>
@@ -1075,23 +1214,23 @@ export default function Dashboard() {
                         />
                         <HeroStatCard
                             icon={Shield}
-                            iconColor="#EF4444"
+                            iconColor={colors.error}
                             value={0}
                             total={0}
                             label="Alarmanlage"
                             statusText={alarmStatusText}
-                            gradient={['#DC2626', '#991B1B']}
+                            gradient={[colors.error, '#991B1B']}
                             isActive={alarmEntity?.state !== 'disarmed'}
                             cardWidth={cardWidth}
                             onPress={openSecurityModal}
                         />
                         <HeroStatCard
                             icon={Video}
-                            iconColor="#3B82F6"
+                            iconColor={colors.accent}
                             value={camerasCount}
                             total={camerasCount}
                             label="Kameras"
-                            gradient={['#2563EB', '#1D4ED8']}
+                            gradient={[colors.accent, '#1D4ED8']}
                             isActive={camerasCount > 0}
                             cardWidth={cardWidth}
                             onPress={openCamerasModal}
@@ -1107,8 +1246,8 @@ export default function Dashboard() {
             {/* LIGHTS MODAL */}
             <Modal visible={activeModal === 'lights'} animationType="slide" transparent>
                 <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <View style={[styles.modalHeader, { backgroundColor: '#F59E0B' }]}>
+                    <View style={[styles.modalContent, { backgroundColor: colors.background }]}>
+                        <View style={[styles.modalHeader, { backgroundColor: colors.warning }]}>
                             <Text style={styles.modalTitle}>Lichter ({lightsOn} an)</Text>
                             <Pressable onPress={closeModal} style={styles.closeBtn}><X size={24} color="#fff" /></Pressable>
                         </View>
@@ -1120,8 +1259,8 @@ export default function Dashboard() {
                                             label={l.attributes.friendly_name?.replace(' Licht', '').replace(' Lampen', '') || l.entity_id}
                                             subtext={l.state === 'on' ? 'An' : 'Aus'}
                                             icon={Lightbulb}
-                                            iconColor="#64748B"
-                                            activeColor="#FBBF24"
+                                            iconColor={colors.subtext}
+                                            activeColor={colors.warning}
                                             isActive={l.state === 'on'}
                                             onPress={() => toggleLight(l.entity_id)}
                                         />
@@ -1136,8 +1275,8 @@ export default function Dashboard() {
             {/* COVERS MODAL */}
             <Modal visible={activeModal === 'covers'} animationType="slide" transparent>
                 <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <View style={[styles.modalHeader, { backgroundColor: '#3B82F6' }]}>
+                    <View style={[styles.modalContent, { backgroundColor: colors.background }]}>
+                        <View style={[styles.modalHeader, { backgroundColor: colors.accent }]}>
                             <Text style={styles.modalTitle}>Rollläden ({coversOpen} offen)</Text>
                             <Pressable onPress={closeModal} style={styles.closeBtn}><X size={24} color="#fff" /></Pressable>
                         </View>
@@ -1149,8 +1288,8 @@ export default function Dashboard() {
                                             label={c.attributes.friendly_name || c.entity_id}
                                             subtext={c.attributes?.current_position != null ? `${c.attributes?.current_position}%` : c.state}
                                             icon={Blinds}
-                                            iconColor="#64748B"
-                                            activeColor="#3B82F6"
+                                            iconColor={colors.subtext}
+                                            activeColor={colors.accent}
                                             isActive={c.state === 'open' || c.attributes.current_position > 0}
                                             activeStyle={styles.tileActiveCover}
                                         >
@@ -1210,6 +1349,12 @@ export default function Dashboard() {
                 visible={!!activeFeedback}
                 onClose={() => setActiveFeedback(null)} // This was missing in the state definition below, need to add it
                 type={activeFeedback || 'sleep'}
+            />
+
+            <QuickActionInfoModal
+                visible={!!quickActionInfo}
+                onClose={() => setQuickActionInfo(null)}
+                info={quickActionInfo}
             />
         </SafeAreaView >
     );

@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Alert, AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from './AuthContext';
 import { HomeAssistantService } from '../services/homeAssistant';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
@@ -39,6 +40,17 @@ TaskManager.defineTask(SHOPPING_TASK, async ({ data, error }: any) => {
                 // List empty, reset any entry and return
                 await AsyncStorage.removeItem(SHOP_ENTRY_KEY);
                 return;
+            }
+
+            // Check Settings
+            const settingsStr = await AsyncStorage.getItem(NOTIF_SETTINGS_KEY);
+            if (settingsStr) {
+                const settings = JSON.parse(settingsStr);
+                // Check new structure (household.shopping) or fallback
+                if (settings.household?.shopping === false) {
+                    console.log("Shopping notification disabled by setting");
+                    return;
+                }
             }
 
             // 2. Reverse Geocode to check if we are at a shop
@@ -116,6 +128,16 @@ TaskManager.defineTask(GEOFENCING_TASK, async ({ data, error }: any) => {
         if (isHome === 'true') {
             console.log("Already at home, skipping notification");
             return;
+        }
+
+        // Check Settings
+        const settingsStr = await AsyncStorage.getItem(NOTIF_SETTINGS_KEY);
+        if (settingsStr) {
+            const settings = JSON.parse(settingsStr);
+            if (settings.home?.welcome === false) {
+                console.log("Welcome notification disabled by setting");
+                return;
+            }
         }
 
         console.log("Entered Home Region!");
@@ -207,14 +229,47 @@ const NOTIF_SETTINGS_KEY = '@smarthome_notif_settings';
 
 export interface NotificationSettings {
     enabled: boolean;
-    doors: {
-        highlight: boolean;
-        waschkueche: boolean;
-        [key: string]: boolean;
+    security: {
+        doors_ug: boolean; // Waschkueche & Highlight merged
+    };
+    household: {
+        shopping: boolean;
+    };
+    home: {
+        welcome: boolean;
+        doorbell: boolean;
+    };
+    weather: {
+        warning: boolean;
+    };
+    baby: {
+        cry: boolean;
     };
 }
 
 export function HomeAssistantProvider({ children }: { children: React.ReactNode }) {
+    const { user } = useAuth();
+
+    // Derive user slug (e.g. stefan_gross)
+    const userSlug = useMemo(() => {
+        if (!user?.email) return null;
+        // Check if user is 'stibe' explicitly or fallback to email slug
+        if (user.email.toLowerCase().startsWith('stibe') || user.email.toLowerCase().startsWith('stefan')) {
+            return 'stibe'; // Force 'stibe' for Stefan/Stibe
+        }
+        return user.email.split('@')[0].replace(/\./g, '_').toLowerCase();
+    }, [user]);
+
+    // Helper Entity IDs
+    const helperIds = useMemo(() => {
+        if (!userSlug) return null;
+        return {
+            security: `input_boolean.notify_${userSlug}_turen_ug`,
+            doorbell: `input_boolean.notify_${userSlug}_doorbell`,
+            weather: `input_boolean.notify_${userSlug}_weatheralert`,
+            baby_cry: `input_boolean.notify_${userSlug}_baby_cry`,
+        };
+    }, [userSlug]);
 
     const [entities, setEntities] = useState<EntityState[]>([]);
     const [isConnected, setIsConnected] = useState(false);
@@ -224,13 +279,89 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
     const [authToken, setAuthToken] = useState<string | null>(null); // State for token
     const [expoPushToken, setExpoPushToken] = useState<string | null>(null); // State for Expo Push Token
     const serviceRef = useRef<HomeAssistantService | null>(null);
-    const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>({
+    const [notificationSettings, setNotificationSettingsState] = useState<NotificationSettings>({
         enabled: true,
-        doors: {
-            highlight: true,
-            waschkueche: true
+        security: {
+            doors_ug: true
+        },
+        household: {
+            shopping: true
+        },
+        home: {
+            welcome: true,
+            doorbell: true
+        },
+        weather: {
+            warning: true
+        },
+        baby: {
+            cry: true
         }
     });
+
+    // Create a ref to access current settings in callbacks/effects without dependency cycles
+    const notificationSettingsRef = useRef<NotificationSettings>(notificationSettings);
+
+    // Sync ref when state changes
+    useEffect(() => {
+        notificationSettingsRef.current = notificationSettings;
+    }, [notificationSettings]);
+
+    // Compatible setter that updates both
+    // Updated setter that handles both Local and HA sync
+    const updateNotificationSettings = async (newSettings: NotificationSettings) => {
+        // 1. Update Local State & Storage (Optimistic)
+        setNotificationSettingsState(newSettings);
+        await AsyncStorage.setItem(NOTIF_SETTINGS_KEY, JSON.stringify(newSettings));
+
+        console.log('UpdateNotifSettings called. Connected:', isConnected, 'HelperIds:', helperIds);
+
+        // 2. Sync with HA Helpers if connected and user is known
+        if (isConnected && serviceRef.current && helperIds) {
+            try {
+                // Security
+                if (newSettings.security.doors_ug !== notificationSettings.security.doors_ug) {
+                    console.log(`Syncing Security -> ${newSettings.security.doors_ug ? 'ON' : 'OFF'} (${helperIds.security})`);
+                    serviceRef.current.callService(
+                        'input_boolean',
+                        newSettings.security.doors_ug ? 'turn_on' : 'turn_off',
+                        helperIds.security
+                    );
+                }
+                // Doorbell
+                if (newSettings.home.doorbell !== notificationSettings.home.doorbell) {
+                    console.log(`Syncing Doorbell -> ${newSettings.home.doorbell ? 'ON' : 'OFF'} (${helperIds.doorbell})`);
+                    serviceRef.current.callService(
+                        'input_boolean',
+                        newSettings.home.doorbell ? 'turn_on' : 'turn_off',
+                        helperIds.doorbell
+                    );
+                }
+                // Weather
+                if (newSettings.weather.warning !== notificationSettings.weather.warning) {
+                    console.log(`Syncing Weather -> ${newSettings.weather.warning ? 'ON' : 'OFF'} (${helperIds.weather})`);
+                    serviceRef.current.callService(
+                        'input_boolean',
+                        newSettings.weather.warning ? 'turn_on' : 'turn_off',
+                        helperIds.weather
+                    );
+                }
+                // Baby Cry
+                if (newSettings.baby?.cry !== notificationSettings.baby?.cry) {
+                    console.log(`Syncing Baby Cry -> ${newSettings.baby.cry ? 'ON' : 'OFF'} (${helperIds.baby_cry})`);
+                    serviceRef.current.callService(
+                        'input_boolean',
+                        newSettings.baby.cry ? 'turn_on' : 'turn_off',
+                        helperIds.baby_cry
+                    );
+                }
+            } catch (e) {
+                console.warn('Failed to sync settings with HA', e);
+            }
+        } else {
+            console.log('Skipping HA Sync - Connected:', isConnected, 'Helpers:', !!helperIds);
+        }
+    };
     const [isGeofencingActive, setIsGeofencingActive] = useState(false);
     const [shoppingListVisible, setShoppingListVisible] = useState(false);
     const disconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -303,6 +434,8 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
             // Trigger the button
             serviceRef.current.callService('button', 'press', 'button.hausture_tur_offnen');
             // Feedback
+            /* MOVED TO HA AUTOMATION ? No, this is response to action. Keep feedback or remove?
+               Let's keep the "Command Sent" feedback locally. */
             Notifications.scheduleNotificationAsync({
                 content: { title: "Haustür", body: "Öffnen Befehl gesendet.", sound: false },
                 trigger: null
@@ -313,6 +446,57 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
     const handleStateChange = useCallback((newEntities: any[]) => {
         setEntities(newEntities);
     }, []);
+
+    // Timestamp tracking to prevent race conditions (HA state vs Local Optimistic state)
+    const prevHelperTimestamps = useRef<{ [key: string]: string }>({});
+
+    // Sync HA Helpers to Local State
+    useEffect(() => {
+        if (!helperIds || entities.length === 0) return;
+
+        const securityHelper = entities.find(e => e.entity_id === helperIds.security);
+        const doorbellHelper = entities.find(e => e.entity_id === helperIds.doorbell);
+        const weatherHelper = entities.find(e => e.entity_id === helperIds.weather);
+        const babyCryHelper = entities.find(e => e.entity_id === helperIds.baby_cry);
+
+        setNotificationSettingsState(prev => {
+            const next = { ...prev };
+            let changed = false;
+            const timestamps = prevHelperTimestamps.current;
+
+            // Helper function to check sync
+            const checkSync = (helper: EntityState | undefined, currentSetting: boolean, setVal: (val: boolean) => void) => {
+                if (!helper) return;
+                // Only sync if HA state is DIFFERENT from Local AND Timestamp is NEW
+                // We use last_updated to ensure we process only NEW events
+                const lastTs = timestamps[helper.entity_id];
+                if (helper.last_updated !== lastTs) {
+                    // HA Updated! Sync to local.
+                    const haState = helper.state === 'on';
+                    // Update only if different (or force sync to ensure consistency)
+                    if (haState !== currentSetting) {
+                        setVal(haState);
+                        changed = true;
+                    }
+                    timestamps[helper.entity_id] = helper.last_updated;
+                }
+            };
+
+            checkSync(securityHelper, prev.security.doors_ug, (v) => next.security.doors_ug = v);
+            checkSync(doorbellHelper, prev.home.doorbell, (v) => next.home.doorbell = v);
+            checkSync(weatherHelper, prev.weather.warning, (v) => next.weather.warning = v);
+            // Ensure baby object exists before assigning
+            if (!next.baby) next.baby = { cry: true };
+            checkSync(babyCryHelper, prev.baby?.cry ?? true, (v) => next.baby.cry = v);
+
+            if (changed) {
+                console.log('🔄 Synced Notification Settings from HA');
+                AsyncStorage.setItem(NOTIF_SETTINGS_KEY, JSON.stringify(next));
+                return next;
+            }
+            return prev;
+        });
+    }, [entities, helperIds]);
 
     // State for notification tracking (previous states)
     const prevDoorStates = useRef<{ [key: string]: string }>({});
@@ -349,51 +533,16 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
         return t;
     };
 
-    // Monitor MeteoAlarm
+    // Monitor MeteoAlarm - REMOVED LOCAL NOTIFICATION LOGIC
+    // Now handled by HA Automation via Helper check
+    /*
     useEffect(() => {
         const checkWeather = async () => {
-            if (!entities.length) return;
-
-            const meteoData = entities.find(e => e.entity_id === 'binary_sensor.meteoalarm');
-            if (meteoData) {
-                const currentState = meteoData.state;
-
-                if (currentState === 'on') {
-                    const headline = meteoData.attributes.headline || 'Wetterwarnung';
-                    const description = meteoData.attributes.description || '';
-                    const effective = meteoData.attributes.effective || '';
-
-                    // Create unique ID for this specific warning occurrence
-                    const warningId = `${headline}_${effective}`;
-                    const lastWarningId = await AsyncStorage.getItem(METEO_WARNING_KEY);
-
-                    if (warningId !== lastWarningId) {
-                        const titleDE = translateWeather(headline);
-                        const descDE = translateWeather(description);
-                        // Simple effective date formatting if it's a timestamp
-                        const effectiveDE = effective ? new Date(effective).toLocaleString('de-CH') : '';
-
-                        const body = `${descDE} ${effectiveDE ? `(gültig ab ${effectiveDE})` : ''}`;
-
-                        await Notifications.scheduleNotificationAsync({
-                            content: {
-                                title: titleDE,
-                                body: body,
-                                sound: true,
-                                data: { type: 'weather_warning' }
-                            },
-                            trigger: null
-                        });
-
-                        // Remember we showed this one
-                        await AsyncStorage.setItem(METEO_WARNING_KEY, warningId);
-                    }
-                }
-            }
+            // ... Removed ...
         };
-
-        checkWeather();
+        // checkWeather();
     }, [entities]);
+    */
 
     // Initialize service
     useEffect(() => {
@@ -455,23 +604,12 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
         ]);
 
         // Set up event callback for doorbell
+        // REMOVED LOCAL NOTIFICATION LOGIC - Handled by HA Automation
         serviceRef.current.setEventCallback((event: any) => {
-            // Check if this is a doorbell event
+            // We can still log it or use it for in-app UI updates if needed
             if (event.event_type === 'state_changed' &&
-                event.data?.entity_id === 'event.hausture_klingeln' &&
-                event.data?.new_state?.state !== event.data?.old_state?.state) {
-                console.log('🔔 Doorbell rang!', event);
-                // Send notification
-                Notifications.scheduleNotificationAsync({
-                    content: {
-                        title: 'Jemand hat geklingelt',
-                        body: 'Möchtest du die Türe öffnen?',
-                        sound: true,
-                        categoryIdentifier: 'DOORBELL_ACTION',
-                        data: { type: 'doorbell' }
-                    },
-                    trigger: null
-                });
+                event.data?.entity_id === 'event.hausture_klingeln') {
+                console.log('🔔 Doorbell event received (Logic moved to HA)');
             }
         });
 
@@ -483,7 +621,7 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
             try {
                 const stored = await AsyncStorage.getItem(NOTIF_SETTINGS_KEY);
                 if (stored) {
-                    setNotificationSettings(JSON.parse(stored));
+                    setNotificationSettingsState(JSON.parse(stored));
                 }
             } catch (e) { console.warn('Failed search notif settings', e); }
         })();
@@ -540,16 +678,22 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
         };
     }, []);
 
-    // Save Settings Helper
+    // Save Settings Helper (Legacy wrapper if used elsewhere)
+    /*
     const updateNotificationSettings = async (newSettings: NotificationSettings) => {
         setNotificationSettings(newSettings);
         await AsyncStorage.setItem(NOTIF_SETTINGS_KEY, JSON.stringify(newSettings));
     };
+    */
 
     // Monitor entities for notifications (Doors)
     useEffect(() => {
         if (entities.length === 0) return;
         if (!notificationSettings.enabled) return; // Master Switch Check
+
+        // HYBRID SETUP: Logic moved to Home Assistant.
+        // This effect is kept to avoid breaking hook rules, but returns early.
+        return;
 
         // Specific door sensors to monitor - STRICTLY only Waschküche and Highlight as requested
         const binarySensors = entities.filter(e => {
@@ -574,11 +718,14 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
                 console.log(`🔔 Door opened: ${e.entity_id}`);
 
                 // Check granular settings
+                // "Türen UG" controls both Highlight and Waschkueche
                 const isHighlight = e.entity_id.toLowerCase().includes('highlight');
                 const isWaschkueche = e.entity_id.toLowerCase().includes('wasch');
 
-                if (isHighlight && notificationSettings.doors.highlight === false) return;
-                if (isWaschkueche && notificationSettings.doors.waschkueche === false) return;
+                // If it's one of our targeted doors, check the master switch for UG Doors
+                if ((isHighlight || isWaschkueche) && notificationSettings.security?.doors_ug === false) {
+                    return;
+                }
 
                 // Get friendly name from entity or generate from ID
                 const friendlyName = e.attributes.friendly_name ||

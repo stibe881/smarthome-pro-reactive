@@ -1,18 +1,20 @@
 import { Tabs } from 'expo-router';
 import { LayoutGrid, DoorOpen, PlayCircle, Users, Sparkles, Settings } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '../../contexts/ThemeContext';
 import ResponsiveTabBar from '../../components/ResponsiveTabBar';
 
 export default function TabLayout() {
     const insets = useSafeAreaInsets();
+    const { colors } = useTheme();
 
     return (
         <Tabs
             tabBar={props => <ResponsiveTabBar {...props} />}
             screenOptions={{
                 headerShown: false,
-                tabBarActiveTintColor: '#3b82f6',
-                tabBarInactiveTintColor: '#6b7280',
+                tabBarActiveTintColor: colors.accent,
+                tabBarInactiveTintColor: colors.subtext,
             }}
         >
             <Tabs.Screen
