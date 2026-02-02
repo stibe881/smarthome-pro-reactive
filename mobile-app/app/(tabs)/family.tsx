@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, Pressable, ActivityIndicator, useWindowDimensions, TextInput, Modal, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, ScrollView, Pressable, ActivityIndicator, useWindowDimensions, TextInput, Modal, Alert, KeyboardAvoidingView, Platform, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -37,35 +37,70 @@ export default function Family() {
     const [showPassword, setShowPassword] = useState(false);
     const [isInviting, setIsInviting] = useState(false);
 
+    const [refreshing, setRefreshing] = useState(false);
+
     useEffect(() => {
         loadFamilyData();
     }, []);
 
+    const onRefresh = React.useCallback(() => {
+        setRefreshing(true);
+        loadFamilyData().then(() => setRefreshing(false));
+    }, []);
+
     const loadFamilyData = async () => {
-        setIsLoading(true);
+        // setIsLoading(true); // Don't show full loader on refresh
         try {
-            const { data: membersData } = await supabase
+            // 1. Get current user's household_id
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
+                console.log("LOG: No user found");
+                return;
+            }
+
+            const { data: myMemberData, error: memberError } = await supabase
+                .from('family_members')
+                .select('household_id')
+                .eq('user_id', user.id)
+                .single();
+
+            const myHouseholdId = myMemberData?.household_id;
+            console.log("LOG: My Household ID:", myHouseholdId, "Error:", memberError);
+
+            // 2. Fetch Members
+            const { data: membersData, error: membersError } = await supabase
                 .from('family_members')
                 .select('*')
                 .order('created_at', { ascending: true });
 
             if (membersData) {
                 setMembers(membersData);
+            } else {
+                console.log("LOG: Members Error:", membersError);
             }
 
-            const { data: invitesData } = await supabase
-                .from('family_invitations')
-                .select('*')
-                .eq('status', 'pending')
-                .order('created_at', { ascending: false });
+            // 3. Fetch Invitations (Filtered by Household)
+            if (myHouseholdId) {
+                const { data: invitesData, error: invitesError } = await supabase
+                    .from('family_invitations')
+                    .select('*')
+                    .eq('household_id', myHouseholdId)
+                    .eq('status', 'pending')
+                    .order('created_at', { ascending: false });
 
-            if (invitesData) {
-                setInvitations(invitesData);
+                console.log("LOG: Invites Data:", invitesData?.length, "Error:", invitesError);
+
+                if (invitesData) {
+                    setInvitations(invitesData);
+                }
+            } else {
+                console.log("LOG: No Household ID, skipping invites fetch");
             }
         } catch (e) {
             console.error('Error loading family data:', e);
         } finally {
             setIsLoading(false);
+            setRefreshing(false);
         }
     };
 
@@ -168,6 +203,9 @@ export default function Family() {
             <ScrollView
                 style={styles.flex1}
                 contentContainerStyle={{ padding: isTablet ? 24 : 16 }}
+                refreshControl={
+                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.text} />
+                }
             >
                 {/* Header */}
                 <View style={styles.header}>
