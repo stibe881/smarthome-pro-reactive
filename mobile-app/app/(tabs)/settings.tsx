@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { useHomeAssistant } from '../../contexts/HomeAssistantContext';
 import { useTheme, THEMES, ThemeType } from '../../contexts/ThemeContext';
-import { Wifi, WifiOff, Save, LogOut, User, Server, Key, CheckCircle, XCircle, Shield, Bell, Palette, ChevronRight, LucideIcon, X, ScanFace, MapPin, Smartphone, Search } from 'lucide-react-native';
+import { Wifi, WifiOff, Save, LogOut, User, Server, Key, CheckCircle, XCircle, Shield, Bell, Palette, ChevronRight, LucideIcon, X, ScanFace, MapPin, Smartphone, Search, Calendar } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
@@ -37,7 +37,7 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
         } catch (e) { console.warn('Failed to load token for settings display', e); }
     };
 
-    const toggleSetting = async (category: 'security' | 'household' | 'home' | 'weather' | 'baby', key: string) => {
+    const toggleSetting = async (category: 'security' | 'household' | 'home' | 'weather' | 'baby' | 'calendar', key: string) => {
         // Deep copy to prevent mutation of existing state causing comparison failure
         let newSettings = JSON.parse(JSON.stringify(notificationSettings));
 
@@ -226,6 +226,27 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
                                     <Switch
                                         value={notificationSettings.baby?.cry ?? true}
                                         onValueChange={() => toggleSetting('baby', 'cry')}
+                                        trackColor={{ false: '#334155', true: '#3B82F6' }}
+                                        thumbColor={'#fff'}
+                                    />
+                                </View>
+                            </View>
+
+
+                            {/* KALENDER */}
+                            <View style={styles.settingGroup}>
+                                <Text style={styles.groupTitle}>KALENDER</Text>
+                                <View style={styles.settingRow}>
+                                    <View style={[styles.iconBadge, { backgroundColor: 'rgba(168, 85, 247, 0.15)' }]}>
+                                        <Calendar size={20} color="#A855F7" />
+                                    </View>
+                                    <View style={{ flex: 1, marginLeft: 12 }}>
+                                        <Text style={styles.settingLabel}>Geburtstage</Text>
+                                        <Text style={styles.settingDescription}>Benachrichtigung bei Geburtstagen</Text>
+                                    </View>
+                                    <Switch
+                                        value={notificationSettings.calendar?.birthday ?? true}
+                                        onValueChange={() => toggleSetting('calendar', 'birthday')}
                                         trackColor={{ false: '#334155', true: '#3B82F6' }}
                                         thumbColor={'#fff'}
                                     />

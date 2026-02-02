@@ -153,6 +153,30 @@ TaskManager.defineTask(GEOFENCING_TASK, async ({ data, error }: any) => {
         });
         await AsyncStorage.setItem(IS_HOME_KEY, 'true');
 
+        // Trigger Arrival Script (script.ankunft_stibe)
+        try {
+            const haUrl = await AsyncStorage.getItem('@smarthome_ha_url');
+            const haToken = await AsyncStorage.getItem('@smarthome_ha_token');
+
+            if (haUrl && haToken) {
+                console.log("🚀 Triggering Arrival Script: script.ankunft_stibe");
+                fetch(`${haUrl}/api/services/script/turn_on`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${haToken}`,
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ entity_id: 'script.ankunft_stibe' }),
+                }).then(res => {
+                    if (!res.ok) console.warn('Script Trigger Status:', res.status);
+                }).catch(e => console.error("Failed to trigger arrival script (fetch):", e));
+            } else {
+                console.log("⚠️ Cannot trigger arrival script - No credentials found in local storage");
+            }
+        } catch (e) {
+            console.error("Failed to trigger arrival script logic:", e);
+        }
+
     } else if (eventType === Location.GeofencingEventType.Exit) {
         console.log("Exited Home Region");
         await AsyncStorage.setItem(IS_HOME_KEY, 'false');
@@ -221,6 +245,8 @@ interface HomeAssistantContextType {
     fetchWeatherForecast: (entityId: string, forecastType?: 'daily' | 'hourly') => Promise<any[]>;
     debugShoppingLogic: () => Promise<void>;
     getExpoPushToken: () => string | null;
+    isDoorbellRinging: boolean;
+    setIsDoorbellRinging: (ringing: boolean) => void;
 }
 
 const HomeAssistantContext = createContext<HomeAssistantContextType | undefined>(undefined);
@@ -245,6 +271,9 @@ export interface NotificationSettings {
     baby: {
         cry: boolean;
     };
+    calendar: {
+        birthday: boolean;
+    };
 }
 
 export function HomeAssistantProvider({ children }: { children: React.ReactNode }) {
@@ -268,6 +297,7 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
             doorbell: `input_boolean.notify_${userSlug}_doorbell`,
             weather: `input_boolean.notify_${userSlug}_weatheralert`,
             baby_cry: `input_boolean.notify_${userSlug}_baby_cry`,
+            birthday: `input_boolean.notify_${userSlug}_birthday`,
         };
     }, [userSlug]);
 
@@ -296,6 +326,9 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
         },
         baby: {
             cry: true
+        },
+        calendar: {
+            birthday: true
         }
     });
 
@@ -355,6 +388,15 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
                         helperIds.baby_cry
                     );
                 }
+                // Birthday
+                if (newSettings.calendar?.birthday !== notificationSettings.calendar?.birthday) {
+                    console.log(`Syncing Birthday -> ${newSettings.calendar.birthday ? 'ON' : 'OFF'} (${helperIds.birthday})`);
+                    serviceRef.current.callService(
+                        'input_boolean',
+                        newSettings.calendar.birthday ? 'turn_on' : 'turn_off',
+                        helperIds.birthday
+                    );
+                }
             } catch (e) {
                 console.warn('Failed to sync settings with HA', e);
             }
@@ -364,6 +406,7 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
     };
     const [isGeofencingActive, setIsGeofencingActive] = useState(false);
     const [shoppingListVisible, setShoppingListVisible] = useState(false);
+    const [isDoorbellRinging, setIsDoorbellRinging] = useState(false);
     const disconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Register for Push Notifications
@@ -458,6 +501,7 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
         const doorbellHelper = entities.find(e => e.entity_id === helperIds.doorbell);
         const weatherHelper = entities.find(e => e.entity_id === helperIds.weather);
         const babyCryHelper = entities.find(e => e.entity_id === helperIds.baby_cry);
+        const birthdayHelper = entities.find(e => e.entity_id === helperIds.birthday);
 
         setNotificationSettingsState(prev => {
             const next = { ...prev };
@@ -488,6 +532,10 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
             // Ensure baby object exists before assigning
             if (!next.baby) next.baby = { cry: true };
             checkSync(babyCryHelper, prev.baby?.cry ?? true, (v) => next.baby.cry = v);
+
+            // Ensure calendar object exists
+            if (!next.calendar) next.calendar = { birthday: true };
+            checkSync(birthdayHelper, prev.calendar?.birthday ?? true, (v) => next.calendar.birthday = v);
 
             if (changed) {
                 console.log('🔄 Synced Notification Settings from HA');
@@ -604,12 +652,20 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
         ]);
 
         // Set up event callback for doorbell
-        // REMOVED LOCAL NOTIFICATION LOGIC - Handled by HA Automation
+        // Set up event callback for doorbell
         serviceRef.current.setEventCallback((event: any) => {
-            // We can still log it or use it for in-app UI updates if needed
+            // Check for specific doorbell event
             if (event.event_type === 'state_changed' &&
                 event.data?.entity_id === 'event.hausture_klingeln') {
-                console.log('🔔 Doorbell event received (Logic moved to HA)');
+
+                const newState = event.data.new_state;
+                // Only trigger if state is NOT unknown/unavailable and (optional) recently changed
+                if (newState && newState.state !== 'unknown' && newState.state !== 'unavailable') {
+                    console.log('🔔 DOORBELL RANG! Showing Popup.');
+                    setIsDoorbellRinging(true);
+                    // Auto-hide after 1 minute if no action taken (optional safety)
+                    setTimeout(() => setIsDoorbellRinging(false), 60000);
+                }
             }
         });
 
@@ -992,6 +1048,10 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
             setHaBaseUrl(cleanUrl); // Set base URL immediately
             setAuthToken(creds.token); // Save token to state
 
+            // Cache credentials for Background Tasks (Geofencing)
+            await AsyncStorage.setItem('@smarthome_ha_url', cleanUrl);
+            await AsyncStorage.setItem('@smarthome_ha_token', creds.token);
+
             const success = await serviceRef.current!.connect(cleanUrl, creds.token);
             setIsConnected(success);
             if (!success) { // If connection failed, clear the token and URL
@@ -1230,7 +1290,9 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
                 Alert.alert("Debug Error", e.message);
             }
         },
-        getExpoPushToken: () => expoPushToken
+        getExpoPushToken: () => expoPushToken,
+        isDoorbellRinging,
+        setIsDoorbellRinging
     };
 
     return (

@@ -7,6 +7,7 @@ import { useEffect } from "react";
 import { View, ActivityIndicator } from "react-native";
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import ChangePasswordModal from "../components/ChangePasswordModal";
+import { DoorbellModal } from "../components/DoorbellModal";
 
 function RootLayoutNav() {
     const { session, isLoading, mustChangePassword, clearMustChangePassword } = useAuth();
@@ -45,6 +46,8 @@ function RootLayoutNav() {
                 onSuccess={clearMustChangePassword}
                 isForced={true}
             />
+            {/* Global Doorbell Popup */}
+            <DoorbellModal />
         </>
     );
 }
