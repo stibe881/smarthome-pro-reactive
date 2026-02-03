@@ -94,11 +94,11 @@ export default function GeminiScreen() {
             ));
 
             // 2. System Instructions & Prompt
-            // Try gemini-1.5-flash first
-            const model = genAI.getGenerativeModel({
-                model: "gemini-1.5-flash",
-                generationConfig: { maxOutputTokens: 500 }
-            });
+            // Using gemini-pro-latest with v1beta API - last attempt to find a model with quota
+            const model = genAI.getGenerativeModel(
+                { model: "gemini-pro-latest", generationConfig: { maxOutputTokens: 500 } },
+                { apiVersion: 'v1beta' }
+            );
 
             const prompt = `
             Du bist ein hilfsbereiter Smart Home Assistent.

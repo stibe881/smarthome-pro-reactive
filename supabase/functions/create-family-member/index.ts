@@ -45,7 +45,7 @@ Deno.serve(async (req) => {
     // Check if calling user is admin
     const { data: memberData } = await userClient
       .from('family_members')
-      .select('role')
+      .select('role, household_id')
       .eq('user_id', callingUser.id)
       .single()
 
@@ -104,7 +104,8 @@ Deno.serve(async (req) => {
         user_id: newUser.user.id,
         email: email,
         role: 'member',
-        invited_by: callingUser.id
+        invited_by: callingUser.id,
+        household_id: memberData.household_id
       })
 
     if (memberError) {

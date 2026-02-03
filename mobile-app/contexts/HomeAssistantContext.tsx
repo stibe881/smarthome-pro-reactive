@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Alert, AppState } from 'react-native';
+import { Alert, AppState, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from './AuthContext';
 import { HomeAssistantService } from '../services/homeAssistant';
@@ -22,7 +22,7 @@ const METEO_WARNING_KEY = '@smarthome_last_weather_warning';
 const TARGET_SHOPS = ['coop', 'migros', 'volg', 'aldi', 'lidl', 'kaufland', 'denner'];
 
 // Define the background task for Shopping
-TaskManager.defineTask(SHOPPING_TASK, async ({ data, error }: any) => {
+if (Platform.OS !== 'web') TaskManager.defineTask(SHOPPING_TASK, async ({ data, error }: any) => {
     if (error) {
         console.error("Shopping Task Error:", error);
         return;
@@ -116,7 +116,7 @@ TaskManager.defineTask(SHOPPING_TASK, async ({ data, error }: any) => {
 });
 
 // Define the background task
-TaskManager.defineTask(GEOFENCING_TASK, async ({ data, error }: any) => {
+if (Platform.OS !== 'web') TaskManager.defineTask(GEOFENCING_TASK, async ({ data, error }: any) => {
     if (error) {
         console.error("Geofencing Task Error:", error);
         return;
@@ -630,26 +630,30 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
         });
 
         // Register Action Category
-        Notifications.setNotificationCategoryAsync('DOOR_OPEN_ACTION', [
-            {
-                identifier: 'open_door_btn',
-                buttonTitle: 'Haustüre öffnen',
-                options: {
-                    opensAppToForeground: false, // Perform in background if supported, or true to open app
+        if (Platform.OS !== 'web') {
+            Notifications.setNotificationCategoryAsync('DOOR_OPEN_ACTION', [
+                {
+                    identifier: 'open_door_btn',
+                    buttonTitle: 'Haustüre öffnen',
+                    options: {
+                        opensAppToForeground: false, // Perform in background if supported, or true to open app
+                    },
                 },
-            },
-        ]);
+            ]);
+        }
 
         // Register Doorbell Action Category
-        Notifications.setNotificationCategoryAsync('DOORBELL_ACTION', [
-            {
-                identifier: 'open_door_btn',
-                buttonTitle: 'Türe öffnen',
-                options: {
-                    opensAppToForeground: false,
+        if (Platform.OS !== 'web') {
+            Notifications.setNotificationCategoryAsync('DOORBELL_ACTION', [
+                {
+                    identifier: 'open_door_btn',
+                    buttonTitle: 'Türe öffnen',
+                    options: {
+                        opensAppToForeground: false,
+                    },
                 },
-            },
-        ]);
+            ]);
+        }
 
         // Set up event callback for doorbell
         // Set up event callback for doorbell
@@ -813,11 +817,16 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
 
     // Geofencing Logic
     const checkGeofencingStatus = async () => {
+        if (Platform.OS === 'web') return;
         const isRegistered = await TaskManager.isTaskRegisteredAsync(GEOFENCING_TASK);
         setIsGeofencingActive(isRegistered);
     };
 
     const setHomeLocation = async () => {
+        if (Platform.OS === 'web') {
+            alert('Funktion im Web nicht verfügbar');
+            return;
+        }
         try {
             const { status } = await Location.requestForegroundPermissionsAsync();
             if (status !== 'granted') {
@@ -858,6 +867,7 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
     };
 
     const startShoppingGeofencing = async () => {
+        if (Platform.OS === 'web') return;
         try {
             const { status } = await Location.requestBackgroundPermissionsAsync();
             if (status !== 'granted') {
