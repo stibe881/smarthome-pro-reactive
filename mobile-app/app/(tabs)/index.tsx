@@ -524,8 +524,9 @@ export default function Dashboard() {
     const covers = useMemo(() => {
         const allowedCovers = [
             { id: 'cover.alle_storen', name: 'Alle Storen' },
-            { id: 'cover.essbereich', name: '🍽️ Essbereich' },
             { id: 'cover.kuche', name: '🍳 Küche' },
+            { id: 'cover.ogp_3900159', name: '🍳 Küche Balkon' },
+            { id: 'cover.essbereich', name: '🍽️ Essbereich' },
             { id: 'cover.wohnzimmer_spielplaetzchen', name: '🧸 Spielplätzchen' },
             { id: 'cover.terrasse', name: '🪴 Terrasse' },
             { id: 'cover.wohnzimmer_sofa', name: '🛋️ Wohnzimmer' },
@@ -1282,24 +1283,27 @@ export default function Dashboard() {
                         </View>
                         <ScrollView style={styles.modalBody}>
                             <View style={styles.modalGrid}>
-                                {covers.map(c => (
-                                    <View key={c.entity_id} style={{ width: tileWidth }}>
-                                        <Tile
-                                            label={c.attributes.friendly_name || c.entity_id}
-                                            subtext={c.attributes?.current_position != null ? `${c.attributes?.current_position}%` : c.state}
-                                            icon={Blinds}
-                                            iconColor={colors.subtext}
-                                            activeColor={colors.accent}
-                                            isActive={c.state === 'open' || c.attributes.current_position > 0}
-                                            activeStyle={styles.tileActiveCover}
-                                        >
-                                            <View style={{ flexDirection: 'row', gap: 4, marginTop: 8 }}>
-                                                <Pressable onPress={() => openCover(c.entity_id)} style={styles.miniBtn}><Text style={styles.miniBtnText}>↑</Text></Pressable>
-                                                <Pressable onPress={() => closeCover(c.entity_id)} style={styles.miniBtn}><Text style={styles.miniBtnText}>↓</Text></Pressable>
-                                            </View>
-                                        </Tile>
-                                    </View>
-                                ))}
+                                {covers.map(c => {
+                                    const isFullWidth = c.attributes.friendly_name === 'Alle Storen';
+                                    return (
+                                        <View key={c.entity_id} style={{ width: isFullWidth ? '100%' : tileWidth }}>
+                                            <Tile
+                                                label={c.attributes.friendly_name || c.entity_id}
+                                                subtext={c.attributes?.current_position != null ? `${c.attributes?.current_position}%` : c.state}
+                                                icon={Blinds}
+                                                iconColor={colors.subtext}
+                                                activeColor={colors.accent}
+                                                isActive={c.state === 'open' || c.attributes.current_position > 0}
+                                                activeStyle={styles.tileActiveCover}
+                                            >
+                                                <View style={{ flexDirection: 'row', gap: 4, marginTop: 8 }}>
+                                                    <Pressable onPress={() => openCover(c.entity_id)} style={styles.miniBtn}><Text style={styles.miniBtnText}>↑</Text></Pressable>
+                                                    <Pressable onPress={() => closeCover(c.entity_id)} style={styles.miniBtn}><Text style={styles.miniBtnText}>↓</Text></Pressable>
+                                                </View>
+                                            </Tile>
+                                        </View>
+                                    );
+                                })}
                             </View>
                         </ScrollView>
                     </View>
