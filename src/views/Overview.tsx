@@ -14,6 +14,9 @@ interface OverviewProps {
     onBrightnessChange: (id: string, brightness: number) => void;
     onColorChange: (id: string, color: string) => void;
     onTempChange: (id: string, temp: number) => void;
+    onSetPosition?: (id: string, position: number) => void;
+    onSetTilt?: (id: string, tilt: number) => void;
+    onTriggerMyPosition?: (id: string) => void;
 }
 
 export const Overview: React.FC<OverviewProps> = ({
@@ -21,7 +24,10 @@ export const Overview: React.FC<OverviewProps> = ({
     onToggle,
     onBrightnessChange,
     onColorChange,
-    onTempChange
+    onTempChange,
+    onSetPosition,
+    onSetTilt,
+    onTriggerMyPosition
 }) => {
     const lights = entities.filter(e => e.type === 'light');
     const covers = entities.filter(e => e.type === 'cover');
@@ -254,10 +260,9 @@ export const Overview: React.FC<OverviewProps> = ({
                         console.log(`Closing cover ${id}`);
                         // TODO: Call HA service to close cover
                     }}
-                    onSetPosition={(id, position) => {
-                        console.log(`Set cover ${id} position to ${position}`);
-                        // TODO: Call HA service to set cover position
-                    }}
+                    onSetPosition={onSetPosition}
+                    onSetTilt={onSetTilt}
+                    onTriggerMyPosition={onTriggerMyPosition}
                 />
             </Modal>
         </>

@@ -201,6 +201,7 @@ export interface EntityState {
         source?: string;
         [key: string]: any;
     };
+    myPositionEntity?: string;
     last_changed: string;
     last_updated: string;
 }
@@ -219,12 +220,15 @@ interface HomeAssistantContextType {
     openCover: (entityId: string) => void;
     closeCover: (entityId: string) => void;
     setCoverPosition: (entityId: string, position: number) => void;
+    stopCover: (entityId: string) => void;
     startVacuum: (entityId: string) => void;
     pauseVacuum: (entityId: string) => void;
     returnVacuum: (entityId: string) => void;
     activateScene: (sceneId: string) => void;
     setClimateTemperature: (entityId: string, temperature: number) => void;
     setClimateHvacMode: (entityId: string, mode: string) => void;
+    setCoverTiltPosition: (entityId: string, position: number) => void;
+    pressButton: (entityId: string) => void;
     playMedia: (entityId: string, mediaContentId: string, mediaContentType: string) => void;
     browseMedia: (entityId: string, mediaContentId?: string, mediaContentType?: string) => Promise<any>;
     callService: (domain: string, service: string, entityId: string, data?: any) => void;
@@ -487,7 +491,38 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
     };
 
     const handleStateChange = useCallback((newEntities: any[]) => {
-        setEntities(newEntities);
+        // MY_POSITION_MAPPING by entity_id for reliable matching
+        const MY_POSITION_MAPPING: Record<string, string> = {
+            'cover.essbereich': 'button.evb_essbereich_my_position',
+            'cover.kuche': 'button.evb_kuchenfenster_my_position',
+            'cover.ogp_3900159': 'button.evb_kuche_balkon_my_position', // Küche Balkon
+            'cover.wohnzimmer_sofa': 'button.evb_sofa_my_position',
+            'cover.wohnzimmer_spielplaetzchen': 'button.evb_spielplatz_my_position',
+            'cover.terrasse': 'button.evb_terrasse_my_position',
+        };
+
+        // RENAMING by entity_id for covers only
+        const COVER_RENAMING: Record<string, string> = {
+            'cover.kuche': 'Küchenfenster',
+            'cover.wohnzimmer_sofa': 'Sofa',
+        };
+
+        const mapped: EntityState[] = newEntities.map((ent: any) => {
+            const attributes = { ...ent.attributes };
+
+            // Renaming logic (covers only)
+            if (COVER_RENAMING[ent.entity_id]) {
+                attributes.friendly_name = COVER_RENAMING[ent.entity_id];
+            }
+
+            return {
+                ...ent,
+                attributes,
+                myPositionEntity: MY_POSITION_MAPPING[ent.entity_id]
+            };
+        });
+
+        setEntities(mapped);
     }, []);
 
     // Timestamp tracking to prevent race conditions (HA state vs Local Optimistic state)
@@ -1133,6 +1168,10 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
         serviceRef.current?.setCoverPosition(entityId, position);
     };
 
+    const stopCover = (entityId: string) => {
+        serviceRef.current?.callService('cover', 'stop_cover', entityId);
+    };
+
     const startVacuum = (entityId: string) => {
         serviceRef.current?.startVacuum(entityId);
     };
@@ -1164,13 +1203,21 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
         }
         serviceRef.current.callService(domain, service, entityId, data);
     }, []);
-    const setClimateTemperature = (entityId: string, temperature: number) => {
+    const setClimateTemperature = useCallback((entityId: string, temperature: number) => {
         serviceRef.current?.callService('climate', 'set_temperature', entityId, { temperature });
-    };
+    }, []);
 
-    const setClimateHvacMode = (entityId: string, mode: string) => {
-        serviceRef.current?.callService('climate', 'set_hvac_mode', entityId, { hvac_mode: mode });
-    };
+    const setCoverTiltPosition = useCallback((entityId: string, tilt_position: number) => {
+        serviceRef.current?.callService('cover', 'set_cover_tilt_position', entityId, { tilt_position });
+    }, []);
+
+    const pressButton = useCallback((entityId: string) => {
+        serviceRef.current?.callService('button', 'press', entityId);
+    }, []);
+
+    const setClimateHvacMode = useCallback((entityId: string, hvac_mode: string) => {
+        serviceRef.current?.callService('climate', 'set_hvac_mode', entityId, { hvac_mode: hvac_mode });
+    }, []);
 
     const getEntityPictureUrl = (entityPicture: string | undefined): string | undefined => {
         if (!entityPicture) return undefined;
@@ -1187,7 +1234,7 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
             // or relying on the session if the user was logged in via webview (which we aren't).
             // 
             // Actually, HA Long-Lived Access Tokens cannot be passed via query param for all endpoints.
-            // But `entity_picture` for cameras often points to `/api/camera_proxy/...?token=...` which is a temporary token generated by HA.
+            // BUT: Camera entities often update their `entity_picture` attribute to include a short-lived `token` valid for that session context.
             // If the entity_picture ALREADY has a token (e.g. from camera entity attribute), we don't need to do anything.
 
             // Let's check if it already has a query param
@@ -1229,6 +1276,9 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
         openCover,
         closeCover,
         setCoverPosition,
+        stopCover,
+        setCoverTiltPosition,
+        pressButton,
         startVacuum,
         pauseVacuum,
         returnVacuum,

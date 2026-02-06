@@ -6,13 +6,17 @@ interface CoversControlProps {
     onOpen: (id: string) => void;
     onClose: (id: string) => void;
     onSetPosition?: (id: string, position: number) => void;
+    onSetTilt?: (id: string, tilt: number) => void;
+    onTriggerMyPosition?: (id: string) => void;
 }
 
 export const CoversControl: React.FC<CoversControlProps> = ({
     covers,
     onOpen,
     onClose,
-    onSetPosition
+    onSetPosition,
+    onSetTilt,
+    onTriggerMyPosition
 }) => {
     const handlePositionChange = (id: string, value: string) => {
         if (onSetPosition) {
@@ -82,6 +86,17 @@ export const CoversControl: React.FC<CoversControlProps> = ({
                                         </span>
                                     </div>
                                 )}
+
+                                {/* My Position Button */}
+                                {onTriggerMyPosition && (
+                                    <button
+                                        onClick={() => onTriggerMyPosition(cover.id)}
+                                        className="glass-card w-10 h-10 rounded-full flex items-center justify-center hover:scale-110 active:scale-95 transition-all text-amber-500 bg-amber-500/10 border-amber-500/20"
+                                        title="My Position"
+                                    >
+                                        <i className="fa-solid fa-star"></i>
+                                    </button>
+                                )}
                             </div>
 
                             {/* Control Buttons */}
@@ -115,6 +130,36 @@ export const CoversControl: React.FC<CoversControlProps> = ({
                                     Schließen
                                 </button>
                             </div>
+
+                            {/* Tilt Buttons */}
+                            {onSetTilt && (
+                                <div className="flex gap-3 mb-4">
+                                    <button
+                                        onClick={() => onSetTilt(cover.id, 50)}
+                                        className="
+                                            flex-1 glass-card p-2 rounded-xl text-sm font-bold
+                                            hover:scale-105 active:scale-95 transition-all
+                                            bg-gradient-to-r from-amber-500/20 to-orange-500/20
+                                            hover:from-amber-500/30 hover:to-orange-500/30
+                                        "
+                                    >
+                                        <i className="fa-solid fa-angles-up mr-2 text-amber-400"></i>
+                                        Schräg auf
+                                    </button>
+                                    <button
+                                        onClick={() => onSetTilt(cover.id, 10)}
+                                        className="
+                                            flex-1 glass-card p-2 rounded-xl text-sm font-bold
+                                            hover:scale-105 active:scale-95 transition-all
+                                            bg-gradient-to-r from-teal-500/20 to-emerald-500/20
+                                            hover:from-teal-500/30 hover:to-emerald-500/30
+                                        "
+                                    >
+                                        <i className="fa-solid fa-angles-down mr-2 text-teal-400"></i>
+                                        Schräg zu
+                                    </button>
+                                </div>
+                            )}
 
                             {/* Position Slider */}
                             {onSetPosition && (

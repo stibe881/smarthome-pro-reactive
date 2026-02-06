@@ -188,6 +188,14 @@ export class HomeAssistantService {
         await this.callService('cover', 'set_cover_position', entityId, { position });
     }
 
+    async setCoverTiltPosition(entityId: string, tilt_position: number) {
+        await this.callService('cover', 'set_cover_tilt_position', entityId, { tilt_position });
+    }
+
+    async pressButton(entityId: string) {
+        await this.callService('button', 'press', entityId);
+    }
+
     async startVacuum(entityId: string) {
         await this.callService('vacuum', 'start', entityId);
     }

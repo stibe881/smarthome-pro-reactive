@@ -6,7 +6,8 @@ import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useHomeAssistant } from '../../contexts/HomeAssistantContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { Lightbulb, Blinds, Thermometer, Droplets, Wind, Lock, Unlock, Zap, Music, Play, Pause, SkipForward, SkipBack, Bot, PartyPopper, Calendar, CloudRain, Cloud, Sun, Moon, ShoppingCart, Info, Loader2, UtensilsCrossed, Shirt, Clapperboard, BedDouble, ChevronRight, Shield, LucideIcon, DoorOpen, DoorClosed, WifiOff, Tv, X, Wifi, RefreshCw, Power, Battery, PlayCircle, Home, Map, MapPin, Fan, Clock, Video } from 'lucide-react-native';
+import { Lightbulb, Blinds, Thermometer, Droplets, Wind, Lock, Unlock, Zap, Music, Play, Pause, SkipForward, SkipBack, Bot, PartyPopper, Calendar, CloudRain, Cloud, Sun, Moon, ShoppingCart, Info, Loader2, UtensilsCrossed, Shirt, Clapperboard, BedDouble, ChevronRight, Shield, LucideIcon, DoorOpen, DoorClosed, WifiOff, Tv, X, Wifi, RefreshCw, Power, Battery, PlayCircle, Home, Map, MapPin, Fan, Clock, Video, Star, Square } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
 import SecurityModal from '../../components/SecurityModal';
 import { WHITELISTED_PLAYERS } from '../../config/mediaPlayers';
 import { filterSecurityEntities } from '../../utils/securityHelpers';
@@ -23,6 +24,8 @@ import WeatherForecastModal from '../../components/WeatherForecastModal';
 import HeaderClock from '../../components/HeaderClock';
 import ActionFeedbackModal from '../../components/ActionFeedbackModal';
 import QuickActionInfoModal, { QuickActionInfo } from '../../components/QuickActionInfoModal';
+import ShutterControlModal from '../../components/ShutterControlModal';
+import { EntityState } from '../../contexts/HomeAssistantContext';
 
 interface HeroStatCardProps {
     icon: LucideIcon;
@@ -470,6 +473,10 @@ export default function Dashboard() {
         activateScene,
         openCover,
         closeCover,
+        setCoverPosition,
+        setCoverTiltPosition,
+        pressButton,
+        stopCover,
         startVacuum,
         returnVacuum,
         callService,
@@ -487,6 +494,7 @@ export default function Dashboard() {
 
     // Modal states
     const [activeModal, setActiveModal] = useState<'lights' | 'covers' | 'robi' | 'security' | 'cameras' | null>(null);
+    const [selectedCover, setSelectedCover] = useState<EntityState | null>(null);
 
     // Filter entities
     const lights = useMemo(() => {
@@ -1287,20 +1295,80 @@ export default function Dashboard() {
                                     const isFullWidth = c.attributes.friendly_name === 'Alle Storen';
                                     return (
                                         <View key={c.entity_id} style={{ width: isFullWidth ? '100%' : tileWidth }}>
-                                            <Tile
-                                                label={c.attributes.friendly_name || c.entity_id}
-                                                subtext={c.attributes?.current_position != null ? `${c.attributes?.current_position}%` : c.state}
-                                                icon={Blinds}
-                                                iconColor={colors.subtext}
-                                                activeColor={colors.accent}
-                                                isActive={c.state === 'open' || c.attributes.current_position > 0}
-                                                activeStyle={styles.tileActiveCover}
+                                            <Pressable
+                                                onPress={() => {
+                                                    // Close covers modal first, then open shutter control modal
+                                                    setActiveModal(null);
+                                                    setSelectedCover(c);
+                                                }}
+                                                style={({ pressed }) => [
+                                                    styles.tile,
+                                                    { backgroundColor: colors.card, borderColor: colors.border },
+                                                    (c.state === 'open' || c.attributes.current_position > 0) && styles.tileActiveCover,
+                                                    pressed && { opacity: 0.8 }
+                                                ]}
                                             >
-                                                <View style={{ flexDirection: 'row', gap: 4, marginTop: 8 }}>
-                                                    <Pressable onPress={() => openCover(c.entity_id)} style={styles.miniBtn}><Text style={styles.miniBtnText}>↑</Text></Pressable>
-                                                    <Pressable onPress={() => closeCover(c.entity_id)} style={styles.miniBtn}><Text style={styles.miniBtnText}>↓</Text></Pressable>
+                                                {/* My Position Star (top-left, not covering %) */}
+                                                {c.myPositionEntity && (
+                                                    <Pressable
+                                                        onPress={(e) => {
+                                                            e.stopPropagation();
+                                                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                                                            pressButton(c.myPositionEntity!);
+                                                        }}
+                                                        style={{
+                                                            position: 'absolute',
+                                                            top: 8,
+                                                            left: 8,
+                                                            width: 28,
+                                                            height: 28,
+                                                            borderRadius: 14,
+                                                            backgroundColor: 'rgba(245, 158, 11, 0.15)',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center',
+                                                            borderWidth: 1,
+                                                            borderColor: 'rgba(245, 158, 11, 0.3)',
+                                                            zIndex: 10,
+                                                        }}
+                                                    >
+                                                        <Star size={14} color="#F59E0B" fill="#F59E0B" />
+                                                    </Pressable>
+                                                )}
+
+                                                <View style={styles.tileHeader}>
+                                                    <View style={[styles.tileIcon, { backgroundColor: (c.state === 'open' || c.attributes.current_position > 0) ? colors.accent : colors.background }]}>
+                                                        <Blinds size={24} color={(c.state === 'open' || c.attributes.current_position > 0) ? '#FFF' : colors.accent} />
+                                                    </View>
+                                                    <Text style={[styles.tileState, { color: colors.subtext }]}>
+                                                        {c.attributes?.current_position != null ? `${c.attributes.current_position}%` : c.state}
+                                                    </Text>
                                                 </View>
-                                            </Tile>
+                                                <Text numberOfLines={1} style={[styles.tileName, { color: colors.text }]}>
+                                                    {c.attributes.friendly_name || c.entity_id}
+                                                </Text>
+
+                                                {/* Up / Stop / Down Buttons */}
+                                                <View style={{ flexDirection: 'row', gap: 4, marginTop: 8 }}>
+                                                    <Pressable
+                                                        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openCover(c.entity_id); }}
+                                                        style={styles.miniBtn}
+                                                    >
+                                                        <Text style={styles.miniBtnText}>↑</Text>
+                                                    </Pressable>
+                                                    <Pressable
+                                                        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); stopCover(c.entity_id); }}
+                                                        style={[styles.miniBtn, { backgroundColor: 'rgba(239, 68, 68, 0.2)' }]}
+                                                    >
+                                                        <Square size={12} color="#EF4444" fill="#EF4444" />
+                                                    </Pressable>
+                                                    <Pressable
+                                                        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); closeCover(c.entity_id); }}
+                                                        style={styles.miniBtn}
+                                                    >
+                                                        <Text style={styles.miniBtnText}>↓</Text>
+                                                    </Pressable>
+                                                </View>
+                                            </Pressable>
                                         </View>
                                     );
                                 })}
@@ -1340,6 +1408,16 @@ export default function Dashboard() {
             <CamerasModal
                 visible={activeModal === 'cameras'}
                 onClose={closeModal}
+            />
+
+            <ShutterControlModal
+                visible={!!selectedCover}
+                cover={selectedCover}
+                onClose={() => setSelectedCover(null)}
+                setCoverPosition={setCoverPosition}
+                setCoverTiltPosition={setCoverTiltPosition}
+                stopCover={stopCover}
+                pressButton={pressButton}
             />
 
             <WeatherForecastModal

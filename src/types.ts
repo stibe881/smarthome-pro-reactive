@@ -11,6 +11,7 @@ export interface EntityState {
     room?: string;
     brightness?: number;
     position?: number;
+    myPositionEntity?: string;
 }
 
 export interface Room {

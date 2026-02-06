@@ -48,14 +48,32 @@ const App: React.FC = () => {
     });
 
     const haService = useMemo(() => new HomeAssistantService((raw) => {
-        const mapped: EntityState[] = raw.map((ent: any) => ({
-            id: ent.entity_id,
-            name: ent.attributes.friendly_name || ent.entity_id,
-            state: ent.state,
-            attributes: ent.attributes,
-            icon: ent.attributes.icon?.replace('mdi:', 'fa-') || 'fa-circle',
-            type: ent.entity_id.split('.')[0] as any,
-        }));
+        const MY_POSITION_MAPPING: Record<string, string> = {
+            'Essbereich': 'button.evb_essbereich_my_position',
+            'Küche Balkon': 'button.evb_kuche_balkon_my_position',
+            'Küche': 'button.evb_kuchenfenster_my_position',
+            'Wohnzimmer': 'button.evb_sofa_my_position',
+            'Spielplätzchen': 'button.evb_spielplatz_my_position',
+            'Terrasse': 'button.evb_terrasse_my_position',
+        };
+
+        const mapped: EntityState[] = raw.map((ent: any) => {
+            let name = ent.attributes.friendly_name || ent.entity_id;
+
+            // Renaming logic
+            if (name === 'Küche') name = 'Küchenfenster';
+            if (name === 'Wohnzimmer') name = 'Sofa';
+
+            return {
+                id: ent.entity_id,
+                name: name,
+                state: ent.state,
+                attributes: ent.attributes,
+                icon: ent.attributes.icon?.replace('mdi:', 'fa-') || 'fa-circle',
+                type: ent.entity_id.split('.')[0] as any,
+                myPositionEntity: MY_POSITION_MAPPING[ent.attributes.friendly_name] || MY_POSITION_MAPPING[name]
+            };
+        });
         setEntities(mapped);
         setIsConnected(true);
         setIsLoadingHA(false);
@@ -170,6 +188,35 @@ const App: React.FC = () => {
             ...e,
             attributes: { ...e.attributes, color_temp: temp }
         } : e));
+    };
+
+    const handleCoverPosition = (id: string, position: number) => {
+        if (isConnected) {
+            haService.setCoverPosition(id, position);
+        }
+        // Update local state (optimistic)
+        setEntities(prev => prev.map(e => e.id === id ? {
+            ...e,
+            attributes: { ...e.attributes, current_position: position }
+        } : e));
+    };
+
+    const handleCoverTilt = (id: string, tilt: number) => {
+        if (isConnected) {
+            haService.setCoverTiltPosition(id, tilt);
+        }
+        // Update local state (optimistic)
+        setEntities(prev => prev.map(e => e.id === id ? {
+            ...e,
+            attributes: { ...e.attributes, current_tilt_position: tilt }
+        } : e));
+    };
+
+    const handleTriggerMyPosition = (id: string) => {
+        const entity = entities.find(e => e.id === id);
+        if (entity?.myPositionEntity && isConnected) {
+            haService.pressButton(entity.myPositionEntity);
+        }
     };
 
     const menu = [
@@ -453,6 +500,9 @@ const App: React.FC = () => {
                                 onBrightnessChange={handleLightBrightness}
                                 onColorChange={handleLightColor}
                                 onTempChange={handleLightTemp}
+                                onSetPosition={handleCoverPosition}
+                                onSetTilt={handleCoverTilt}
+                                onTriggerMyPosition={handleTriggerMyPosition}
                             />
                         )}
                         {activeView === 'rooms' && (

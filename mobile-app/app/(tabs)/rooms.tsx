@@ -12,9 +12,12 @@ import {
     Wind, Fan, Play, Pause, Square, Volume2, Tv, Timer, Heart, Music, Coffee, Zap, Camera,
     SkipBack, SkipForward, Palette, DoorClosed, Rocket, Sparkles, Star, Crown, Power
 } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import Slider from '@react-native-community/slider';
 import LightControlModal from '../../components/LightControlModal';
+import ShutterControlModal from '../../components/ShutterControlModal';
+import { EntityState } from '../../contexts/HomeAssistantContext';
 
 // Theme Types
 type RoomTheme = {
@@ -301,15 +304,45 @@ const LightTile = memo(({ light, toggleLight, setBrightness, width, onLongPress,
     );
 });
 
-const CoverTile = memo(({ cover, openCover, closeCover, stopCover, width, theme: roomTheme }: any) => {
+const CoverTile = memo(({ cover, openCover, closeCover, stopCover, pressButton, onPress, width, theme: roomTheme }: any) => {
     const { colors } = useTheme();
     const isOpen = cover.state === 'open' || (cover.attributes.current_position && cover.attributes.current_position > 0);
     const position = cover.attributes.current_position;
     const activeColor = roomTheme ? roomTheme.accentColor : colors.accent;
 
     return (
-        <View style={[styles.tile, { width, backgroundColor: roomTheme ? 'rgba(255,255,255,0.1)' : colors.card, borderColor: roomTheme ? 'rgba(255,255,255,0.1)' : colors.border }]}>
+        <Pressable
+            onPress={() => onPress?.(cover)}
+            style={[styles.tile, { width, backgroundColor: roomTheme ? 'rgba(255,255,255,0.1)' : colors.card, borderColor: roomTheme ? 'rgba(255,255,255,0.1)' : colors.border }]}
+        >
             <View style={[styles.tileContent, isOpen && { backgroundColor: activeColor + '20', borderColor: activeColor + '50' }]}>
+                {/* My Position Star (top-left) */}
+                {cover.myPositionEntity && (
+                    <Pressable
+                        onPress={(e) => {
+                            e.stopPropagation();
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                            pressButton(cover.myPositionEntity!);
+                        }}
+                        style={{
+                            position: 'absolute',
+                            top: 8,
+                            left: 8,
+                            width: 28,
+                            height: 28,
+                            borderRadius: 14,
+                            backgroundColor: 'rgba(245, 158, 11, 0.15)',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            borderWidth: 1,
+                            borderColor: 'rgba(245, 158, 11, 0.3)',
+                            zIndex: 10,
+                        }}
+                    >
+                        <Star size={14} color="#F59E0B" fill="#F59E0B" />
+                    </Pressable>
+                )}
+
                 <View style={styles.tileHeader}>
                     <View style={[styles.tileIcon, { backgroundColor: isOpen ? activeColor : (roomTheme ? 'rgba(255,255,255,0.1)' : colors.background) }]}>
                         <Blinds size={24} color={isOpen ? "#FFF" : activeColor} />
@@ -322,16 +355,20 @@ const CoverTile = memo(({ cover, openCover, closeCover, stopCover, width, theme:
                     {cover.attributes.friendly_name}
                 </Text>
 
+                {/* Up / Stop / Down Buttons */}
                 <View style={styles.tileActions}>
-                    <Pressable onPress={() => openCover(cover.entity_id)} style={styles.actionBtn}>
+                    <Pressable onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openCover(cover.entity_id); }} style={styles.actionBtn}>
                         <Text style={styles.actionBtnText}>↑</Text>
                     </Pressable>
-                    <Pressable onPress={() => closeCover(cover.entity_id)} style={styles.actionBtn}>
+                    <Pressable onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); stopCover(cover.entity_id); }} style={[styles.actionBtn, { backgroundColor: 'rgba(239, 68, 68, 0.2)' }]}>
+                        <Square size={12} color="#EF4444" fill="#EF4444" />
+                    </Pressable>
+                    <Pressable onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); closeCover(cover.entity_id); }} style={styles.actionBtn}>
                         <Text style={styles.actionBtnText}>↓</Text>
                     </Pressable>
                 </View>
             </View>
-        </View>
+        </Pressable>
     );
 });
 
@@ -739,7 +776,7 @@ const HelperTile = memo(({ entity, api, width, theme }: any) => {
     return null;
 });
 
-const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState }: any) => {
+const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, onSelectCover }: any) => {
     const { width } = useWindowDimensions();
     const { colors } = useTheme();
     const isTablet = width >= 768;
@@ -993,6 +1030,9 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState }: 
                                             cover={c}
                                             openCover={api.openCover}
                                             closeCover={api.closeCover}
+                                            stopCover={api.stopCover}
+                                            pressButton={api.pressButton}
+                                            onPress={onSelectCover}
                                             width={tileWidth}
                                             theme={theme}
                                         />
@@ -1068,6 +1108,9 @@ export default function Rooms() {
         openCover,
         closeCover,
         setCoverPosition,
+        setCoverTiltPosition,
+        stopCover,
+        pressButton,
         callService,
         setClimateTemperature, // Assuming availability
         activateScene,
@@ -1075,6 +1118,7 @@ export default function Rooms() {
     } = useHomeAssistant();
 
     const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
+    const [selectedCoverForModal, setSelectedCoverForModal] = useState<EntityState | null>(null);
 
     // Allowed Rooms Configuration
     // Categories Configuration
@@ -1640,10 +1684,13 @@ export default function Rooms() {
         openCover,
         closeCover,
         setCoverPosition,
+        setCoverTiltPosition,
+        pressButton,
         setClimateTemperature,
         callService,
-        activateScene
-    }), [toggleLight, setLightBrightness, openCover, closeCover, setCoverPosition, setClimateTemperature, callService, activateScene]);
+        activateScene,
+        stopCover
+    }), [toggleLight, setLightBrightness, openCover, closeCover, setCoverPosition, setCoverTiltPosition, stopCover, pressButton, setClimateTemperature, callService, activateScene]);
 
     const activeRoomData = useMemo(() => rooms.find(r => r.name === selectedRoom), [rooms, selectedRoom]);
 
@@ -1817,6 +1864,17 @@ export default function Rooms() {
                 onClose={closeModal}
                 api={api}
                 sleepTimerState={sleepTimerState}
+                onSelectCover={setSelectedCoverForModal}
+            />
+
+            <ShutterControlModal
+                visible={!!selectedCoverForModal}
+                cover={selectedCoverForModal}
+                onClose={() => setSelectedCoverForModal(null)}
+                setCoverPosition={setCoverPosition}
+                setCoverTiltPosition={setCoverTiltPosition}
+                stopCover={stopCover}
+                pressButton={pressButton}
             />
         </SafeAreaView>
     );
