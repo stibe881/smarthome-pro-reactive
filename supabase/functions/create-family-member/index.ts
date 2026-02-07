@@ -34,24 +34,29 @@ Deno.serve(async (req) => {
     })
 
     // Get calling user
-    const { data: { user: callingUser } } = await userClient.auth.getUser()
-    if (!callingUser) {
+    const { data: { user: callingUser }, error: userError } = await userClient.auth.getUser()
+    if (userError || !callingUser) {
+      console.error('Auth error:', userError)
       return new Response(
-        JSON.stringify({ error: 'Benutzer nicht gefunden' }),
+        JSON.stringify({ error: 'Benutzer nicht gefunden oder Token ungültig: ' + (userError?.message || '') }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
     // Check if calling user is admin
-    const { data: memberData } = await userClient
+    const { data: memberData, error: memberFetchError } = await userClient
       .from('family_members')
       .select('role, household_id')
       .eq('user_id', callingUser.id)
-      .single()
+      .maybeSingle()
 
-    if (!memberData || memberData.role !== 'admin') {
+    if (memberFetchError || !memberData || memberData.role !== 'admin') {
+      console.log('Member check failed:', { memberData, error: memberFetchError })
       return new Response(
-        JSON.stringify({ error: 'Nur Admins können Mitglieder hinzufügen' }),
+        JSON.stringify({ 
+          error: 'Nur Admins können Mitglieder hinzufügen.',
+          details: memberFetchError?.message || 'Kein Admin-Eintrag in family_members gefunden. Bitte Datenbank-Status prüfen.'
+        }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
