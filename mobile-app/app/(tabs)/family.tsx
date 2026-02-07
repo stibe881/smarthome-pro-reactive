@@ -133,14 +133,15 @@ export default function Family() {
 
             if (error) {
                 console.log('Invite failed:', error);
-                // Try to parse if it's a JSON string in the error message, otherwise show message
                 let errorMessage = error.message;
+                const statusCode = error.status || (error as any).statusCode;
+
                 try {
                     const parsed = JSON.parse(errorMessage);
                     if (parsed.error) errorMessage = parsed.error;
                 } catch (e) { /* ignore */ }
 
-                Alert.alert('Fehler', errorMessage || 'Unbekannter Fehler');
+                Alert.alert('Fehler', `Status: ${statusCode}\n\n${errorMessage || 'Unbekannter Fehler'}`);
                 return;
             }
 
