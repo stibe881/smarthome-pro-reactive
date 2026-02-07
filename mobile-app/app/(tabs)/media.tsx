@@ -120,6 +120,12 @@ export default function Media() {
             return mappedId;
         }
 
+        // Pattern 0.5: The player itself is already a Music Assistant player (ma_ or mass_ prefix)
+        if (id.startsWith('media_player.ma_') || id.startsWith('media_player.mass_')) {
+            console.log(`[MASS] Player ${id} is already a Music Assistant player`);
+            return id;
+        }
+
         // Pattern 1: media_player.mass_name (Exact Prefix Replacement)
         const massId = id.replace('media_player.', 'media_player.mass_');
         if (entities.find(e => e.entity_id === massId)) return massId;
@@ -132,7 +138,7 @@ export default function Media() {
             .replace('home_', '');
 
         const massCandidate = entities.find(e =>
-            e.entity_id.startsWith('media_player.mass_') &&
+            (e.entity_id.startsWith('media_player.mass_') || e.entity_id.startsWith('media_player.ma_')) &&
             e.entity_id.includes(coreName)
         );
 
@@ -140,9 +146,6 @@ export default function Media() {
             console.log(`[MASS] Found fuzzy match: ${massCandidate.entity_id} for ${id}`);
             return massCandidate.entity_id;
         }
-
-        // Pattern 3: The player itself is already a MASS player
-        if (id.startsWith('media_player.mass_')) return id;
 
         return null;
     };

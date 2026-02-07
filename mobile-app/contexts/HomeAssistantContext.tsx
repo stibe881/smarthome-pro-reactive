@@ -418,6 +418,31 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
         registerForPushNotificationsAsync().then(token => setExpoPushToken(token ?? null));
     }, []);
 
+    // Sync Push Token to Home Assistant
+    useEffect(() => {
+        const syncPushTokenToHA = async () => {
+            if (!isConnected || !expoPushToken || !userSlug || !serviceRef.current) return;
+
+            try {
+                // The input_text entity should be named: input_text.push_token_{userSlug}
+                // e.g., input_text.push_token_stibe
+                const inputTextEntityId = `input_text.push_token_${userSlug}`;
+
+                console.log(`[Push Token] Syncing to HA: ${inputTextEntityId}`);
+
+                await serviceRef.current.callService('input_text', 'set_value', inputTextEntityId, {
+                    value: expoPushToken
+                });
+
+                console.log(`[Push Token] Successfully synced to HA`);
+            } catch (e) {
+                console.warn('[Push Token] Failed to sync to HA:', e);
+            }
+        };
+
+        syncPushTokenToHA();
+    }, [isConnected, expoPushToken, userSlug]);
+
     async function registerForPushNotificationsAsync() {
         if (!Device.isDevice) {
             console.log('Must use physical device for Push Notifications');
