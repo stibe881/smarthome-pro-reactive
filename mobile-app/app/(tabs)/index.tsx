@@ -1305,6 +1305,7 @@ export default function Dashboard() {
                                                     styles.tile,
                                                     { backgroundColor: colors.card, borderColor: colors.border },
                                                     (c.state === 'open' || c.attributes.current_position > 0) && styles.tileActiveCover,
+                                                    (c.state === 'opening' || c.state === 'closing') && { borderColor: '#F97316', borderWidth: 2, backgroundColor: 'rgba(249, 115, 22, 0.1)' },
                                                     pressed && { opacity: 0.8 }
                                                 ]}
                                             >
