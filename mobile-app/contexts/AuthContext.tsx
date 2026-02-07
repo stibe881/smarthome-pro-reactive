@@ -21,6 +21,11 @@ interface AuthContextType {
     login: (email: string, password: string) => Promise<void>;
     register: (email: string, password: string) => Promise<void>;
     logout: () => Promise<void>;
+    deleteAccount: () => Promise<void>;
+    changePassword: (newPassword: string) => Promise<void>;
+    resetMemberPassword: (memberId: string, newPassword: string) => Promise<void>;
+    removeMember: (memberId: string) => Promise<void>;
+    toggleMemberAccess: (memberId: string, active: boolean) => Promise<void>;
     clearMustChangePassword: () => void;
 }
 
@@ -319,6 +324,43 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setMustChangePassword(false);
     };
 
+    const deleteAccount = async () => {
+        const { error } = await supabase.rpc('delete_user_account');
+        if (error) throw error;
+        setSession(null);
+        setUser(null);
+        setMustChangePassword(false);
+    };
+
+    const changePassword = async (newPassword: string) => {
+        const { error } = await supabase.auth.updateUser({ password: newPassword });
+        if (error) throw error;
+        setMustChangePassword(false);
+    };
+
+    const resetMemberPassword = async (memberId: string, newPassword: string) => {
+        const { error } = await supabase.rpc('reset_member_password', {
+            p_user_id: memberId,
+            p_new_password: newPassword
+        });
+        if (error) throw error;
+    };
+
+    const removeMember = async (memberId: string) => {
+        const { error } = await supabase.rpc('remove_family_member', {
+            p_user_id: memberId
+        });
+        if (error) throw error;
+    };
+
+    const toggleMemberAccess = async (memberId: string, active: boolean) => {
+        const { error } = await supabase.rpc('toggle_member_access', {
+            p_user_id: memberId,
+            p_active: active
+        });
+        if (error) throw error;
+    };
+
     const clearMustChangePassword = () => {
         setMustChangePassword(false);
     };
@@ -337,6 +379,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             login,
             register,
             logout,
+            deleteAccount,
+            changePassword,
+            resetMemberPassword,
+            removeMember,
+            toggleMemberAccess,
             mustChangePassword,
             clearMustChangePassword
         }}>

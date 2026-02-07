@@ -294,6 +294,9 @@ interface HomeAssistantContextType {
     getExpoPushToken: () => string | null;
     isDoorbellRinging: boolean;
     setIsDoorbellRinging: (ringing: boolean) => void;
+    dashboardConfig: any;
+    saveDashboardConfig: (config: any) => Promise<void>;
+    isHAInitialized: boolean;
 }
 
 const HomeAssistantContext = createContext<HomeAssistantContextType | undefined>(undefined);
@@ -378,6 +381,8 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
             birthday: true
         }
     });
+    const [dashboardConfig, setDashboardConfig] = useState<any>({});
+    const [isHAInitialized, setIsHAInitialized] = useState(false);
 
     // Create a ref to access current settings in callbacks/effects without dependency cycles
     const notificationSettingsRef = useRef<NotificationSettings>(notificationSettings);
@@ -825,13 +830,16 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
 
         // Initial check in case listener missed it (race condition)
         (async () => {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session?.user) {
-                // console.log('[HA Context] Initial session check: User logged in. Checking credentials...');
-                const creds = await getCredentials();
-                if (creds) {
-                    connect();
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+                if (session?.user) {
+                    const creds = await getCredentials();
+                    if (creds) {
+                        await connect();
+                    }
                 }
+            } finally {
+                setIsHAInitialized(true);
             }
         })();
 
@@ -1095,7 +1103,7 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
                 // Get household HA credentials
                 const { data: householdData, error: householdError } = await supabase
                     .from('households')
-                    .select('ha_url, ha_token')
+                    .select('ha_url, ha_token, dashboard_config')
                     .eq('id', memberData.household_id)
                     .single();
 
@@ -1103,6 +1111,9 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
 
                 if (householdData?.ha_url && householdData?.ha_token) {
                     // console.log('✅ Loaded HA credentials from household via family_members');
+                    if (householdData.dashboard_config) {
+                        setDashboardConfig(householdData.dashboard_config);
+                    }
                     return { url: householdData.ha_url, token: householdData.ha_token };
                 }
             } else {
@@ -1113,13 +1124,16 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
             // Fallback: try to get from any household
             const { data: householdData } = await supabase
                 .from('households')
-                .select('ha_url, ha_token')
+                .select('ha_url, ha_token, dashboard_config')
                 .not('ha_url', 'is', null)
                 .limit(1)
                 .single();
 
             if (householdData?.ha_url && householdData?.ha_token) {
                 // console.log('✅ Loaded HA credentials from default household');
+                if (householdData.dashboard_config) {
+                    setDashboardConfig(householdData.dashboard_config);
+                }
                 return { url: householdData.ha_url, token: householdData.ha_token };
             }
 
@@ -1420,7 +1434,29 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
         },
         getExpoPushToken: () => expoPushToken,
         isDoorbellRinging,
-        setIsDoorbellRinging
+        setIsDoorbellRinging,
+        dashboardConfig,
+        isHAInitialized,
+        saveDashboardConfig: async (config: any) => {
+            try {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (!user) return;
+                const { data: memberData } = await supabase
+                    .from('family_members')
+                    .select('household_id')
+                    .eq('user_id', user.id)
+                    .single();
+                if (memberData?.household_id) {
+                    await supabase
+                        .from('households')
+                        .update({ dashboard_config: config })
+                        .eq('id', memberData.household_id);
+                    setDashboardConfig(config);
+                }
+            } catch (e) {
+                console.error('Failed to save dashboard config:', e);
+            }
+        }
     };
 
     return (

@@ -10,7 +10,7 @@ import {
     Thermometer, Gamepad2, BookOpen, Armchair, DoorOpen, ChevronUp,
     ParkingSquare, Flower2, Sun, Moon, LucideIcon,
     Wind, Fan, Play, Pause, Square, Volume2, Tv, Timer, Heart, Music, Coffee, Zap, Camera,
-    SkipBack, SkipForward, Palette, DoorClosed, Rocket, Sparkles, Star, Crown, Power
+    SkipBack, SkipForward, Palette, DoorClosed, Rocket, Star, Crown, Power
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -850,8 +850,6 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, on
                                 start={{ x: 0, y: 0 }}
                                 end={{ x: 1, y: 1 }}
                             />
-                            {/* Sparkles/Flowers */}
-                            <Sparkles size={24} color="#F472B6" style={{ position: 'absolute', top: 80, left: 30, opacity: 0.3 }} />
                             <Heart size={16} color="#DB2777" style={{ position: 'absolute', top: 180, right: 50, opacity: 0.2 }} />
                             <Crown size={300} color="rgba(236, 72, 153, 0.05)" style={{ position: 'absolute', top: 100, left: -50, transform: [{ rotate: '15deg' }] }} />
                             <Flower2 size={200} color="rgba(236, 72, 153, 0.05)" style={{ position: 'absolute', bottom: -20, right: -20 }} />

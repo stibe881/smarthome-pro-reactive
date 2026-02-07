@@ -12,6 +12,7 @@ import SecurityModal from '../../components/SecurityModal';
 import { WHITELISTED_PLAYERS } from '../../config/mediaPlayers';
 import { filterSecurityEntities } from '../../utils/securityHelpers';
 import CamerasModal from '../../components/CamerasModal';
+import { ConnectionWizard } from '../../components/ConnectionWizard';
 // LinearGradient removed to fix compatibility issue
 
 // =====================================================
@@ -485,8 +486,25 @@ export default function Dashboard() {
         shoppingListVisible,
         setShoppingListVisible,
         startShoppingGeofencing,
-        debugShoppingLogic
+        debugShoppingLogic,
+        dashboardConfig,
+        haBaseUrl,
+        isHAInitialized
     } = useHomeAssistant();
+
+    const [showWizard, setShowWizard] = useState(false);
+
+    // Show wizard if no HA URL is set after initialization
+    useEffect(() => {
+        if (isHAInitialized) {
+            if (!haBaseUrl && !isConnecting && !isConnected) {
+                setShowWizard(true);
+            } else if (haBaseUrl && isConnected) {
+                // Auto-hide if we were auto-opened but now connected
+                setShowWizard(false);
+            }
+        }
+    }, [haBaseUrl, isConnecting, isConnected, isHAInitialized]);
 
     // Start Shopping Geofencing on Mount
     useEffect(() => {
@@ -499,7 +517,7 @@ export default function Dashboard() {
 
     // Filter entities
     const lights = useMemo(() => {
-        const allowedLights = [
+        const allowedLights = dashboardConfig.lights || [
             { id: 'light.wohnzimmer', name: '🛋️ Wohnzimmer' },
             { id: 'light.essbereich', name: '🍽️ Essbereich' },
             { id: 'light.kuche', name: '🍳 Küche' },
@@ -509,14 +527,16 @@ export default function Dashboard() {
             { id: 'light.badezimmer', name: '🚿 Badezimmer' },
             { id: 'light.deckenbeleuchtung_buro', name: '🏢 Büro' },
             { id: 'light.licht_garage', name: '🚽 Gäste WC' },
-        ].sort((a, b) => {
+        ];
+
+        const sortedLights = [...allowedLights].sort((a, b) => {
             // Extract name after emoji (skip first 2-3 chars which are emoji)
-            const nameA = a.name.slice(a.name.indexOf(' ') + 1).toLowerCase();
-            const nameB = b.name.slice(b.name.indexOf(' ') + 1).toLowerCase();
+            const nameA = a.name.includes(' ') ? a.name.slice(a.name.indexOf(' ') + 1).toLowerCase() : a.name.toLowerCase();
+            const nameB = b.name.includes(' ') ? b.name.slice(b.name.indexOf(' ') + 1).toLowerCase() : b.name.toLowerCase();
             return nameA.localeCompare(nameB, 'de');
         });
 
-        return allowedLights.map(def => {
+        return sortedLights.map(def => {
             const entity = entities.find(e => e.entity_id === def.id);
             if (!entity) return null;
             // Override friendly name for display
@@ -528,10 +548,10 @@ export default function Dashboard() {
                 }
             };
         }).filter(Boolean) as any[];
-    }, [entities]);
+    }, [entities, dashboardConfig]);
 
     const covers = useMemo(() => {
-        const allowedCovers = [
+        const allowedCovers = dashboardConfig.covers || [
             { id: 'cover.alle_storen', name: 'Alle Storen' },
             { id: 'cover.kuche', name: '🍳 Küche' },
             { id: 'cover.ogp_3900159', name: '🍳 Küche Balkon' },
@@ -539,7 +559,9 @@ export default function Dashboard() {
             { id: 'cover.wohnzimmer_spielplaetzchen', name: '🧸 Spielplätzchen' },
             { id: 'cover.terrasse', name: '🪴 Terrasse' },
             { id: 'cover.wohnzimmer_sofa', name: '🛋️ Wohnzimmer' },
-        ].sort((a, b) => {
+        ];
+
+        const sortedCovers = [...allowedCovers].sort((a, b) => {
             // "Alle Storen" always first, then alphabetically
             if (a.name === 'Alle Storen') return -1;
             if (b.name === 'Alle Storen') return 1;
@@ -549,7 +571,7 @@ export default function Dashboard() {
             return nameA.localeCompare(nameB, 'de');
         });
 
-        return allowedCovers.map(def => {
+        return sortedCovers.map(def => {
             const entity = entities.find(e => e.entity_id === def.id);
             if (!entity) return null;
             return {
@@ -560,7 +582,7 @@ export default function Dashboard() {
                 }
             };
         }).filter(Boolean) as any[];
-    }, [entities]);
+    }, [entities, dashboardConfig]);
     const vacuums = useMemo(() => entities.filter(e => e.entity_id.startsWith('vacuum.')), [entities]);
     const mediaPlayers = useMemo(() => {
         return entities.filter(e => e.entity_id.startsWith('media_player.') && WHITELISTED_PLAYERS.includes(e.entity_id));
@@ -970,20 +992,6 @@ export default function Dashboard() {
                 <View style={styles.section}>
                     <Text style={[styles.sectionTitle, { color: colors.subtext }]}>Schnellaktionen</Text>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickActionsRow}>
-                        <QuickAction
-                            icon={ShoppingCart}
-                            iconColor={colors.error}
-                            label="Debug Shop"
-                            onPress={() => { debugShoppingLogic(); setActiveFeedback('shop_debug'); }}
-                            onLongPress={() => setQuickActionInfo({
-                                title: "Debug Shop",
-                                description: "Prüft die Einkaufslisten-Logik und Geofencing-Status für Fehlerbehebung.",
-                                icon: ShoppingCart,
-                                iconColor: colors.error,
-                                gradient: [colors.error + '26', colors.error + '0D']
-                            })}
-                            gradient={[colors.error + '26', colors.error + '0D']}
-                        />
 
                         <QuickAction
                             icon={Sun}
@@ -1439,6 +1447,11 @@ export default function Dashboard() {
                 visible={!!quickActionInfo}
                 onClose={() => setQuickActionInfo(null)}
                 info={quickActionInfo}
+            />
+
+            <ConnectionWizard
+                visible={showWizard}
+                onClose={() => setShowWizard(false)}
             />
         </SafeAreaView >
     );

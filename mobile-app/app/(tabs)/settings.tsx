@@ -5,11 +5,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { useHomeAssistant } from '../../contexts/HomeAssistantContext';
 import { useTheme, THEMES, ThemeType } from '../../contexts/ThemeContext';
-import { Wifi, WifiOff, Save, LogOut, User, Server, Key, CheckCircle, XCircle, Shield, Bell, Palette, ChevronRight, LucideIcon, X, ScanFace, MapPin, Smartphone, Search, Calendar } from 'lucide-react-native';
+import { Wifi, WifiOff, Save, LogOut, User, Server, Key, CheckCircle, XCircle, Shield, Bell, Palette, ChevronRight, LucideIcon, X, ScanFace, MapPin, Smartphone, Search, Calendar, Trash2, Users, Eye, EyeOff } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
+import { DashboardConfigModal } from '../../components/DashboardConfigModal';
+import { FamilyManagement } from '../../components/FamilyManagement';
+import { ConnectionWizard } from '../../components/ConnectionWizard';
+import { Activity, ShieldCheck, Zap, Blinds, AlertTriangle } from 'lucide-react-native';
 
 const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onClose: () => void }) => {
     const { notificationSettings, updateNotificationSettings } = useHomeAssistant();
@@ -293,6 +297,87 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
     );
 };
 
+const ChangePasswordModal = ({ visible, onClose, colors }: { visible: boolean; onClose: () => void; colors: any }) => {
+    const { changePassword } = useAuth();
+    const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
+
+    const handleSubmit = async () => {
+        if (password.length < 6) {
+            Alert.alert('Fehler', 'Das Passwort muss mindestens 6 Zeichen lang sein.');
+            return;
+        }
+        if (password !== confirmPassword) {
+            Alert.alert('Fehler', 'Die Passwörter stimmen nicht überein.');
+            return;
+        }
+
+        setIsLoading(true);
+        try {
+            await changePassword(password);
+            Alert.alert('Erfolg', 'Dein Passwort wurde erfolgreich geändert.');
+            setPassword('');
+            setConfirmPassword('');
+            onClose();
+        } catch (e: any) {
+            Alert.alert('Fehler', 'Passwortänderung fehlgeschlagen: ' + e.message);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    return (
+        <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+            <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+                <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+                    <Text style={[styles.modalTitle, { color: colors.text }]}>Passwort ändern</Text>
+                    <Pressable onPress={onClose} style={styles.closeButton}>
+                        <X size={24} color={colors.subtext} />
+                    </Pressable>
+                </View>
+                <ScrollView style={{ padding: 16 }}>
+                    <Text style={{ color: colors.subtext, marginBottom: 8, fontSize: 12 }}>Neues Passwort</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', borderColor: colors.border, borderWidth: 1, backgroundColor: colors.card, borderRadius: 12, marginBottom: 16 }}>
+                        <TextInput
+                            style={{ flex: 1, color: colors.text, padding: 12 }}
+                            value={password}
+                            onChangeText={setPassword}
+                            secureTextEntry={!showPassword}
+                            placeholder="Mind. 6 Zeichen"
+                            placeholderTextColor={colors.subtext}
+                        />
+                        <Pressable onPress={() => setShowPassword(!showPassword)} style={{ padding: 12 }}>
+                            {showPassword ? <EyeOff size={18} color={colors.subtext} /> : <Eye size={18} color={colors.subtext} />}
+                        </Pressable>
+                    </View>
+
+                    <Text style={{ color: colors.subtext, marginBottom: 8, fontSize: 12 }}>Passwort bestätigen</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', borderColor: colors.border, borderWidth: 1, backgroundColor: colors.card, borderRadius: 12, marginBottom: 24 }}>
+                        <TextInput
+                            style={{ flex: 1, color: colors.text, padding: 12 }}
+                            value={confirmPassword}
+                            onChangeText={setConfirmPassword}
+                            secureTextEntry={!showPassword}
+                            placeholder="Gleiches Passwort erneut"
+                            placeholderTextColor={colors.subtext}
+                        />
+                    </View>
+
+                    <Pressable
+                        onPress={handleSubmit}
+                        disabled={isLoading}
+                        style={{ backgroundColor: colors.accent, borderRadius: 12, padding: 16, alignItems: 'center' }}
+                    >
+                        {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>Passwort speichern</Text>}
+                    </Pressable>
+                </ScrollView>
+            </View>
+        </Modal>
+    );
+};
+
 // =====================================================
 // CHILD COMPONENTS - Defined OUTSIDE of Settings
 // =====================================================
@@ -358,7 +443,7 @@ export default function Settings() {
     const { width } = useWindowDimensions();
     const isTablet = width >= 768;
 
-    const { logout, user, isBiometricsSupported, isBiometricsEnabled, toggleBiometrics } = useAuth();
+    const { logout, user, isBiometricsSupported, isBiometricsEnabled, toggleBiometrics, deleteAccount } = useAuth();
     const {
         isConnected,
         haBaseUrl,
@@ -380,7 +465,11 @@ export default function Settings() {
     const [isSaving, setIsSaving] = useState(false);
     const [testResult, setTestResult] = useState<'success' | 'error' | null>(null);
     const [notificationModalVisible, setNotificationModalVisible] = useState(false);
+    const [configModalVisible, setConfigModalVisible] = useState(false);
+    const [changePasswordModalVisible, setChangePasswordModalVisible] = useState(false);
     const [isHAExpanded, setIsHAExpanded] = useState(false);
+    const [isFamilyExpanded, setIsFamilyExpanded] = useState(false);
+    const [showWizard, setShowWizard] = useState(false);
 
     // Effect to update status bar style based on theme
     useEffect(() => {
@@ -424,6 +513,28 @@ export default function Settings() {
         } finally {
             setIsSaving(false);
         }
+    };
+
+    const handleDeleteAccount = () => {
+        Alert.alert(
+            'Konto unwiderruflich löschen',
+            'Bist du sicher? Alle deine Daten und Einstellungen werden permanent gelöscht. Dies kann nicht rückgängig gemacht werden.',
+            [
+                { text: 'Abbrechen', style: 'cancel' },
+                {
+                    text: 'LÖSCHEN',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            await deleteAccount();
+                            Alert.alert('Erfolg', 'Dein Konto wurde gelöscht.');
+                        } catch (e: any) {
+                            Alert.alert('Fehler', 'Löschen fehlgeschlagen: ' + e.message);
+                        }
+                    }
+                }
+            ]
+        );
     };
 
     const handleLogout = () => {
@@ -556,6 +667,14 @@ export default function Settings() {
                         {/* App Settings */}
                         <SettingsSection title="App" colors={colors}>
                             <SettingsRow
+                                icon={<Palette size={20} color={colors.accent} />}
+                                iconColor={colors.accent}
+                                label="Dashboard anpassen"
+                                showChevron
+                                onPress={() => setConfigModalVisible(true)}
+                                colors={colors}
+                            />
+                            <SettingsRow
                                 icon={<Bell size={20} color={notificationSettings.enabled ? colors.accent : colors.subtext} />}
                                 iconColor={notificationSettings.enabled ? colors.accent : colors.subtext}
                                 label="Benachrichtigungen"
@@ -590,14 +709,69 @@ export default function Settings() {
                                 />
                             )}
                             <SettingsRow
+                                icon={<Key size={20} color={colors.accent} />}
+                                iconColor={colors.accent}
+                                label="Passwort ändern"
+                                showChevron
+                                onPress={() => setChangePasswordModalVisible(true)}
+                                colors={colors}
+                            />
+                            <SettingsRow
                                 icon={<Shield size={20} color={colors.success} />}
                                 iconColor={colors.success}
                                 label="Datenschutz"
                                 showChevron
+                                onPress={() => Linking.openURL('https://gross-ict.ch/datenschutz')}
+                                colors={colors}
+                            />
+                            <SettingsRow
+                                icon={<Trash2 size={20} color={colors.error} />}
+                                iconColor={colors.error}
+                                label="Konto löschen"
+                                onPress={handleDeleteAccount}
                                 isLast
                                 colors={colors}
                             />
                         </SettingsSection>
+
+                        {/* FAMILY Management - COLLAPSIBLE */}
+                        <View style={styles.section}>
+                            <Pressable
+                                onPress={() => setIsFamilyExpanded(!isFamilyExpanded)}
+                                style={[styles.sectionContent, {
+                                    backgroundColor: colors.card,
+                                    borderColor: colors.border,
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    padding: 16,
+                                    justifyContent: 'space-between'
+                                }]}
+                            >
+                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                    <View style={[styles.iconContainer, { backgroundColor: colors.accent + '20' }]}>
+                                        <Users size={20} color={colors.accent} />
+                                    </View>
+                                    <View>
+                                        <Text style={[styles.rowLabel, { color: colors.text }]}>Familienmitglieder</Text>
+                                        <Text style={[styles.rowValue, { color: colors.subtext, marginTop: 2 }]}>
+                                            Verwalten & Einladen
+                                        </Text>
+                                    </View>
+                                </View>
+                                {isFamilyExpanded ? <ChevronRight size={20} color={colors.subtext} style={{ transform: [{ rotate: '90deg' }] }} /> : <ChevronRight size={20} color={colors.subtext} />}
+                            </Pressable>
+
+                            {isFamilyExpanded && (
+                                <View style={[styles.sectionContent, {
+                                    marginTop: 8,
+                                    backgroundColor: colors.card,
+                                    borderColor: colors.border,
+                                    padding: 8
+                                }]}>
+                                    <FamilyManagement colors={colors} />
+                                </View>
+                            )}
+                        </View>
 
                         {/* HOME ASSISTANT - COLLAPSIBLE AT BOTTOM */}
                         <View style={styles.section}>
@@ -676,26 +850,28 @@ export default function Settings() {
                                         </Text>
                                     </View>
 
-                                    {/* Save Button */}
-                                    <View style={styles.saveContainer}>
+                                    {/* Action Buttons */}
+                                    <View style={[styles.saveContainer, { flexDirection: 'row', gap: 12 }]}>
+                                        <Pressable
+                                            onPress={() => setShowWizard(true)}
+                                            style={[styles.saveButton, { backgroundColor: colors.accent, flex: 1, flexDirection: 'row', gap: 8 }]}
+                                        >
+                                            <Zap size={18} color="#fff" />
+                                            <Text style={styles.saveButtonText}>Setup Wizard</Text>
+                                        </Pressable>
                                         <Pressable
                                             onPress={handleSaveAndConnect}
                                             disabled={isSaving || isConnecting}
                                             style={[
                                                 styles.saveButton,
-                                                { backgroundColor: colors.accent },
+                                                { backgroundColor: colors.success, flex: 1 },
                                                 (isSaving || isConnecting) && styles.saveButtonDisabled
                                             ]}
                                         >
                                             {isSaving || isConnecting ? (
                                                 <ActivityIndicator size="small" color="white" />
                                             ) : (
-                                                <>
-                                                    <Save size={18} color="white" />
-                                                    <Text style={styles.saveButtonText}>
-                                                        Speichern & Verbinden
-                                                    </Text>
-                                                </>
+                                                <Text style={styles.saveButtonText}>Speichern</Text>
                                             )}
                                         </Pressable>
                                     </View>
@@ -721,6 +897,19 @@ export default function Settings() {
                 <NotificationSettingsModal
                     visible={notificationModalVisible}
                     onClose={() => setNotificationModalVisible(false)}
+                />
+                <DashboardConfigModal
+                    visible={configModalVisible}
+                    onClose={() => setConfigModalVisible(false)}
+                />
+                <ChangePasswordModal
+                    visible={changePasswordModalVisible}
+                    onClose={() => setChangePasswordModalVisible(false)}
+                    colors={colors}
+                />
+                <ConnectionWizard
+                    visible={showWizard}
+                    onClose={() => setShowWizard(false)}
                 />
             </SafeAreaView>
         </View>

@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { LayoutGrid, DoorOpen, PlayCircle, Users, Sparkles, Settings } from 'lucide-react-native';
+import { LayoutGrid, DoorOpen, PlayCircle, Users, Settings } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../contexts/ThemeContext';
 import ResponsiveTabBar from '../../components/ResponsiveTabBar';
@@ -36,20 +36,6 @@ export default function TabLayout() {
                 options={{
                     title: 'Medien',
                     tabBarIcon: ({ color }) => <PlayCircle size={24} stroke={color} />,
-                }}
-            />
-            <Tabs.Screen
-                name="family"
-                options={{
-                    title: 'Familie',
-                    tabBarIcon: ({ color }) => <Users size={24} stroke={color} />,
-                }}
-            />
-            <Tabs.Screen
-                name="gemini"
-                options={{
-                    title: 'Gemini',
-                    tabBarIcon: ({ color }) => <Sparkles size={24} stroke={color} />,
                 }}
             />
             <Tabs.Screen
