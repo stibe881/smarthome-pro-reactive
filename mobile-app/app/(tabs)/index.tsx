@@ -6,7 +6,7 @@ import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useHomeAssistant } from '../../contexts/HomeAssistantContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { Lightbulb, Blinds, Thermometer, Droplets, Wind, Lock, Unlock, Zap, Music, Play, Pause, SkipForward, SkipBack, Bot, PartyPopper, Calendar, CloudRain, Cloud, Sun, Moon, ShoppingCart, Info, Loader2, UtensilsCrossed, Shirt, Clapperboard, BedDouble, ChevronRight, Shield, LucideIcon, DoorOpen, DoorClosed, WifiOff, Tv, X, Wifi, RefreshCw, Power, Battery, PlayCircle, Home, Map, MapPin, Fan, Clock, Video, Star, Square } from 'lucide-react-native';
+import { Lightbulb, Blinds, Thermometer, Droplets, Wind, Lock, Unlock, Zap, Music, Play, Pause, SkipForward, SkipBack, Bot, PartyPopper, Calendar, CloudRain, Cloud, Sun, Moon, ShoppingCart, Info, Loader2, UtensilsCrossed, Shirt, Clapperboard, BedDouble, ChevronRight, Shield, LucideIcon, DoorOpen, DoorClosed, WifiOff, Tv, X, Wifi, RefreshCw, Power, Battery, PlayCircle, Home, Map, MapPin, Fan, Clock, Video, Star, Square, Bell } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import SecurityModal from '../../components/SecurityModal';
 import { WHITELISTED_PLAYERS } from '../../config/mediaPlayers';
@@ -25,6 +25,7 @@ import HeaderClock from '../../components/HeaderClock';
 import ActionFeedbackModal from '../../components/ActionFeedbackModal';
 import QuickActionInfoModal, { QuickActionInfo } from '../../components/QuickActionInfoModal';
 import ShutterControlModal from '../../components/ShutterControlModal';
+import NotificationBell from '../../components/NotificationBell';
 import { EntityState } from '../../contexts/HomeAssistantContext';
 
 interface HeroStatCardProps {
@@ -932,7 +933,7 @@ export default function Dashboard() {
                                 </Pressable>
                             );
                         })()}
-                        <View style={[styles.statusDot, { backgroundColor: isConnected ? colors.success : colors.error }]} />
+                        <NotificationBell />
                     </View>
                 </View>
 

@@ -18,8 +18,46 @@ const SHOP_ENTRY_KEY = '@smarthome_shop_entry';
 const IS_HOME_KEY = '@smarthome_is_at_home';
 const METEO_WARNING_KEY = '@smarthome_last_weather_warning';
 
-// Shops to trigger notification
+// Known shops with GPS coordinates for reliable geofencing
+const KNOWN_SHOPS = [
+    { name: 'Aldi Sursee', lat: 47.170723963107065, lng: 8.095389675777374 },
+    { name: 'Aldi Willisau', lat: 47.12633650391756, lng: 7.996571426910975 },
+    { name: 'Coop Willisau', lat: 47.127780306002485, lng: 7.997146443242294 },
+    { name: 'Denner Wauwil', lat: 47.185210354299905, lng: 8.020021866533813 },
+    { name: 'Emmencenter', lat: 47.07458218737632, lng: 8.287166539542232 },
+    { name: 'Gäupark', lat: 47.31872686571612, lng: 7.8036032896462295 },
+    { name: 'Lidl Sursee', lat: 47.17435395463242, lng: 8.099342183724342 },
+    { name: 'Lidl Willisau', lat: 47.13072945815979, lng: 7.999687810709169 },
+    { name: 'Märti Zell', lat: 47.13723434652069, lng: 7.92844912605166 },
+    { name: 'Migros Willisau', lat: 47.123844972245344, lng: 7.994886639544442 },
+    { name: 'Pilatusmarkt', lat: 47.017756755461235, lng: 8.300323511109347 },
+    { name: 'Surseepark', lat: 47.17315292712783, lng: 8.10190380633404 },
+];
+
+// Fallback: Generic shop names for reverse geocoding matching
 const TARGET_SHOPS = ['coop', 'migros', 'volg', 'aldi', 'lidl', 'kaufland', 'denner'];
+
+// Haversine distance formula (returns meters)
+const haversineDistance = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
+    const R = 6371000; // Earth's radius in meters
+    const toRad = (deg: number) => deg * (Math.PI / 180);
+    const dLat = toRad(lat2 - lat1);
+    const dLng = toRad(lng2 - lng1);
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
+// Check if location is near a known shop (within 100m)
+const findNearbyShop = (lat: number, lng: number): string | null => {
+    for (const shop of KNOWN_SHOPS) {
+        const distance = haversineDistance(lat, lng, shop.lat, shop.lng);
+        if (distance <= 100) { // 100 meters radius
+            console.log(`🛒 Near ${shop.name} (${Math.round(distance)}m)`);
+            return shop.name;
+        }
+    }
+    return null;
+};
 
 // Define the background task for Shopping
 if (Platform.OS !== 'web') TaskManager.defineTask(SHOPPING_TASK, async ({ data, error }: any) => {
@@ -53,62 +91,67 @@ if (Platform.OS !== 'web') TaskManager.defineTask(SHOPPING_TASK, async ({ data, 
                 }
             }
 
-            // 2. Reverse Geocode to check if we are at a shop
-            const addresses = await Location.reverseGeocodeAsync({ latitude, longitude });
+            // 2. Check if near a known shop (by GPS coordinates - reliable)
+            let matchingShop = findNearbyShop(latitude, longitude);
 
-            if (addresses && addresses.length > 0) {
-                const address = addresses[0];
-                const name = (address.name || '').toLowerCase();
-                const street = (address.street || '').toLowerCase();
+            // 3. Fallback: Reverse Geocode to check if we are at a shop (less reliable)
+            if (!matchingShop) {
+                const addresses = await Location.reverseGeocodeAsync({ latitude, longitude });
+                if (addresses && addresses.length > 0) {
+                    const address = addresses[0];
+                    const name = (address.name || '').toLowerCase();
+                    const street = (address.street || '').toLowerCase();
 
-                // Check if any target shop name is present in the address name or street (sometimes reliable)
-                // Note: Address.name often contains the POI name (e.g. "Coop Supermarkt")
-                const matchingShop = TARGET_SHOPS.find(shop =>
-                    name.includes(shop) || street.includes(shop)
-                );
-
-                if (matchingShop) {
-                    console.log(`🛒 At Shop: ${matchingShop}`);
-
-                    // 3. Logic: Check Duration
-                    const now = Date.now();
-                    const entryDataStr = await AsyncStorage.getItem(SHOP_ENTRY_KEY);
-                    let entryData = entryDataStr ? JSON.parse(entryDataStr) : null;
-
-                    if (!entryData || entryData.shop !== matchingShop) {
-                        // New shop entry
-                        entryData = { shop: matchingShop, timestamp: now, notified: false };
-                        await AsyncStorage.setItem(SHOP_ENTRY_KEY, JSON.stringify(entryData));
-                    } else {
-                        // Still in same shop
-                        const durationMinutes = (now - entryData.timestamp) / 60000;
-                        console.log(`⏱️ Duration in ${matchingShop}: ${durationMinutes.toFixed(1)} min`);
-
-                        if (durationMinutes >= 3 && !entryData.notified) {
-                            // > 3 Minutes and not yet notified -> NOTIFY!
-                            await Notifications.scheduleNotificationAsync({
-                                content: {
-                                    title: "Haushalt",
-                                    body: "Schau doch kurz in eure Einkaufsliste",
-                                    sound: true,
-                                    categoryIdentifier: 'SHOPPING_ACTION',
-                                    data: { action: 'open_list' }
-                                },
-                                trigger: null
-                            });
-
-                            // Mark as notified
-                            entryData.notified = true;
-                            await AsyncStorage.setItem(SHOP_ENTRY_KEY, JSON.stringify(entryData));
-                        }
+                    const geocodeMatch = TARGET_SHOPS.find(shop =>
+                        name.includes(shop) || street.includes(shop)
+                    );
+                    if (geocodeMatch) {
+                        matchingShop = geocodeMatch;
+                        console.log(`🛒 At Shop (geocode): ${matchingShop}`);
                     }
-                } else {
-                    // Not at a known shop -> Reset entry
-                    // Only reset if we are confident (maybe give it a grace period? For simplicity: reset).
-                    await AsyncStorage.removeItem(SHOP_ENTRY_KEY);
                 }
             }
 
+            if (matchingShop) {
+                console.log(`🛒 At Shop: ${matchingShop}`);
+
+                // 3. Logic: Check Duration
+                const now = Date.now();
+                const entryDataStr = await AsyncStorage.getItem(SHOP_ENTRY_KEY);
+                let entryData = entryDataStr ? JSON.parse(entryDataStr) : null;
+
+                if (!entryData || entryData.shop !== matchingShop) {
+                    // New shop entry
+                    entryData = { shop: matchingShop, timestamp: now, notified: false };
+                    await AsyncStorage.setItem(SHOP_ENTRY_KEY, JSON.stringify(entryData));
+                } else {
+                    // Still in same shop
+                    const durationMinutes = (now - entryData.timestamp) / 60000;
+                    console.log(`⏱️ Duration in ${matchingShop}: ${durationMinutes.toFixed(1)} min`);
+
+                    if (durationMinutes >= 3 && !entryData.notified) {
+                        // > 3 Minutes and not yet notified -> NOTIFY!
+                        await Notifications.scheduleNotificationAsync({
+                            content: {
+                                title: "Haushalt",
+                                body: "Schau doch kurz in eure Einkaufsliste",
+                                sound: true,
+                                categoryIdentifier: 'SHOPPING_ACTION',
+                                data: { action: 'open_list' }
+                            },
+                            trigger: null
+                        });
+
+                        // Mark as notified
+                        entryData.notified = true;
+                        await AsyncStorage.setItem(SHOP_ENTRY_KEY, JSON.stringify(entryData));
+                    }
+                }
+            } else {
+                // Not at a known shop -> Reset entry
+                // Only reset if we are confident (maybe give it a grace period? For simplicity: reset).
+                await AsyncStorage.removeItem(SHOP_ENTRY_KEY);
+            }
         } catch (e) {
             console.error("Shopping Task Logic Error:", e);
         }
