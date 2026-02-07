@@ -25,9 +25,20 @@ Deno.serve(async (req) => {
     }
 
     // Create Supabase client with user's token to check permissions
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+
+    if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceKey) {
+      console.error('Missing environment variables')
+      return new Response(
+        JSON.stringify({ 
+          error: 'Server-Konfigurationsfehler',
+          details: 'SUPABASE_URL, ANON_KEY oder SERVICE_ROLE_KEY fehlen in den Edge Function Secrets.'
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
 
     const userClient = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } }

@@ -147,7 +147,10 @@ export default function Family() {
 
             // Check if application level error came back in data
             if (data && data.error) {
-                Alert.alert('Fehler', data.error);
+                Alert.alert(
+                    'Fehler (App)',
+                    `${data.error}${data.details ? '\n\nDetails: ' + data.details : ''}`
+                );
                 return;
             }
 
