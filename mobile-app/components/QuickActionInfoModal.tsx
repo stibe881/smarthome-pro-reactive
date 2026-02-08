@@ -21,6 +21,16 @@ export default function QuickActionInfoModal({ visible, onClose, info }: QuickAc
 
     const Icon = info.icon;
 
+    // Auto-Close after 5 seconds
+    React.useEffect(() => {
+        if (visible) {
+            const timer = setTimeout(() => {
+                onClose();
+            }, 5000);
+            return () => clearTimeout(timer);
+        }
+    }, [visible, onClose]);
+
     return (
         <Modal
             transparent

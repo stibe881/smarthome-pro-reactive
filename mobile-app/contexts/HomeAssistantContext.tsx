@@ -256,7 +256,7 @@ interface HomeAssistantContextType {
     error: string | null;
     haBaseUrl: string | null;
     authToken: string | null; // Expose token
-    connect: () => Promise<boolean>;
+    connect: (internalCreds?: { url: string; token: string }) => Promise<boolean>;
     disconnect: () => void;
     toggleLight: (entityId: string) => void;
     setLightBrightness: (entityId: string, brightness: number) => void;
@@ -833,9 +833,9 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
             try {
                 const { data: { session } } = await supabase.auth.getSession();
                 if (session?.user) {
-                    const creds = await getCredentials();
+                    const creds = await getCredentials(session.user.id);
                     if (creds) {
-                        await connect();
+                        await connect(creds);
                     }
                 }
             } finally {
@@ -1039,12 +1039,12 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
 
                 if (error) {
                     console.error('Failed to save HA credentials to household:', error);
-                    // Fallback to AsyncStorage
-                    await AsyncStorage.setItem('@smarthome_ha_url', url);
-                    await AsyncStorage.setItem('@smarthome_ha_token', token);
                 } else {
                     console.log('✅ HA credentials saved to household');
                 }
+                // ALWAYS Save to AsyncStorage as fallback/cache
+                await AsyncStorage.setItem('@smarthome_ha_url', url);
+                await AsyncStorage.setItem('@smarthome_ha_token', token);
             } else {
                 // User not in a household, try to get the first household or fallback
                 const { data: householdData } = await supabase
@@ -1075,13 +1075,18 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
     };
 
     // Get HA credentials from Supabase household (or fallback to local)
-    const getCredentials = async (): Promise<{ url: string; token: string } | null> => {
+    const getCredentials = async (userUuid?: string): Promise<{ url: string; token: string } | null> => {
         try {
-            // Get current user
-            const { data: { user } } = await supabase.auth.getUser();
-            // console.log('[getCredentials] User:', user?.email || 'NOT LOGGED IN');
+            let userId = userUuid;
+            if (!userId) {
+                // Get current user if not provided
+                const { data: { user: currentUser } } = await supabase.auth.getUser();
+                userId = currentUser?.id;
+            }
 
-            if (!user) {
+            // console.log('[getCredentials] User ID:', userId || 'NOT LOGGED IN');
+
+            if (!userId) {
                 // Not logged in, try local storage
                 const url = await AsyncStorage.getItem('@smarthome_ha_url');
                 const token = await AsyncStorage.getItem('@smarthome_ha_token');
@@ -1094,7 +1099,7 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
             const { data: memberData, error: memberError } = await supabase
                 .from('family_members')
                 .select('household_id')
-                .eq('user_id', user.id)
+                .eq('user_id', userId)
                 .single();
 
             // console.log('[getCredentials] family_members lookup:', memberData, memberError?.message);
@@ -1156,8 +1161,12 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
         }
     };
 
-    const connect = async (): Promise<boolean> => {
-        const creds = await getCredentials();
+    const connect = async (internalCreds?: { url: string; token: string }): Promise<boolean> => {
+        let creds = internalCreds;
+        if (!creds) {
+            creds = await getCredentials();
+        }
+
         if (!creds) {
             setError('Keine Home Assistant Zugangsdaten gespeichert');
             return false;

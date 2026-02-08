@@ -13,7 +13,8 @@ import Constants from 'expo-constants';
 import { DashboardConfigModal } from '../../components/DashboardConfigModal';
 import { FamilyManagement } from '../../components/FamilyManagement';
 import { ConnectionWizard } from '../../components/ConnectionWizard';
-import { Activity, ShieldCheck, Zap, Blinds, AlertTriangle } from 'lucide-react-native';
+import { Activity, ShieldCheck, Zap, Blinds, AlertTriangle, Baby, Plus } from 'lucide-react-native';
+import { useKidsMode } from '../../contexts/KidsContext';
 
 const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onClose: () => void }) => {
     const { notificationSettings, updateNotificationSettings } = useHomeAssistant();
@@ -378,14 +379,103 @@ const ChangePasswordModal = ({ visible, onClose, colors }: { visible: boolean; o
     );
 };
 
-// =====================================================
-// CHILD COMPONENTS - Defined OUTSIDE of Settings
-// =====================================================
+const RoomConfigScreen = ({ room, onBack, updateRoom, deleteRoom, entities, colors }: {
+    room: any,
+    onBack: () => void,
+    updateRoom: (id: string, updates: Partial<any>) => void,
+    deleteRoom: (id: string) => void,
+    entities: any[],
+    colors: any
+}) => {
+    const lightEntities = entities.filter(e => e.entity_id.startsWith('light.'));
+    const mediaEntities = entities.filter(e => e.entity_id.startsWith('media_player.'));
+
+    const handleDelete = () => {
+        Alert.alert("Zimmer löschen", "Möchtest du dieses Zimmer wirklich löschen?", [
+            { text: "Abbrechen", style: "cancel" },
+            { text: "Löschen", style: "destructive", onPress: () => { deleteRoom(room.id); onBack(); } }
+        ]);
+    };
+
+    return (
+        <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onBack}>
+            <View style={styles.modalContainer}>
+                <View style={styles.modalHeader}>
+                    <Pressable onPress={onBack} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <ChevronRight size={24} color={colors.accent} style={{ transform: [{ rotate: '180deg' }] }} />
+                        <Text style={[styles.modalTitle, { color: colors.text }]}>{room.name}</Text>
+                    </Pressable>
+                    <Pressable onPress={handleDelete} style={{ padding: 8 }}>
+                        <Trash2 size={20} color={colors.error} />
+                    </Pressable>
+                </View>
+
+                <ScrollView style={[styles.modalContent, { backgroundColor: colors.background }]}>
+                    <View style={styles.settingGroup}>
+                        <Text style={styles.groupTitle}>INFO</Text>
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.inputLabel}>Name</Text>
+                            <TextInput
+                                style={[styles.input, { backgroundColor: colors.card, color: colors.text }]}
+                                value={room.name}
+                                onChangeText={(val) => updateRoom(room.id, { name: val })}
+                            />
+                        </View>
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.inputLabel}>Hintergrund URL</Text>
+                            <TextInput
+                                style={[styles.input, { backgroundColor: colors.card, color: colors.text }]}
+                                value={room.backgroundUri}
+                                onChangeText={(val) => updateRoom(room.id, { backgroundUri: val })}
+                                placeholder="https://..."
+                                placeholderTextColor={colors.subtext}
+                            />
+                        </View>
+                    </View>
+
+                    <View style={styles.settingGroup}>
+                        <Text style={styles.groupTitle}>GERÄTE-ZUWEISUNG</Text>
+                        <EntitySelector
+                            label="Licht"
+                            value={room.lightEntity || ''}
+                            entities={lightEntities}
+                            onSelect={(val) => updateRoom(room.id, { lightEntity: val })}
+                            colors={colors}
+                        />
+                        <EntitySelector
+                            label="Media Player"
+                            value={room.mediaEntity || ''}
+                            entities={mediaEntities}
+                            onSelect={(val) => updateRoom(room.id, { mediaEntity: val })}
+                            colors={colors}
+                        />
+                        <EntitySelector
+                            label="Schlaf-Trainer"
+                            value={room.sleepTrainerEntity || ''}
+                            entities={entities}
+                            onSelect={(val) => updateRoom(room.id, { sleepTrainerEntity: val })}
+                            colors={colors}
+                        />
+                    </View>
+
+                    <View style={styles.settingGroup}>
+                        <Text style={styles.groupTitle}>BESCHRÄNKUNGEN</Text>
+                        <View style={styles.settingRow}>
+                            <View>
+                                <Text style={styles.settingLabel}>Max. Lautstärke ({(room.volumeLimit * 100).toFixed(0)}%)</Text>
+                            </View>
+                        </View>
+                    </View>
+                </ScrollView>
+            </View>
+        </Modal>
+    );
+};
 
 interface SettingsSectionProps {
     title: string;
     children: React.ReactNode;
-    colors: any; // Using explicit prop for colors
+    colors: any;
 }
 
 const SettingsSection = ({ title, children, colors }: SettingsSectionProps) => (
@@ -399,6 +489,222 @@ const SettingsSection = ({ title, children, colors }: SettingsSectionProps) => (
     </View>
 );
 
+const KidsSettingsModal = ({ visible, onClose }: { visible: boolean; onClose: () => void }) => {
+    const { colors } = useTheme();
+    const { config, updateConfig, isKidsModeActive, setKidsModeActive, addRoom, updateRoom, deleteRoom } = useKidsMode();
+    const { entities } = useHomeAssistant();
+    const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
+
+    const toggleKidsMode = () => {
+        if (!isKidsModeActive) {
+            setKidsModeActive(true);
+            onClose();
+        } else {
+            Alert.prompt(
+                "Kindermodus beenden",
+                "Bitte gib den PIN ein:",
+                [
+                    { text: "Abbrechen", style: "cancel" },
+                    {
+                        text: "Bestätigen",
+                        onPress: (input?: string) => {
+                            if (input === config.parentalPin) {
+                                setKidsModeActive(false);
+                            } else {
+                                Alert.alert("Falscher PIN");
+                            }
+                        }
+                    }
+                ],
+                "secure-text"
+            );
+        }
+    };
+
+    const handleAddRoom = () => {
+        Alert.prompt("Neues Zimmer", "Name des Zimmers:", [
+            { text: "Abbrechen", style: "cancel" },
+            { text: "Hinzufügen", onPress: (name: string | undefined) => name && addRoom(name) }
+        ]);
+    };
+
+    const editingRoom = config.rooms.find(r => r.id === editingRoomId);
+
+    return (
+        <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+            <View style={styles.modalContainer}>
+                <View style={styles.modalHeader}>
+                    <Text style={styles.modalTitle}>Kindermodus</Text>
+                    <Pressable onPress={onClose} style={styles.closeButton}>
+                        <X size={24} color="#94A3B8" />
+                    </Pressable>
+                </View>
+
+                <ScrollView style={[styles.modalContent, { backgroundColor: colors.background }]}>
+                    <SettingsSection title="STATUS" colors={colors}>
+                        <View style={styles.settingRow}>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.settingLabel}>Aktivieren</Text>
+                                <Text style={styles.settingDescription}>Sperrt die App für Kinder</Text>
+                            </View>
+                            <Switch
+                                value={isKidsModeActive}
+                                onValueChange={toggleKidsMode}
+                                trackColor={{ false: '#334155', true: '#10B981' }}
+                                thumbColor={'#fff'}
+                            />
+                        </View>
+                    </SettingsSection>
+
+                    <SettingsSection title="ZIMMER" colors={colors}>
+                        {config.rooms.map(room => (
+                            <Pressable
+                                key={room.id}
+                                onPress={() => setEditingRoomId(room.id)}
+                                style={({ pressed }) => [
+                                    {
+                                        flexDirection: 'row',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        paddingVertical: 12,
+                                        opacity: pressed ? 0.7 : 1
+                                    }
+                                ]}
+                            >
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                                    <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.accent + '20', justifyContent: 'center', alignItems: 'center' }}>
+                                        <Baby size={20} color={colors.accent} />
+                                    </View>
+                                    <View>
+                                        <Text style={{ color: colors.text, fontSize: 16, fontWeight: '600' }}>{room.name}</Text>
+                                        <Text style={{ color: colors.subtext, fontSize: 12 }}>
+                                            {room.lightEntity ? 'Licht konf.' : 'Kein Licht'} • {room.mediaEntity ? 'Musik konf.' : 'Keine Musik'}
+                                        </Text>
+                                    </View>
+                                </View>
+                                <ChevronRight size={20} color={colors.subtext} />
+                            </Pressable>
+                        ))}
+
+                        <Pressable
+                            onPress={handleAddRoom}
+                            style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                gap: 12,
+                                paddingVertical: 12,
+                                marginTop: 8,
+                                borderTopWidth: 1,
+                                borderTopColor: colors.border + '50'
+                            }}
+                        >
+                            <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.05)', justifyContent: 'center', alignItems: 'center' }}>
+                                <Plus size={20} color={colors.accent} />
+                            </View>
+                            <Text style={{ color: colors.accent, fontSize: 16, fontWeight: '600' }}>Zimmer hinzufügen</Text>
+                        </Pressable>
+                    </SettingsSection>
+
+                    <SettingsSection title="ELTERN-EINSTELLUNGEN" colors={colors}>
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.inputLabel}>Parental PIN</Text>
+                            <TextInput
+                                style={[styles.input, { backgroundColor: colors.card, color: colors.text }]}
+                                value={config.parentalPin}
+                                onChangeText={(val) => updateConfig({ parentalPin: val })}
+                                keyboardType="number-pad"
+                                maxLength={4}
+                                secureTextEntry
+                            />
+                        </View>
+                    </SettingsSection>
+
+                    <View style={{ height: 40 }} />
+                </ScrollView>
+            </View>
+
+            {editingRoom && (
+                <RoomConfigScreen
+                    room={editingRoom}
+                    onBack={() => setEditingRoomId(null)}
+                    updateRoom={updateRoom}
+                    deleteRoom={deleteRoom}
+                    entities={entities}
+                    colors={colors}
+                />
+            )}
+        </Modal>
+    );
+};
+
+
+const EntitySelector = ({ label, value, entities, onSelect, colors }: { label: string, value: string, entities: any[], onSelect: (id: string) => void, colors: any }) => {
+    const [modalVisible, setModalVisible] = useState(false);
+    const [search, setSearch] = useState('');
+    const selectedEntity = entities.find(e => e.entity_id === value);
+
+    const filteredEntities = entities.filter(e =>
+        e.entity_id.toLowerCase().includes(search.toLowerCase()) ||
+        (e.attributes.friendly_name || '').toLowerCase().includes(search.toLowerCase())
+    ).sort((a, b) => (a.attributes.friendly_name || a.entity_id).localeCompare(b.attributes.friendly_name || b.entity_id));
+
+    return (
+        <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>{label}</Text>
+            <Pressable
+                onPress={() => setModalVisible(true)}
+                style={[styles.input, { backgroundColor: colors.card, justifyContent: 'center', paddingHorizontal: 12 }]}
+            >
+                <Text style={{ color: value ? colors.text : colors.subtext }}>
+                    {selectedEntity?.attributes?.friendly_name || value || "Keines ausgewählt"}
+                </Text>
+            </Pressable>
+
+            <Modal visible={modalVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setModalVisible(false)}>
+                <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+                    <View style={[styles.modalHeader, { paddingHorizontal: 20 }]}>
+                        <Text style={[styles.modalTitle, { color: colors.text }]}>{label} wählen</Text>
+                        <Pressable onPress={() => setModalVisible(false)} style={styles.closeButton}>
+                            <X size={24} color={colors.subtext} />
+                        </Pressable>
+                    </View>
+
+                    <View style={{ padding: 16 }}>
+                        <TextInput
+                            style={[styles.input, { backgroundColor: colors.card, color: colors.text, marginBottom: 12 }]}
+                            placeholder="Suchen..."
+                            placeholderTextColor={colors.subtext}
+                            value={search}
+                            onChangeText={setSearch}
+                        />
+                    </View>
+
+                    <ScrollView style={{ flex: 1, paddingHorizontal: 16 }}>
+                        <Pressable
+                            onPress={() => { onSelect(''); setModalVisible(false); }}
+                            style={{ paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border + '50' }}
+                        >
+                            <Text style={{ color: colors.accent }}>Keine Auswahl</Text>
+                        </Pressable>
+                        {filteredEntities.map(e => (
+                            <Pressable
+                                key={e.entity_id}
+                                onPress={() => { onSelect(e.entity_id); setModalVisible(false); }}
+                                style={{ paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border + '50' }}
+                            >
+                                <Text style={{ color: colors.text, fontWeight: e.entity_id === value ? 'bold' : 'normal' }}>
+                                    {e.attributes.friendly_name || e.entity_id}
+                                </Text>
+                                <Text style={{ color: colors.subtext, fontSize: 12 }}>{e.entity_id}</Text>
+                            </Pressable>
+                        ))}
+                    </ScrollView>
+                </SafeAreaView>
+            </Modal>
+        </View>
+    );
+};
+
 interface SettingsRowProps {
     icon: React.ReactNode;
     iconColor: string;
@@ -407,7 +713,7 @@ interface SettingsRowProps {
     onPress?: () => void;
     showChevron?: boolean;
     isLast?: boolean;
-    colors: any; // Using explicit prop for colors 
+    colors: any;
 }
 
 const SettingsRow = ({
@@ -469,6 +775,7 @@ export default function Settings() {
     const [changePasswordModalVisible, setChangePasswordModalVisible] = useState(false);
     const [isHAExpanded, setIsHAExpanded] = useState(false);
     const [isFamilyExpanded, setIsFamilyExpanded] = useState(false);
+    const [kidsModalVisible, setKidsModalVisible] = useState(false);
     const [showWizard, setShowWizard] = useState(false);
 
     // Effect to update status bar style based on theme
@@ -663,7 +970,17 @@ export default function Settings() {
                             </ScrollView>
                         </View>
 
-                        {/* App Settings */}
+                        <SettingsSection title="Kindermodus" colors={colors}>
+                            <SettingsRow
+                                icon={<Baby size={20} color={colors.accent} />}
+                                iconColor={colors.accent}
+                                label="Kindermodus konfigurieren"
+                                showChevron
+                                onPress={() => setKidsModalVisible(true)}
+                                colors={colors}
+                            />
+                        </SettingsSection>
+
                         {/* App Settings */}
                         <SettingsSection title="App" colors={colors}>
                             <SettingsRow
@@ -911,6 +1228,10 @@ export default function Settings() {
                     visible={showWizard}
                     onClose={() => setShowWizard(false)}
                 />
+                <KidsSettingsModal
+                    visible={kidsModalVisible}
+                    onClose={() => setKidsModalVisible(false)}
+                />
             </SafeAreaView>
         </View>
     );
@@ -1084,6 +1405,9 @@ const styles = StyleSheet.create({
     },
 
     // Inputs
+    inputGroup: {
+        marginBottom: 20,
+    },
     inputContainer: {
         padding: 16,
         borderBottomWidth: 1,

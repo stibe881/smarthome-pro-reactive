@@ -3,6 +3,7 @@ import { Slot, useRouter, useSegments } from "expo-router";
 import { AuthProvider, useAuth } from "../contexts/AuthContext";
 import { HomeAssistantProvider } from "../contexts/HomeAssistantContext";
 import { ThemeProvider } from "../contexts/ThemeContext";
+import { KidsProvider } from "../contexts/KidsContext";
 import { useEffect } from "react";
 import { View, ActivityIndicator } from "react-native";
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -58,7 +59,9 @@ export default function Layout() {
             <ThemeProvider>
                 <AuthProvider>
                     <HomeAssistantProvider>
-                        <RootLayoutNav />
+                        <KidsProvider>
+                            <RootLayoutNav />
+                        </KidsProvider>
                     </HomeAssistantProvider>
                 </AuthProvider>
             </ThemeProvider>

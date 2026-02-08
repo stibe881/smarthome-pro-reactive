@@ -6,13 +6,15 @@ import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useHomeAssistant } from '../../contexts/HomeAssistantContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { Lightbulb, Blinds, Thermometer, Droplets, Wind, Lock, Unlock, Zap, Music, Play, Pause, SkipForward, SkipBack, Bot, PartyPopper, Calendar, CloudRain, Cloud, Sun, Moon, ShoppingCart, Info, Loader2, UtensilsCrossed, Shirt, Clapperboard, BedDouble, ChevronRight, Shield, LucideIcon, DoorOpen, DoorClosed, WifiOff, Tv, X, Wifi, RefreshCw, Power, Battery, PlayCircle, Home, Map, MapPin, Fan, Clock, Video, Star, Square, Bell } from 'lucide-react-native';
+import { Lightbulb, Blinds, Thermometer, Droplets, Wind, Lock, Unlock, Zap, Music, Play, Pause, SkipForward, SkipBack, Bot, PartyPopper, Calendar, CloudRain, Cloud, Sun, Moon, ShoppingCart, Info, Loader2, UtensilsCrossed, Shirt, Clapperboard, BedDouble, ChevronRight, Shield, LucideIcon, DoorOpen, DoorClosed, WifiOff, Tv, X, Wifi, RefreshCw, Power, Battery, PlayCircle, Home, Map, MapPin, Fan, Clock, Video, Star, Square, Bell, Baby } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import SecurityModal from '../../components/SecurityModal';
 import { WHITELISTED_PLAYERS } from '../../config/mediaPlayers';
 import { filterSecurityEntities } from '../../utils/securityHelpers';
 import CamerasModal from '../../components/CamerasModal';
 import { ConnectionWizard } from '../../components/ConnectionWizard';
+import { useKidsMode } from '../../contexts/KidsContext';
+import { KidsDashboard } from '../../components/KidsDashboard';
 // LinearGradient removed to fix compatibility issue
 
 // =====================================================
@@ -492,6 +494,8 @@ export default function Dashboard() {
         isHAInitialized
     } = useHomeAssistant();
 
+    const { isKidsModeActive, config, setKidsModeActive, selectRoom } = useKidsMode();
+
     const [showWizard, setShowWizard] = useState(false);
 
     // Show wizard if no HA URL is set after initialization
@@ -886,6 +890,67 @@ export default function Dashboard() {
                 />
             </SafeAreaView>
         );
+    }
+
+    if (isKidsModeActive) {
+        if (!config.activeRoomId) {
+            return (
+                <SafeAreaView style={[styles.container, { backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' }]}>
+                    <Pressable
+                        onLongPress={() => {
+                            Alert.prompt(
+                                "Kindermodus beenden",
+                                "Bitte gib den PIN ein:",
+                                [
+                                    { text: "Abbrechen", style: "cancel" },
+                                    {
+                                        text: "Bestätigen",
+                                        onPress: (input?: string) => {
+                                            if (input === config.parentalPin) {
+                                                setKidsModeActive(false);
+                                            } else {
+                                                Alert.alert("Falscher PIN");
+                                            }
+                                        }
+                                    }
+                                ],
+                                "secure-text"
+                            );
+                        }}
+                        style={{ position: 'absolute', top: 60, right: 30, padding: 20 }}
+                    >
+                        <X size={24} color="rgba(255,255,255,0.2)" />
+                    </Pressable>
+
+                    <Text style={{ color: '#fff', fontSize: 32, fontWeight: 'bold', marginBottom: 40 }}>Wer bist du?</Text>
+
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 20, padding: 20 }}>
+                        {config.rooms.map(room => (
+                            <Pressable
+                                key={room.id}
+                                onPress={() => selectRoom(room.id)}
+                                style={{
+                                    width: 140,
+                                    height: 180,
+                                    backgroundColor: colors.card,
+                                    borderRadius: 30,
+                                    justifyContent: 'center',
+                                    alignItems: 'center',
+                                    borderWidth: 2,
+                                    borderColor: colors.border
+                                }}
+                            >
+                                <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: colors.accent + '20', justifyContent: 'center', alignItems: 'center', marginBottom: 15 }}>
+                                    <Baby size={40} color={colors.accent} />
+                                </View>
+                                <Text style={{ color: colors.text, fontSize: 18, fontWeight: 'bold' }}>{room.name}</Text>
+                            </Pressable>
+                        ))}
+                    </View>
+                </SafeAreaView>
+            );
+        }
+        return <KidsDashboard />;
     }
 
     return (

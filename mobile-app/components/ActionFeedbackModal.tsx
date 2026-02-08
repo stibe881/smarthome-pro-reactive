@@ -116,6 +116,16 @@ export default function ActionFeedbackModal({ visible, onClose, type }: ActionFe
         return { message: randMsg, title: randTitle };
     }, [visible, type]);
 
+    // Auto-Close after 5 seconds
+    useEffect(() => {
+        if (visible) {
+            const timer = setTimeout(() => {
+                onClose();
+            }, 5000);
+            return () => clearTimeout(timer);
+        }
+    }, [visible, onClose]);
+
     const Icon = config.icon;
 
     if (!visible) return null;

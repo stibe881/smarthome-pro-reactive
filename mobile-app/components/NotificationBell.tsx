@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, Pressable, Modal, FlatList, StyleSheet, Alert } from 'react-native';
 import { Bell, Check, CheckCheck, X, Trash2 } from 'lucide-react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
 
 const NOTIFICATION_HISTORY_KEY = '@smarthome_notification_history';
 
@@ -21,71 +22,123 @@ interface NotificationBellProps {
 
 export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
     const { colors } = useTheme();
+    const { user } = useAuth();
     const [notifications, setNotifications] = useState<StoredNotification[]>([]);
     const [showModal, setShowModal] = useState(false);
 
-    // Load notifications from storage
+    // Load notifications from Supabase
     const loadNotifications = useCallback(async () => {
+        if (!user) return;
         try {
-            const stored = await AsyncStorage.getItem(NOTIFICATION_HISTORY_KEY);
-            if (stored) {
-                setNotifications(JSON.parse(stored));
+            const { data, error } = await supabase
+                .from('notifications')
+                .select('*')
+                .eq('user_id', user.id)
+                .order('created_at', { ascending: false })
+                .limit(50);
+
+            if (error) throw error;
+
+            if (data) {
+                const formatted = data.map(n => ({
+                    id: n.id,
+                    title: n.title,
+                    body: n.body,
+                    timestamp: new Date(n.created_at).getTime(),
+                    isRead: n.is_read
+                }));
+                setNotifications(formatted);
+                // Update badge
+                const unreadCount = formatted.filter(n => !n.isRead).length;
+                Notifications.setBadgeCountAsync(unreadCount);
             }
         } catch (e) {
-            console.warn('Failed to load notification history:', e);
+            console.warn('Failed to load notifications:', e);
         }
-    }, []);
+    }, [user]);
 
-    // Save notifications to storage
-    const saveNotifications = useCallback(async (notifs: StoredNotification[]) => {
-        try {
-            await AsyncStorage.setItem(NOTIFICATION_HISTORY_KEY, JSON.stringify(notifs));
-        } catch (e) {
-            console.warn('Failed to save notification history:', e);
-        }
-    }, []);
-
-    // Add new notification to history
+    // Add new notification to Supabase
     const addNotification = useCallback(async (title: string, body: string) => {
-        const newNotif: StoredNotification = {
-            id: Date.now().toString(),
-            title,
-            body,
-            timestamp: Date.now(),
-            isRead: false,
-        };
-        const updated = [newNotif, ...notifications].slice(0, 50); // Keep last 50
-        setNotifications(updated);
-        await saveNotifications(updated);
+        if (!user) return;
+        try {
+            const { data, error } = await supabase
+                .from('notifications')
+                .insert({
+                    user_id: user.id,
+                    title,
+                    body,
+                    is_read: false
+                })
+                .select()
+                .single();
 
-        // Update app badge
-        const unreadCount = updated.filter(n => !n.isRead).length;
-        await Notifications.setBadgeCountAsync(unreadCount);
-    }, [notifications, saveNotifications]);
+            if (error) throw error;
+
+            if (data) {
+                const newNotif = {
+                    id: data.id,
+                    title: data.title,
+                    body: data.body,
+                    timestamp: new Date(data.created_at).getTime(),
+                    isRead: data.is_read
+                };
+                setNotifications(prev => [newNotif, ...prev]);
+
+                // Update Badge
+                Notifications.setBadgeCountAsync((notifications.filter(n => !n.isRead).length) + 1);
+            }
+        } catch (e) {
+            console.warn('Failed to add notification:', e);
+        }
+    }, [user, notifications]);
 
     // Mark single notification as read
     const markAsRead = useCallback(async (id: string) => {
-        const updated = notifications.map(n =>
-            n.id === id ? { ...n, isRead: true } : n
-        );
-        setNotifications(updated);
-        await saveNotifications(updated);
+        if (!user) return;
+        try {
+            const { error } = await supabase
+                .from('notifications')
+                .update({ is_read: true })
+                .eq('id', id)
+                .eq('user_id', user.id);
 
-        // Update badge
-        const unreadCount = updated.filter(n => !n.isRead).length;
-        await Notifications.setBadgeCountAsync(unreadCount);
-    }, [notifications, saveNotifications]);
+            if (error) throw error;
+
+            setNotifications(prev =>
+                prev.map(n => n.id === id ? { ...n, isRead: true } : n)
+            );
+
+            // Format badge again
+            const updated = notifications.map(n => n.id === id ? { ...n, isRead: true } : n);
+            Notifications.setBadgeCountAsync(updated.filter(n => !n.isRead).length);
+
+        } catch (e) {
+            console.warn('Failed to mark read:', e);
+        }
+    }, [user, notifications]);
 
     // Mark all as read
     const markAllAsRead = useCallback(async () => {
-        const updated = notifications.map(n => ({ ...n, isRead: true }));
-        setNotifications(updated);
-        await saveNotifications(updated);
-        await Notifications.setBadgeCountAsync(0);
-    }, [notifications, saveNotifications]);
+        if (!user) return;
+        try {
+            const { error } = await supabase
+                .from('notifications')
+                .update({ is_read: true })
+                .eq('user_id', user.id)
+                .eq('is_read', false); // optimization
+
+            if (error) throw error;
+
+            setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+            Notifications.setBadgeCountAsync(0);
+        } catch (e) {
+            console.warn('Failed to mark all read:', e);
+        }
+    }, [user]);
 
     // Clear all notifications
     const clearAll = useCallback(async () => {
+        if (!user) return;
         Alert.alert(
             'Alle löschen?',
             'Möchtest du alle Benachrichtigungen löschen?',
@@ -95,32 +148,82 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
                     text: 'Löschen',
                     style: 'destructive',
                     onPress: async () => {
-                        setNotifications([]);
-                        await AsyncStorage.removeItem(NOTIFICATION_HISTORY_KEY);
-                        await Notifications.setBadgeCountAsync(0);
+                        try {
+                            const { error } = await supabase
+                                .from('notifications')
+                                .delete()
+                                .eq('user_id', user.id);
+
+                            if (error) throw error;
+
+                            setNotifications([]);
+                            Notifications.setBadgeCountAsync(0);
+                        } catch (e) {
+                            console.warn('Failed to delete all:', e);
+                        }
                     }
                 }
             ]
         );
-    }, []);
+    }, [user]);
 
-    // Load on mount
+    // Load on mount & Auth Change
     useEffect(() => {
-        loadNotifications();
-    }, [loadNotifications]);
+        if (user) loadNotifications();
+    }, [user, loadNotifications]);
 
-    // Reset badge when modal opens (app is open and user is checking notifications)
+    // Sub to Realtime
+    useEffect(() => {
+        if (!user) return;
+
+        const sub = supabase
+            .channel('public:notifications:' + user.id)
+            .on(
+                'postgres_changes',
+                {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'notifications',
+                    filter: `user_id=eq.${user.id}`
+                },
+                (payload) => {
+                    const split = payload.new;
+                    const newNotif = {
+                        id: split.id,
+                        title: split.title,
+                        body: split.body,
+                        timestamp: new Date(split.created_at).getTime(),
+                        isRead: split.is_read
+                    };
+                    setNotifications(prev => [newNotif, ...prev]);
+                    // Let the loadNotifications handle badge generally, or update here
+                    Notifications.getBadgeCountAsync().then(c => Notifications.setBadgeCountAsync(c + 1));
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(sub);
+        };
+    }, [user]);
+
+    // Keep existing badge reset on modal open
     useEffect(() => {
         if (showModal) {
+            // Optional: Mark all viewed as read? Or just reset badge?
+            // Usually opening the center resets the badge count even if not all read.
             Notifications.setBadgeCountAsync(0);
         }
     }, [showModal]);
 
-    // Listen for incoming notifications
+    // Listen for incoming notifications from Push (Background/Foreground)
+    // AND SAVE THEM TO SUPABASE (User History)
     useEffect(() => {
         const subscription = Notifications.addNotificationReceivedListener(notification => {
             const { title, body } = notification.request.content;
             if (title || body) {
+                // IMPORTANT: Only add if we have a user. 
+                // Using the ref logic or wrapper might be better to avoid strict dependency on 'addNotification' changing
                 addNotification(title || 'Benachrichtigung', body || '');
             }
         });
