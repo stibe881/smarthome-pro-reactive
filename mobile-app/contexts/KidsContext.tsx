@@ -13,6 +13,7 @@ interface KidsRoom {
     backgroundUri?: string;
     volumeLimit: number;
     tempRange: [number, number];
+    score: number;
 }
 
 interface KidsConfig {
@@ -30,8 +31,8 @@ interface KidsContextType {
     addRoom: (name: string) => Promise<void>;
     deleteRoom: (roomId: string) => Promise<void>;
     selectRoom: (roomId: string) => Promise<void>;
-    score: number;
     addScore: (points: number) => Promise<void>;
+    resetScore: (roomId: string) => Promise<void>;
 }
 
 const KIDS_MODE_KEY = '@smarthome_kids_mode_active';
@@ -48,7 +49,6 @@ const KidsContext = createContext<KidsContextType | undefined>(undefined);
 export const KidsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [isKidsModeActive, setIsKidsModeActiveState] = useState(false);
     const [config, setConfig] = useState<KidsConfig>(DEFAULT_CONFIG);
-    const [score, setScore] = useState(0);
 
     useEffect(() => {
         loadData();
@@ -61,7 +61,6 @@ export const KidsProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const savedScore = await AsyncStorage.getItem(KIDS_SCORE_KEY);
 
             if (active !== null) setIsKidsModeActiveState(JSON.parse(active));
-            if (savedScore !== null) setScore(JSON.parse(savedScore));
 
             if (savedConfig !== null) {
                 let parsedConfig = JSON.parse(savedConfig);
@@ -78,6 +77,7 @@ export const KidsProvider: React.FC<{ children: React.ReactNode }> = ({ children
                         backgroundUri: parsedConfig.backgroundUri,
                         volumeLimit: parsedConfig.volumeLimit || 0.4,
                         tempRange: parsedConfig.tempRange || [19, 22],
+                        score: savedScore ? JSON.parse(savedScore) : 0 // Migrate score
                     };
                     parsedConfig = {
                         rooms: [migratedRoom],
@@ -85,6 +85,13 @@ export const KidsProvider: React.FC<{ children: React.ReactNode }> = ({ children
                         parentalPin: parsedConfig.exitPin,
                     };
                     await AsyncStorage.setItem(KIDS_CONFIG_KEY, JSON.stringify(parsedConfig));
+                }
+                // Migration: Ensure all rooms have a score
+                else if (parsedConfig.rooms) {
+                    parsedConfig.rooms = parsedConfig.rooms.map((r: any) => ({
+                        ...r,
+                        score: r.score ?? 0
+                    }));
                 }
                 setConfig(parsedConfig);
             }
@@ -121,14 +128,14 @@ export const KidsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const addRoom = async (name: string) => {
         const newRoom: KidsRoom = {
-            id: Math.random().toString(36).substring(7),
+            id: Date.now().toString(),
             name,
             volumeLimit: 0.4,
             tempRange: [19, 22],
+            score: 0
         };
-        const updated = { ...config, rooms: [...config.rooms, newRoom] };
-        setConfig(updated);
-        await AsyncStorage.setItem(KIDS_CONFIG_KEY, JSON.stringify(updated));
+        const updatedConfig = { ...config, rooms: [...config.rooms, newRoom] };
+        await updateConfig(updatedConfig);
     };
 
     const deleteRoom = async (roomId: string) => {
@@ -149,9 +156,30 @@ export const KidsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     const addScore = async (points: number) => {
-        const newScore = score + points;
-        setScore(newScore);
-        await AsyncStorage.setItem(KIDS_SCORE_KEY, JSON.stringify(newScore));
+        if (!config.activeRoomId) return;
+
+        const updatedRooms = config.rooms.map(room => {
+            if (room.id === config.activeRoomId) {
+                const newScore = Math.max(0, (room.score || 0) + points);
+                return { ...room, score: newScore };
+            }
+            return room;
+        });
+
+        const updatedConfig = { ...config, rooms: updatedRooms };
+        setConfig(updatedConfig); // Optimistic update
+        await AsyncStorage.setItem(KIDS_CONFIG_KEY, JSON.stringify(updatedConfig));
+    };
+
+    const resetScore = async (roomId: string) => {
+        const updatedRooms = config.rooms.map(room => {
+            if (room.id === roomId) {
+                return { ...room, score: 0 };
+            }
+            return room;
+        });
+        const updatedConfig = { ...config, rooms: updatedRooms };
+        await updateConfig(updatedConfig);
     };
 
     return (
@@ -164,8 +192,8 @@ export const KidsProvider: React.FC<{ children: React.ReactNode }> = ({ children
             addRoom,
             deleteRoom,
             selectRoom,
-            score,
-            addScore
+            addScore,
+            resetScore
         }}>
             {children}
         </KidsContext.Provider>

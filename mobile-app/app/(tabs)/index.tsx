@@ -875,7 +875,7 @@ export default function Dashboard() {
                             <WifiOff size={48} color={colors.subtext} />
                         </View>
                         <Text style={[styles.emptyStateTitle, { color: colors.text }]}>Smart Home nicht verbunden</Text>
-                        <Pressable onPress={connect} style={[styles.connectButton, { backgroundColor: colors.accent }]}>
+                        <Pressable onPress={() => connect()} style={[styles.connectButton, { backgroundColor: colors.accent }]}>
                             <Text style={styles.connectButtonText}>Verbinden</Text>
                         </Pressable>
                     </View>
@@ -1001,7 +1001,11 @@ export default function Dashboard() {
                                 ]}
                             >
                                 <WeatherIcon size={14} color={isWeatherWarning ? colors.error : colors.success} />
-                                <Text style={[styles.tempText, isWeatherWarning ? { color: colors.error } : { color: colors.success }]}>
+                                <Text
+                                    style={[styles.tempText, isWeatherWarning ? { color: colors.error } : { color: colors.success }, { maxWidth: 140 }]}
+                                    numberOfLines={1}
+                                    ellipsizeMode="tail"
+                                >
                                     {weatherComposite.attributes.temperature}°
                                     <Text style={{ fontWeight: '400', opacity: 0.8 }}> {getWeatherText(weatherComposite.state)}</Text>
                                 </Text>

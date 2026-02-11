@@ -9,7 +9,7 @@ import { useHomeAssistant } from '../contexts/HomeAssistantContext';
 
 export const KidsDashboard: React.FC = () => {
     const { colors } = useTheme();
-    const { setKidsModeActive, config, score, addScore } = useKidsMode();
+    const { setKidsModeActive, config, addScore } = useKidsMode();
     const { entities, toggleLight, callService } = useHomeAssistant();
     const [isCleaning, setIsCleaning] = React.useState(false);
     const [toast, setToast] = React.useState<{ visible: boolean; title: string; message: string; type?: 'info' | 'success' | 'magic' } | null>(null);
@@ -158,7 +158,7 @@ export const KidsDashboard: React.FC = () => {
                         <Text style={styles.title}>Hallo, {roomConfig.name}!</Text>
                         <View style={styles.scoreBadge}>
                             <Star size={20} color="#FBBF24" fill="#FBBF24" />
-                            <Text style={styles.scoreText}>{score} Sterne</Text>
+                            <Text style={styles.scoreText}>{roomConfig.score || 0} Sterne</Text>
                         </View>
                     </View>
                 </Pressable>

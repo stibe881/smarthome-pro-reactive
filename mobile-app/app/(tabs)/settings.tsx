@@ -379,11 +379,12 @@ const ChangePasswordModal = ({ visible, onClose, colors }: { visible: boolean; o
     );
 };
 
-const RoomConfigScreen = ({ room, onBack, updateRoom, deleteRoom, entities, colors }: {
+const RoomConfigScreen = ({ room, onBack, updateRoom, deleteRoom, resetScore, entities, colors }: {
     room: any,
     onBack: () => void,
     updateRoom: (id: string, updates: Partial<any>) => void,
     deleteRoom: (id: string) => void,
+    resetScore: (id: string) => void,
     entities: any[],
     colors: any
 }) => {
@@ -395,6 +396,24 @@ const RoomConfigScreen = ({ room, onBack, updateRoom, deleteRoom, entities, colo
             { text: "Abbrechen", style: "cancel" },
             { text: "Löschen", style: "destructive", onPress: () => { deleteRoom(room.id); onBack(); } }
         ]);
+    };
+
+    const handleResetScore = () => {
+        Alert.alert(
+            "Sterne zurücksetzen",
+            `Möchtest du die Sterne von ${room.name} wirklich auf 0 zurücksetzen?`,
+            [
+                { text: "Abbrechen", style: "cancel" },
+                {
+                    text: "Zurücksetzen",
+                    style: "destructive",
+                    onPress: () => {
+                        resetScore(room.id);
+                        Alert.alert("Erledigt", "Sterne wurden zurückgesetzt.");
+                    }
+                }
+            ]
+        );
     };
 
     return (
@@ -466,6 +485,22 @@ const RoomConfigScreen = ({ room, onBack, updateRoom, deleteRoom, entities, colo
                             </View>
                         </View>
                     </View>
+
+                    <View style={styles.settingGroup}>
+                        <Text style={styles.groupTitle}>BELOHNUNGSSYSTEM</Text>
+                        <View style={styles.settingRow}>
+                            <View>
+                                <Text style={styles.settingLabel}>Aktuelle Sterne</Text>
+                                <Text style={styles.settingDescription}>{room.score || 0} Sterne gesammelt</Text>
+                            </View>
+                            <Pressable
+                                onPress={handleResetScore}
+                                style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)' }}
+                            >
+                                <Text style={{ color: '#EF4444', fontWeight: 'bold', fontSize: 12 }}>RESET</Text>
+                            </Pressable>
+                        </View>
+                    </View>
                 </ScrollView>
             </View>
         </Modal>
@@ -491,7 +526,7 @@ const SettingsSection = ({ title, children, colors }: SettingsSectionProps) => (
 
 const KidsSettingsModal = ({ visible, onClose }: { visible: boolean; onClose: () => void }) => {
     const { colors } = useTheme();
-    const { config, updateConfig, isKidsModeActive, setKidsModeActive, addRoom, updateRoom, deleteRoom } = useKidsMode();
+    const { config, updateConfig, isKidsModeActive, setKidsModeActive, addRoom, updateRoom, deleteRoom, resetScore } = useKidsMode();
     const { entities } = useHomeAssistant();
     const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
 
@@ -629,6 +664,7 @@ const KidsSettingsModal = ({ visible, onClose }: { visible: boolean; onClose: ()
                     onBack={() => setEditingRoomId(null)}
                     updateRoom={updateRoom}
                     deleteRoom={deleteRoom}
+                    resetScore={resetScore}
                     entities={entities}
                     colors={colors}
                 />
