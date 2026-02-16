@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Modal, StyleSheet, Pressable, ScrollView, ActivityIndicator, Switch } from 'react-native';
-import { X, Speaker } from 'lucide-react-native';
+import { View, Text, Modal, StyleSheet, Pressable, ScrollView, ActivityIndicator, Switch, TextInput } from 'react-native';
+import { X, Speaker, Pencil, Check } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useHomeAssistant } from '../contexts/HomeAssistantContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -17,34 +17,49 @@ export function MediaPlayerSelectionModal({ visible, onClose, onUpdateSelection 
     const { colors } = useTheme();
     const [visiblePlayers, setVisiblePlayers] = useState<string[]>([]);
     const [loading, setLoading] = useState(true);
+    const [customNames, setCustomNames] = useState<Record<string, string>>({});
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [editName, setEditName] = useState('');
 
     const VISIBLE_PLAYERS_KEY = '@smarthome_visible_media_players';
+    const CUSTOM_NAMES_KEY = '@smarthome_media_player_names';
 
     useEffect(() => {
         if (visible) {
-            loadVisiblePlayers();
+            loadData();
         }
     }, [visible]);
 
-    const loadVisiblePlayers = async () => {
+    const loadData = async () => {
         try {
-            const stored = await AsyncStorage.getItem(VISIBLE_PLAYERS_KEY);
-            if (stored) {
-                setVisiblePlayers(JSON.parse(stored));
+            const [visibleStored, namesStored] = await Promise.all([
+                AsyncStorage.getItem(VISIBLE_PLAYERS_KEY),
+                AsyncStorage.getItem(CUSTOM_NAMES_KEY)
+            ]);
+
+            if (visibleStored) {
+                setVisiblePlayers(JSON.parse(visibleStored));
             } else {
-                // If no stored value, default to all available players initially?
-                // Or maybe default to the whitelist if we want backward compatibility?
-                // Let's start with empty/defaulting to whitelist logic in the main component.
-                // But here, if nothing is stored, let's select ALL for now so user doesn't see empty list.
-                // Actually, let's load whitelist as default if empty.
                 const allPlayers = entities.filter(e => e.entity_id.startsWith('media_player.'));
                 setVisiblePlayers(allPlayers.map(e => e.entity_id));
             }
+
+            if (namesStored) {
+                setCustomNames(JSON.parse(namesStored));
+            }
         } catch (e) {
-            console.warn('Failed to load visible players', e);
+            console.warn('Failed to load player data', e);
         } finally {
             setLoading(false);
         }
+    };
+
+    const saveCustomName = async (entityId: string, newName: string) => {
+        const updatedNames = { ...customNames, [entityId]: newName };
+        setCustomNames(updatedNames);
+        await AsyncStorage.setItem(CUSTOM_NAMES_KEY, JSON.stringify(updatedNames));
+        setEditingId(null);
+        if (onUpdateSelection) onUpdateSelection();
     };
 
     const saveVisiblePlayers = async (newVisible: string[]) => {
@@ -65,10 +80,10 @@ export function MediaPlayerSelectionModal({ visible, onClose, onUpdateSelection 
 
     const allPlayers = entities.filter(e => e.entity_id.startsWith('media_player.'));
 
-    // Sort alphabetically by friendly name
+    // Sort alphabetically by friendly name (using custom name if available)
     allPlayers.sort((a, b) => {
-        const nameA = MEDIA_PLAYER_CONFIG[a.entity_id]?.name || a.attributes.friendly_name || a.entity_id;
-        const nameB = MEDIA_PLAYER_CONFIG[b.entity_id]?.name || b.attributes.friendly_name || b.entity_id;
+        const nameA = customNames[a.entity_id] || MEDIA_PLAYER_CONFIG[a.entity_id]?.name || a.attributes.friendly_name || a.entity_id;
+        const nameB = customNames[b.entity_id] || MEDIA_PLAYER_CONFIG[b.entity_id]?.name || b.attributes.friendly_name || b.entity_id;
         return nameA.localeCompare(nameB);
     });
 
@@ -102,7 +117,40 @@ export function MediaPlayerSelectionModal({ visible, onClose, onUpdateSelection 
                                         <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 12 }}>
                                             <Speaker size={20} color={isVisible ? colors.accent : colors.subtext} />
                                             <View style={{ flex: 1 }}>
-                                                <Text style={[styles.label, { color: colors.text }]}>{name}</Text>
+                                                {editingId === player.entity_id ? (
+                                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                                        <TextInput
+                                                            style={{
+                                                                flex: 1,
+                                                                color: colors.text,
+                                                                fontSize: 16,
+                                                                borderBottomWidth: 1,
+                                                                borderBottomColor: colors.accent,
+                                                                paddingVertical: 4
+                                                            }}
+                                                            value={editName}
+                                                            onChangeText={setEditName}
+                                                            autoFocus
+                                                            onSubmitEditing={() => saveCustomName(player.entity_id, editName)}
+                                                        />
+                                                        <Pressable onPress={() => saveCustomName(player.entity_id, editName)}>
+                                                            <Check size={20} color={colors.accent} />
+                                                        </Pressable>
+                                                    </View>
+                                                ) : (
+                                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                                        <Text style={[styles.label, { color: colors.text }]}>{customNames[player.entity_id] || name}</Text>
+                                                        <Pressable
+                                                            onPress={() => {
+                                                                setEditingId(player.entity_id);
+                                                                setEditName(customNames[player.entity_id] || name);
+                                                            }}
+                                                            hitSlop={8}
+                                                        >
+                                                            <Pencil size={14} color={colors.subtext} />
+                                                        </Pressable>
+                                                    </View>
+                                                )}
                                                 <Text style={{ fontSize: 12, color: colors.subtext }}>{player.entity_id}</Text>
                                             </View>
                                         </View>

@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { View, Text, ScrollView, Pressable, Image, useWindowDimensions, StyleSheet, Alert, Modal, FlatList, Linking, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useHomeAssistant } from '../../contexts/HomeAssistantContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import {
     Play, Pause, SkipBack, SkipForward, Volume2,
@@ -20,6 +21,7 @@ import { MediaPlayerSelectionModal } from '../../components/MediaPlayerSelection
 export default function Media() {
     const { entities, isConnected, isConnecting, callService, getEntityPictureUrl, browseMedia } = useHomeAssistant();
     const { colors } = useTheme();
+    const { userRole } = useAuth();
     const { width } = useWindowDimensions();
 
     // Spotify Modal State
@@ -42,26 +44,40 @@ export default function Media() {
     // State for manually selected player
     const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
 
-    // Dynamic Media Player List
-    const [visiblePlayers, setVisiblePlayers] = useState<string[]>(WHITELISTED_PLAYERS);
-    const [selectionModalVisible, setSelectionModalVisible] = useState(false);
+    // Dynamic Media Player    // Visibility State
+    const [visiblePlayers, setVisiblePlayers] = useState<string[]>([]);
+    const [customNames, setCustomNames] = useState<Record<string, string>>({});
+    const [showSelectionModal, setShowSelectionModal] = useState(false);
+
+    // Initial Load
+    useEffect(() => {
+        loadVisiblePlayers();
+    }, []);
 
     const loadVisiblePlayers = async () => {
         try {
-            const stored = await AsyncStorage.getItem('@smarthome_visible_media_players');
-            if (stored) {
-                setVisiblePlayers(JSON.parse(stored));
+            const [visibleStored, namesStored] = await Promise.all([
+                AsyncStorage.getItem('@smarthome_visible_media_players'),
+                AsyncStorage.getItem('@smarthome_media_player_names')
+            ]);
+
+            if (visibleStored) {
+                setVisiblePlayers(JSON.parse(visibleStored));
+            } else {
+                // Default to whitelist if nothing stored
+                const whitelist = Object.keys(MEDIA_PLAYER_CONFIG);
+                setVisiblePlayers(whitelist);
+            }
+
+            if (namesStored) {
+                setCustomNames(JSON.parse(namesStored));
             }
         } catch (e) {
             console.warn('Failed to load visible players', e);
         }
     };
 
-    React.useEffect(() => {
-        loadVisiblePlayers();
-    }, []);
-
-    React.useEffect(() => {
+    useEffect(() => {
         if (response?.type === 'success') {
             const { code } = response.params;
             if (code && request?.codeVerifier) {
@@ -108,11 +124,11 @@ export default function Media() {
             }
 
             // 2. Sort by Name
-            const nameA = configA?.name || 'Unbekannt';
-            const nameB = configB?.name || 'Unbekannt';
+            const nameA = customNames[a.entity_id] || configA?.name || 'Unbekannt';
+            const nameB = customNames[b.entity_id] || configB?.name || 'Unbekannt';
             return nameA.localeCompare(nameB);
         });
-    }, [mediaPlayers]);
+    }, [mediaPlayers, customNames]);
 
     // Determine Active Player (Hero)
     // Priority: 1. Manually Selected, 2. Currently Playing, 3. First in list
@@ -392,7 +408,13 @@ export default function Media() {
     };
 
     // --- RENDER HELPERS ---
-    const getPlayerName = (entityId: string) => MEDIA_PLAYER_CONFIG[entityId]?.name || 'Unbekannt';
+    const getPlayerName = (entityId: string) => {
+        if (customNames[entityId]) return customNames[entityId];
+        const configName = MEDIA_PLAYER_CONFIG[entityId]?.name;
+        if (configName) return configName;
+        const entity = entities.find(e => e.entity_id === entityId);
+        return entity?.attributes?.friendly_name || 'Unbekannt';
+    };
 
     return (
         <View style={[styles.screen, { backgroundColor: colors.background }]}>
@@ -433,6 +455,7 @@ export default function Media() {
                             onPower={(on) => handlePower(activePlayer?.entity_id, on)}
                             onVolume={(v) => handleVolumeChange(activePlayer?.entity_id, v)}
                             spotifyActive={!!spotifyToken}
+                            getPlayerName={getPlayerName}
                         />
                     </View>
 
@@ -451,29 +474,32 @@ export default function Media() {
                                 onPower={(on) => handlePower(p.entity_id, on)}
                                 onVolume={(v) => handleVolumeChange(p.entity_id, v)}
                                 spotifyActive={!!spotifyToken}
+                                getPlayerName={getPlayerName}
                             />
                         ))}
                     </View>
 
                     {/* Manage Button */}
-                    <Pressable
-                        onPress={() => setSelectionModalVisible(true)}
-                        style={{
-                            marginTop: 32,
-                            alignSelf: 'center',
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            backgroundColor: 'rgba(255,255,255,0.1)',
-                            paddingHorizontal: 16,
-                            paddingVertical: 10,
-                            borderRadius: 12,
-                            borderWidth: 1,
-                            borderColor: 'rgba(255,255,255,0.2)'
-                        }}
-                    >
-                        <ListMusic size={18} color="#94A3B8" style={{ marginRight: 8 }} />
-                        <Text style={{ color: '#94A3B8', fontWeight: '600' }}>Liste bearbeiten</Text>
-                    </Pressable>
+                    {userRole === 'admin' && (
+                        <Pressable
+                            onPress={() => setShowSelectionModal(true)}
+                            style={{
+                                marginTop: 32,
+                                alignSelf: 'center',
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                backgroundColor: 'rgba(255,255,255,0.1)',
+                                paddingHorizontal: 16,
+                                paddingVertical: 10,
+                                borderRadius: 12,
+                                borderWidth: 1,
+                                borderColor: 'rgba(255,255,255,0.2)'
+                            }}
+                        >
+                            <ListMusic size={18} color="#94A3B8" style={{ marginRight: 8 }} />
+                            <Text style={{ color: '#94A3B8', fontWeight: '600' }}>Liste bearbeiten</Text>
+                        </Pressable>
+                    )}
                 </ScrollView>
             </SafeAreaView>
 
@@ -498,7 +524,7 @@ export default function Media() {
                                         </View>
                                         <View style={{ flex: 1 }}>
                                             <Text style={[styles.modalItemText, isSelected && { color: '#60A5FA', fontWeight: '700' }]}>
-                                                {MEDIA_PLAYER_CONFIG[item.entity_id]?.name || 'Unbekannt'}
+                                                {getPlayerName(item.entity_id)}
                                             </Text>
                                             {isPlaying && <Text style={{ fontSize: 12, color: '#1DB954' }}>Spielt gerade</Text>}
                                         </View>
@@ -568,8 +594,8 @@ export default function Media() {
 
             {/* Media Player Selection Modal */}
             <MediaPlayerSelectionModal
-                visible={selectionModalVisible}
-                onClose={() => setSelectionModalVisible(false)}
+                visible={showSelectionModal}
+                onClose={() => setShowSelectionModal(false)}
                 onUpdateSelection={loadVisiblePlayers}
             />
         </View>
@@ -580,7 +606,7 @@ export default function Media() {
 
 // --- EXTRACTED COMPONENTS ---
 
-const HeroPlayer = ({ player, imageUrl, onSelect, onSpotify, onPlayPause, onNext, onPrev, onPower, onVolume, spotifyActive }: {
+const HeroPlayer = ({ player, imageUrl, onSelect, onSpotify, onPlayPause, onNext, onPrev, onPower, onVolume, spotifyActive, getPlayerName }: {
     player: any,
     imageUrl?: string,
     onSelect: () => void,
@@ -591,14 +617,15 @@ const HeroPlayer = ({ player, imageUrl, onSelect, onSpotify, onPlayPause, onNext
     onPower: (on: boolean) => void,
     onVolume: (v: number) => void,
 
-    spotifyActive: boolean
+    spotifyActive: boolean,
+    getPlayerName: (entityId: string) => string
 }) => {
     const { colors } = useTheme();
     if (!player) return null;
     const isPlaying = player.state === 'playing';
     const isOff = player.state === 'off';
     const volume = player.attributes.volume_level || 0;
-    const title = player.attributes.media_title || (isOff ? 'Bereit' : (player.attributes.app_name || MEDIA_PLAYER_CONFIG[player.entity_id]?.name || 'Unbekannt'));
+    const title = player.attributes.media_title || (isOff ? 'Bereit' : (player.attributes.app_name || getPlayerName(player.entity_id)));
     const artist = player.attributes.media_artist || player.attributes.media_series_title || (isOff ? 'Tippen zum Starten' : '');
 
     return (
@@ -611,7 +638,7 @@ const HeroPlayer = ({ player, imageUrl, onSelect, onSpotify, onPlayPause, onNext
             <View style={styles.heroOverlay} />
             <View style={styles.heroContent}>
                 <Pressable style={[styles.heroHeaderSelect, { backgroundColor: 'rgba(0,0,0,0.5)' }]} onPress={onSelect}>
-                    <Text style={[styles.heroSourceText, { color: '#CBD5E1' }]}>{MEDIA_PLAYER_CONFIG[player.entity_id]?.name || 'Unbekannt'} ▼</Text>
+                    <Text style={[styles.heroSourceText, { color: '#CBD5E1' }]}>{getPlayerName(player.entity_id)} ▼</Text>
                 </Pressable>
 
                 {/* Artwork */}
@@ -671,7 +698,7 @@ const HeroPlayer = ({ player, imageUrl, onSelect, onSpotify, onPlayPause, onNext
     );
 };
 
-const ExpandedPlayerRow = ({ player, isSelected, imageUrl, onSelect, onSpotify, onPlayPause, onPower, onVolume, spotifyActive }: {
+const ExpandedPlayerRow = ({ player, isSelected, imageUrl, onSelect, onSpotify, onPlayPause, onPower, onVolume, spotifyActive, getPlayerName }: {
     player: any,
     isSelected: boolean,
     imageUrl?: string,
@@ -681,12 +708,13 @@ const ExpandedPlayerRow = ({ player, isSelected, imageUrl, onSelect, onSpotify, 
     onPower: (on: boolean) => void,
     onVolume: (v: number) => void,
 
-    spotifyActive: boolean
+    spotifyActive: boolean,
+    getPlayerName: (entityId: string) => string
 }) => {
     const { colors } = useTheme();
     const isOff = player.state === 'off';
     const isPlaying = player.state === 'playing';
-    const name = MEDIA_PLAYER_CONFIG[player.entity_id]?.name || 'Unbekannt';
+    const name = getPlayerName(player.entity_id);
     const volume = player.attributes.volume_level || 0;
 
     return (
@@ -697,7 +725,7 @@ const ExpandedPlayerRow = ({ player, isSelected, imageUrl, onSelect, onSpotify, 
             <View style={styles.expandedHeader}>
                 <View style={[styles.miniIcon, { backgroundColor: colors.background }]}>
                     {imageUrl && !isOff ? (
-                        <Image source={{ uri: imageUrl }} style={{ width: 48, height: 48, borderRadius: 8 }} />
+                        <Text style={{ fontSize: 24, color: colors.accent, lineHeight: 28 }}>+</Text>
                     ) : (
                         <Speaker size={24} color={colors.subtext} />
                     )}

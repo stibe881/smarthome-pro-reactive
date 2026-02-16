@@ -1,7 +1,9 @@
 import React, { useMemo, useState, memo, useCallback, useEffect } from 'react';
-import { View, Text, ScrollView, Pressable, useWindowDimensions, Modal, StyleSheet, ActivityIndicator, Image, Alert } from 'react-native';
+import { View, Text, ScrollView, Pressable, useWindowDimensions, Modal, StyleSheet, ActivityIndicator, Image, Alert, Vibration } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useHomeAssistant } from '../../contexts/HomeAssistantContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import {
     Home, Bed, Sofa, UtensilsCrossed, Bath, Warehouse, Building2,
@@ -17,6 +19,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Slider from '@react-native-community/slider';
 import LightControlModal from '../../components/LightControlModal';
 import ShutterControlModal from '../../components/ShutterControlModal';
+import { RoomEditModal } from '../../components/RoomEditModal';
 import { EntityState } from '../../contexts/HomeAssistantContext';
 
 // Theme Types
@@ -1095,6 +1098,7 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, on
 export default function Rooms() {
     const { width } = useWindowDimensions();
     const { colors } = useTheme();
+    const { userRole } = useAuth();
     const isTablet = width >= 768;
 
     const {
@@ -1117,6 +1121,68 @@ export default function Rooms() {
 
     const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
     const [selectedCoverForModal, setSelectedCoverForModal] = useState<EntityState | null>(null);
+
+    // Dynamic Rooms State
+    const [customRooms, setCustomRooms] = useState<any[]>([]);
+    const [isEditMode, setIsEditMode] = useState(false);
+    const [editingRoom, setEditingRoom] = useState<any>(null);
+    const [showEditModal, setShowEditModal] = useState(false);
+
+    // Initial Load of Custom Rooms
+    useEffect(() => {
+        loadCustomRooms();
+    }, []);
+
+    const loadCustomRooms = async () => {
+        try {
+            const stored = await AsyncStorage.getItem('@smarthome_custom_rooms');
+            if (stored) {
+                setCustomRooms(JSON.parse(stored));
+            }
+        } catch (e) {
+            console.error('Failed to load custom rooms', e);
+        }
+    };
+
+    const saveCustomRooms = async (rooms: any[]) => {
+        try {
+            await AsyncStorage.setItem('@smarthome_custom_rooms', JSON.stringify(rooms));
+            setCustomRooms(rooms);
+        } catch (e) {
+            console.error('Failed to save custom rooms', e);
+        }
+    };
+
+    const handleSaveRoom = (room: any) => {
+        let newRooms;
+        if (customRooms.find((r: any) => r.id === room.id)) {
+            // Edit
+            newRooms = customRooms.map((r: any) => r.id === room.id ? room : r);
+        } else {
+            // Create
+            newRooms = [...customRooms, room];
+        }
+        saveCustomRooms(newRooms);
+    };
+
+    const handleDeleteRoom = (roomId: string) => {
+        Alert.alert(
+            "Raum löschen",
+            "Möchtest du diesen Raum wirklich löschen?",
+            [
+                { text: "Abbrechen", style: "cancel" },
+                {
+                    text: "Löschen",
+                    style: "destructive",
+                    onPress: () => {
+                        const newRooms = customRooms.filter((r: any) => r.id !== roomId);
+                        saveCustomRooms(newRooms);
+                        setShowEditModal(false);
+                    }
+                }
+            ]
+        );
+    };
 
     // Allowed Rooms Configuration
     // Categories Configuration
@@ -1652,7 +1718,7 @@ export default function Rooms() {
             return nameA.localeCompare(nameB, 'de');
         };
 
-        return ALLOWED_ROOMS
+        const systemRooms = ALLOWED_ROOMS
             .map(name => {
                 const data = areaMap.get(name);
                 return {
@@ -1673,7 +1739,37 @@ export default function Rooms() {
                 room.cameras.length > 0
             )
             .sort((a, b) => a.name.localeCompare(b.name, 'de'));
-    }, [entities]);
+
+        // Process Custom Rooms
+        const userRooms = customRooms.map(cr => {
+            // Map Entities
+            const lights = entities.filter(e => cr.entities.includes(e.entity_id) && e.entity_id.startsWith('light.'));
+            const covers = entities.filter(e => cr.entities.includes(e.entity_id) && e.entity_id.startsWith('cover.'));
+            const climates = entities.filter(e => cr.entities.includes(e.entity_id) && e.entity_id.startsWith('climate.'));
+            const sensors = entities.filter(e => cr.entities.includes(e.entity_id) && (e.entity_id.startsWith('sensor.') || e.entity_id.startsWith('binary_sensor.')));
+            const mediaPlayers = entities.filter(e => cr.entities.includes(e.entity_id) && e.entity_id.startsWith('media_player.'));
+            const scripts = entities.filter(e => cr.entities.includes(e.entity_id) && e.entity_id.startsWith('script.'));
+            const scenes = entities.filter(e => cr.entities.includes(e.entity_id) && e.entity_id.startsWith('scene.'));
+            const cameras = entities.filter(e => cr.entities.includes(e.entity_id) && e.entity_id.startsWith('camera.'));
+
+            return {
+                ...cr,
+                lights,
+                covers,
+                climates,
+                sensors,
+                mediaPlayers,
+                scripts,
+                scenes,
+                cameras,
+                gradient: ['#6366F1', '#4F46E5'], // Default Indigo
+                icon: getRoomIcon(cr.iconName || 'Home'), // TODO: Dynamic Icon
+                isCustom: true
+            };
+        });
+
+        return [...systemRooms, ...userRooms];
+    }, [entities, customRooms]);
 
     // API object stable reference for modal
     const api = useMemo(() => ({
@@ -1750,7 +1846,7 @@ export default function Rooms() {
                 <View style={[styles.emptyState, { backgroundColor: colors.background }]}>
                     <WifiOff size={48} color={colors.subtext} />
                     <Text style={[styles.emptyTitle, { color: colors.text }]}>Nicht verbunden</Text>
-                    <Pressable onPress={connect} style={[styles.connectBtn, { backgroundColor: colors.accent }]}>
+                    <Pressable onPress={() => connect()} style={[styles.connectBtn, { backgroundColor: colors.accent }]}>
                         <Text style={styles.connectBtnText}>Verbinden</Text>
                     </Pressable>
                 </View>
@@ -1776,11 +1872,30 @@ export default function Rooms() {
                 showsVerticalScrollIndicator={false}
             >
                 {/* Header */}
-                <View style={styles.header}>
-                    <Text style={[styles.title, { color: colors.text }]}>Räume</Text>
-                    <Text style={[styles.subtitle, { color: colors.subtext }]}>
-                        {rooms.length} Bereiche • {rooms.reduce((acc, r) => acc + r.lights.length, 0)} Lichter
-                    </Text>
+                <View style={[styles.header, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
+                    <View>
+                        <Text style={[styles.title, { color: colors.text }]}>Räume</Text>
+                        <Text style={[styles.subtitle, { color: colors.subtext }]}>
+                            {rooms.length} Bereiche • {rooms.reduce((acc, r) => acc + r.lights.length, 0)} Lichter
+                        </Text>
+                    </View>
+                    {userRole === 'admin' && (
+                        <Pressable
+                            onPress={() => {
+                                setEditingRoom(null);
+                                setShowEditModal(true);
+                            }}
+                            style={({ pressed }) => ({
+                                backgroundColor: colors.card,
+                                padding: 10,
+                                borderRadius: 12,
+                                opacity: pressed ? 0.7 : 1
+                            })}
+                        >
+                            {/* Using Plus icon from Lucide directly */}
+                            <Text style={{ fontSize: 24, color: colors.accent, lineHeight: 28 }}>+</Text>
+                        </Pressable>
+                    )}
                 </View>
 
                 {/* Categorized Grids */}
@@ -1822,9 +1937,38 @@ export default function Rooms() {
                                     return (
                                         <Pressable
                                             key={room.name}
-                                            onPress={() => setSelectedRoom(room.name)}
-                                            style={[styles.roomCard, { width: isTablet ? '32%' : '48%', backgroundColor: colors.card }]}
+                                            onPress={() => {
+                                                if (isEditMode && room.isCustom) {
+                                                    setEditingRoom(room);
+                                                    setShowEditModal(true);
+                                                } else {
+                                                    setSelectedRoom(room.name);
+                                                }
+                                            }}
+                                            onLongPress={() => {
+                                                if (room.isCustom) {
+                                                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+                                                    setIsEditMode(true);
+                                                    setEditingRoom(room);
+                                                    setShowEditModal(true);
+                                                }
+                                            }}
+                                            delayLongPress={500}
+                                            style={[
+                                                styles.roomCard,
+                                                {
+                                                    width: isTablet ? '32%' : '48%',
+                                                    backgroundColor: colors.card,
+                                                    opacity: (isEditMode && !room.isCustom) ? 0.5 : 1,
+                                                    transform: [{ scale: (isEditMode && room.isCustom) ? 0.95 : 1 }]
+                                                }
+                                            ]}
                                         >
+                                            {isEditMode && room.isCustom && (
+                                                <View style={{ position: 'absolute', top: 8, right: 8, zIndex: 10, backgroundColor: colors.accent, borderRadius: 12, padding: 4 }}>
+                                                    <Palette size={16} color="#FFF" />
+                                                </View>
+                                            )}
                                             <LinearGradient
                                                 colors={hasActive ? room.gradient : [colors.card, colors.background]} // Theme aware inactive state
                                                 start={{ x: 0, y: 0 }}
@@ -1854,7 +1998,113 @@ export default function Rooms() {
                         </View>
                     );
                 })}
+
+                {/* Custom Rooms Section (User Defined) */}
+                {rooms.filter(r => r.isCustom).length > 0 && (
+                    <View style={{ marginBottom: 24 }}>
+                        <Text style={{ fontSize: 20, fontWeight: '600', color: colors.subtext, marginBottom: 12, marginLeft: 4 }}>
+                            Meine Räume
+                        </Text>
+                        <View style={styles.roomsGrid}>
+                            {rooms.filter(r => r.isCustom).map((room) => {
+                                // Reuse Logic... actually we merge them in the main list above if we want them integrated?
+                                // The plan said "append to system rooms", which we did in the useMemo.
+                                // But existing categories filter mainly by name. 
+                                // Since users can name rooms anything, they won't fall into "Ground Floor" etc.
+                                // So we probably need to RENDER them here if they weren't caught by categories.
+                                // Wait, the logic above: `const categoryRooms = rooms.filter(r => category.data.includes(r.name));`
+                                // So custom rooms are excluded!
+                                // Let's render them here.
+
+                                const Icon = getRoomIcon(room.iconName || 'Home'); // Correct Icon Retrieval
+                                const lightsOn = room.lights.filter((l: any) => l.state === 'on').length;
+                                const hasActive = lightsOn > 0 || room.mediaPlayers.some((m: any) => m.state === 'playing');
+                                let secondaryInfo = null;
+                                const temp = room.climates[0]?.attributes.current_temperature ||
+                                    (room.sensors[0]?.attributes?.unit_of_measurement === '°C' ? room.sensors[0]?.state : null);
+                                if (temp) secondaryInfo = `${temp}°`;
+
+                                return (
+                                    <Pressable
+                                        key={room.id}
+                                        onPress={() => {
+                                            if (isEditMode) {
+                                                setEditingRoom(room);
+                                                setShowEditModal(true);
+                                            } else {
+                                                setSelectedRoom(room.name);
+                                            }
+                                        }}
+                                        onLongPress={() => {
+                                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+                                            setIsEditMode(true);
+                                            // Don't open modal immediately, just enter mode? 
+                                            // User workflow: Long press -> Edit Mode -> Tap to edit.
+                                        }}
+                                        delayLongPress={500}
+                                        style={[
+                                            styles.roomCard,
+                                            {
+                                                width: isTablet ? '32%' : '48%',
+                                                backgroundColor: colors.card,
+                                                transform: [{ scale: isEditMode ? 0.95 : 1 }]
+                                            }
+                                        ]}
+                                    >
+                                        {isEditMode && (
+                                            <View style={{ position: 'absolute', top: 8, right: 8, zIndex: 10, backgroundColor: colors.accent, borderRadius: 12, padding: 4 }}>
+                                                <Palette size={16} color="#FFF" />
+                                            </View>
+                                        )}
+                                        <LinearGradient
+                                            colors={hasActive ? room.gradient : [colors.card, colors.background]}
+                                            start={{ x: 0, y: 0 }}
+                                            end={{ x: 1, y: 1 }}
+                                            style={styles.cardGradient}
+                                        >
+                                            <View style={[styles.iconContainer, hasActive && { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+                                                <Icon size={24} color={hasActive ? '#FFF' : room.gradient[0]} />
+                                            </View>
+
+                                            <View style={styles.cardContent}>
+                                                <Text numberOfLines={1} style={[styles.roomName, { color: colors.text }]}>{room.name}</Text>
+                                                <View style={styles.cardStats}>
+                                                    <Text style={[styles.statsText, { color: colors.subtext }]}>
+                                                        {lightsOn > 0 ? `${lightsOn} an` : 'Aus'}
+                                                    </Text>
+                                                    {secondaryInfo && (
+                                                        <Text style={[styles.statsText, { color: colors.subtext }]}>• {secondaryInfo}</Text>
+                                                    )}
+                                                </View>
+                                            </View>
+                                        </LinearGradient>
+                                    </Pressable>
+                                )
+                            })}
+                        </View>
+                    </View>
+                )}
+
             </ScrollView>
+
+            {/* Footer Control for Adding Rooms */}
+            {customRooms.length > 0 && userRole === 'admin' && (
+                <View style={{ padding: 16, borderTopWidth: 1, borderTopColor: colors.border, alignItems: 'center' }}>
+                    <Pressable onPress={() => setIsEditMode(!isEditMode)} style={{ padding: 12 }}>
+                        <Text style={{ color: isEditMode ? colors.accent : colors.subtext, fontWeight: '600', fontSize: 16 }}>
+                            {isEditMode ? 'Fertig' : 'Liste bearbeiten'}
+                        </Text>
+                    </Pressable>
+                </View>
+            )}
+
+            <RoomEditModal
+                visible={showEditModal}
+                onClose={() => setShowEditModal(false)}
+                onSave={handleSaveRoom}
+                onDelete={handleDeleteRoom}
+                initialRoom={editingRoom}
+            />
 
             <RoomDetailModal
                 room={activeRoomData}
