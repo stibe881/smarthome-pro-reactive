@@ -92,12 +92,32 @@ export const FamilyManagement = ({ colors }: FamilyManagementProps) => {
 
         setIsInviting(true);
         try {
+            console.log('[FamilyManagement] Invoking create-family-member...');
             const { data, error } = await supabase.functions.invoke('create-family-member', {
                 body: { email: inviteEmail.trim(), password: invitePassword },
             });
 
-            if (error || (data && data.error)) {
-                Alert.alert('Fehler', error?.message || data?.error);
+            console.log('[FamilyManagement] Response data:', JSON.stringify(data));
+            console.log('[FamilyManagement] Response error:', JSON.stringify(error));
+
+            if (error) {
+                const errorDetail = error?.message || 'Unbekannter Fehler';
+                // Try to read the response body for more details
+                let responseBody = '';
+                try {
+                    if ((error as any)?.context?.body) {
+                        const reader = (error as any).context.body.getReader();
+                        const { value } = await reader.read();
+                        responseBody = new TextDecoder().decode(value);
+                    }
+                } catch (e) { /* ignore */ }
+                console.log('[FamilyManagement] Error detail:', errorDetail, 'Body:', responseBody);
+                Alert.alert('Fehler', responseBody || errorDetail);
+                return;
+            }
+
+            if (data && data.error) {
+                Alert.alert('Fehler', data.error);
                 return;
             }
 
@@ -106,8 +126,9 @@ export const FamilyManagement = ({ colors }: FamilyManagementProps) => {
             setInviteEmail('');
             setInvitePassword('');
             loadFamilyData();
-        } catch (error) {
-            Alert.alert('Fehler', 'Verbindungsfehler');
+        } catch (error: any) {
+            console.error('[FamilyManagement] Catch error:', error);
+            Alert.alert('Fehler', error?.message || 'Verbindungsfehler');
         } finally {
             setIsInviting(false);
         }

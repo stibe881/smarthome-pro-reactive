@@ -1,7 +1,7 @@
 // Edge Function: Create Family Member
 // Creates a new user with initial password and adds them to family_members table
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'jsr:@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -94,40 +94,60 @@ Deno.serve(async (req) => {
       auth: { autoRefreshToken: false, persistSession: false }
     })
 
-    // Create the new user
-    const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
-      email: email,
-      password: initialPassword,
-      email_confirm: true, // Skip email verification
-      user_metadata: {
-        must_change_password: true,
-        invited_by: callingUser.id
-      }
-    })
+    // Check if a user with this email already exists
+    const { data: existingUsers, error: listError } = await adminClient.auth.admin.listUsers()
+    const existingUser = existingUsers?.users?.find((u: any) => u.email === email)
 
-    if (createError) {
-      console.error('Create user error:', createError)
-      return new Response(
-        JSON.stringify({ error: createError.message }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+    let userId: string
+
+    if (existingUser) {
+      // User already exists - reuse their ID and update password
+      userId = existingUser.id
+      console.log('User already exists, reusing:', userId)
+      await adminClient.auth.admin.updateUser(userId, {
+        password: initialPassword,
+        email_confirm: true,
+        ban_duration: 'none',
+        user_metadata: {
+          must_change_password: true,
+          invited_by: callingUser.id
+        }
+      })
+    } else {
+      // Create the new user
+      const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
+        email: email,
+        password: initialPassword,
+        email_confirm: true,
+        user_metadata: {
+          must_change_password: true,
+          invited_by: callingUser.id
+        }
+      })
+
+      if (createError) {
+        console.error('Create user error:', createError)
+        return new Response(
+          JSON.stringify({ error: createError.message }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+      userId = newUser.user.id
     }
 
-    // Add to family_members table
+    // Add to family_members table (upsert to handle duplicates)
     const { error: memberError } = await adminClient
       .from('family_members')
-      .insert({
-        user_id: newUser.user.id,
+      .upsert({
+        user_id: userId,
         email: email,
         role: 'member',
         invited_by: callingUser.id,
         household_id: memberData.household_id
-      })
+      }, { onConflict: 'user_id' })
 
     if (memberError) {
       console.error('Add member error:', memberError)
-      // Try to delete the created user if member insert fails
-      await adminClient.auth.admin.deleteUser(newUser.user.id)
       return new Response(
         JSON.stringify({ error: 'Fehler beim Hinzufügen zur Familie: ' + memberError.message }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -138,7 +158,7 @@ Deno.serve(async (req) => {
       JSON.stringify({ 
         success: true, 
         message: 'Familienmitglied erstellt',
-        userId: newUser.user.id 
+        userId: userId 
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
