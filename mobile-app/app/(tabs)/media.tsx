@@ -14,6 +14,8 @@ import { spotifyApi, SpotifyDevice } from '../../services/spotifyApi';
 import { OptimisticVolumeSlider } from '../../components/OptimisticVolumeSlider';
 
 import { MEDIA_PLAYER_CONFIG, WHITELISTED_PLAYERS } from '../../config/mediaPlayers';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { MediaPlayerSelectionModal } from '../../components/MediaPlayerSelectionModal';
 
 export default function Media() {
     const { entities, isConnected, isConnecting, callService, getEntityPictureUrl, browseMedia } = useHomeAssistant();
@@ -40,6 +42,25 @@ export default function Media() {
     // State for manually selected player
     const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
 
+    // Dynamic Media Player List
+    const [visiblePlayers, setVisiblePlayers] = useState<string[]>(WHITELISTED_PLAYERS);
+    const [selectionModalVisible, setSelectionModalVisible] = useState(false);
+
+    const loadVisiblePlayers = async () => {
+        try {
+            const stored = await AsyncStorage.getItem('@smarthome_visible_media_players');
+            if (stored) {
+                setVisiblePlayers(JSON.parse(stored));
+            }
+        } catch (e) {
+            console.warn('Failed to load visible players', e);
+        }
+    };
+
+    React.useEffect(() => {
+        loadVisiblePlayers();
+    }, []);
+
     React.useEffect(() => {
         if (response?.type === 'success') {
             const { code } = response.params;
@@ -64,10 +85,10 @@ export default function Media() {
         getSpotifyToken().then(setSpotifyToken);
     }, []);
 
-    // Filter only whitelisted media players
+    // Filter media players based on visible configuration
     const mediaPlayers = useMemo(() =>
-        entities.filter(e => WHITELISTED_PLAYERS.includes(e.entity_id)),
-        [entities]
+        entities.filter(e => visiblePlayers.includes(e.entity_id)),
+        [entities, visiblePlayers]
     );
 
     // Sort: Type (Speaker > TV) then Name
@@ -433,6 +454,26 @@ export default function Media() {
                             />
                         ))}
                     </View>
+
+                    {/* Manage Button */}
+                    <Pressable
+                        onPress={() => setSelectionModalVisible(true)}
+                        style={{
+                            marginTop: 32,
+                            alignSelf: 'center',
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            backgroundColor: 'rgba(255,255,255,0.1)',
+                            paddingHorizontal: 16,
+                            paddingVertical: 10,
+                            borderRadius: 12,
+                            borderWidth: 1,
+                            borderColor: 'rgba(255,255,255,0.2)'
+                        }}
+                    >
+                        <ListMusic size={18} color="#94A3B8" style={{ marginRight: 8 }} />
+                        <Text style={{ color: '#94A3B8', fontWeight: '600' }}>Liste bearbeiten</Text>
+                    </Pressable>
                 </ScrollView>
             </SafeAreaView>
 
@@ -524,6 +565,13 @@ export default function Media() {
                     </View>
                 </View>
             </Modal>
+
+            {/* Media Player Selection Modal */}
+            <MediaPlayerSelectionModal
+                visible={selectionModalVisible}
+                onClose={() => setSelectionModalVisible(false)}
+                onUpdateSelection={loadVisiblePlayers}
+            />
         </View>
     );
 }
