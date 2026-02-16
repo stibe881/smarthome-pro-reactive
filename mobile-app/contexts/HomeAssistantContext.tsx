@@ -1207,10 +1207,38 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
     // Auto-Sync on Auth Change & App State Change
     useEffect(() => {
         // 1. Auth Change
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
             if (event === 'SIGNED_IN') {
                 console.log('🔄 User signed in. Connecting...');
                 connect();
+            } else if (event === 'SIGNED_OUT') {
+                console.log('👋 User signed out. Clearing HA data...');
+                // Disconnect locally
+                disconnect();
+
+                // Clear all persistent storage related to HA
+                try {
+                    await AsyncStorage.multiRemove([
+                        '@smarthome_ha_url',
+                        '@smarthome_ha_token',
+                        NOTIF_SETTINGS_KEY,
+                        HOME_COORDS_KEY,
+                        SHOPPING_COUNT_KEY,
+                        SHOP_ENTRY_KEY,
+                        IS_HOME_KEY,
+                        METEO_WARNING_KEY
+                    ]);
+                    console.log('🧹 HA Credentials & Cache cleared.');
+                } catch (e) {
+                    console.error('Failed to clear HA storage:', e);
+                }
+
+                // Reset State
+                setIsConnected(false);
+                setHaBaseUrl(null);
+                setAuthToken(null);
+                setError(null);
+                setEntities([]);
             }
         });
 

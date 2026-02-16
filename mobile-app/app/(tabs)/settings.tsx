@@ -785,7 +785,7 @@ export default function Settings() {
     const { width } = useWindowDimensions();
     const isTablet = width >= 768;
 
-    const { logout, user, isBiometricsSupported, isBiometricsEnabled, toggleBiometrics, deleteAccount } = useAuth();
+    const { logout, user, userRole, isBiometricsSupported, isBiometricsEnabled, toggleBiometrics, deleteAccount } = useAuth();
     const {
         isConnected,
         haBaseUrl,
@@ -859,25 +859,69 @@ export default function Settings() {
     };
 
     const handleDeleteAccount = () => {
-        Alert.alert(
-            'Konto unwiderruflich löschen',
-            'Bist du sicher? Alle deine Daten und Einstellungen werden permanent gelöscht. Dies kann nicht rückgängig gemacht werden.',
-            [
-                { text: 'Abbrechen', style: 'cancel' },
-                {
-                    text: 'LÖSCHEN',
-                    style: 'destructive',
-                    onPress: async () => {
-                        try {
-                            await deleteAccount();
-                            Alert.alert('Erfolg', 'Dein Konto wurde gelöscht.');
-                        } catch (e: any) {
-                            Alert.alert('Fehler', 'Löschen fehlgeschlagen: ' + e.message);
+        if (userRole === 'admin') {
+            Alert.alert(
+                'Konto löschen',
+                'Du bist Administrator. Möchtest du nur dein Konto oder den gesamten Haushalt (inkl. aller Mitglieder) löschen?',
+                [
+                    { text: 'Abbrechen', style: 'cancel' },
+                    {
+                        text: 'Nur Konto',
+                        style: 'destructive',
+                        onPress: async () => {
+                            try {
+                                await deleteAccount(false);
+                            } catch (e: any) {
+                                Alert.alert('Fehler', e.message);
+                            }
+                        }
+                    },
+                    {
+                        text: 'Konto & Haushalt',
+                        style: 'destructive',
+                        onPress: async () => {
+                            Alert.alert(
+                                'Endgültige Bestätigung',
+                                'Bist du sicher? Der gesamte Haushalt und alle Mitglieder werden unwiderruflich gelöscht.',
+                                [
+                                    { text: 'Abbrechen', style: 'cancel' },
+                                    {
+                                        text: 'ALLES LÖSCHEN',
+                                        style: 'destructive',
+                                        onPress: async () => {
+                                            try {
+                                                await deleteAccount(true);
+                                            } catch (e: any) {
+                                                Alert.alert('Fehler', e.message);
+                                            }
+                                        }
+                                    }
+                                ]
+                            );
                         }
                     }
-                }
-            ]
-        );
+                ]
+            );
+        } else {
+            Alert.alert(
+                'Konto unwiderruflich löschen',
+                'Bist du sicher? Alle deine Daten und Einstellungen werden permanent gelöscht. Dies kann nicht rückgängig gemacht werden.',
+                [
+                    { text: 'Abbrechen', style: 'cancel' },
+                    {
+                        text: 'LÖSCHEN',
+                        style: 'destructive',
+                        onPress: async () => {
+                            try {
+                                await deleteAccount(false);
+                            } catch (e: any) {
+                                Alert.alert('Fehler', 'Löschen fehlgeschlagen: ' + e.message);
+                            }
+                        }
+                    }
+                ]
+            );
+        }
     };
 
     const handleLogout = () => {

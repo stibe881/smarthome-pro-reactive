@@ -56,12 +56,18 @@ export const FamilyManagement = ({ colors }: FamilyManagementProps) => {
 
             const myHouseholdId = myMemberData?.household_id;
 
-            const { data: membersData } = await supabase
-                .from('family_members')
-                .select('*')
-                .order('created_at', { ascending: true });
+            if (myHouseholdId) {
+                const { data: membersData } = await supabase
+                    .from('family_members')
+                    .select('*')
+                    .eq('household_id', myHouseholdId)
+                    .order('created_at', { ascending: true });
 
-            if (membersData) setMembers(membersData);
+                if (membersData) setMembers(membersData);
+            } else {
+                // No household yet - only show the current user
+                setMembers([]);
+            }
 
             if (myHouseholdId) {
                 const { data: invitesData } = await supabase

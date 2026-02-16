@@ -11,7 +11,7 @@ import ChangePasswordModal from "../components/ChangePasswordModal";
 import { DoorbellModal } from "../components/DoorbellModal";
 
 function RootLayoutNav() {
-    const { session, isLoading, mustChangePassword, clearMustChangePassword } = useAuth();
+    const { session, isLoading, mustChangePassword, clearMustChangePassword, needsSetup } = useAuth();
     const segments = useSegments();
     const router = useRouter();
 
@@ -19,15 +19,20 @@ function RootLayoutNav() {
         if (isLoading) return;
 
         const inAuthGroup = segments[0] === "(auth)";
+        const seg = segments as string[];
+        const inSetup = seg[1] === "setup";
 
         if (!session && !inAuthGroup) {
             // Redirect to the sign-in page.
             router.replace("/(auth)/login");
-        } else if (session && inAuthGroup) {
-            // Redirect away from the sign-in page.
+        } else if (session && needsSetup && !inSetup) {
+            // New user needs to complete setup wizard
+            router.replace("/(auth)/setup");
+        } else if (session && !needsSetup && inAuthGroup) {
+            // Redirect away from the auth group to main app.
             router.replace("/(tabs)");
         }
-    }, [session, isLoading, segments]);
+    }, [session, isLoading, segments, needsSetup]);
 
     if (isLoading) {
         return (

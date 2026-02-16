@@ -13,6 +13,7 @@ interface AuthContextType {
     isLoading: boolean;
     userRole: 'admin' | 'user' | null;
     mustChangePassword: boolean;
+    needsSetup: boolean;
     isBiometricsSupported: boolean;
     isBiometricsEnabled: boolean;
     toggleBiometrics: () => Promise<void>;
@@ -21,12 +22,13 @@ interface AuthContextType {
     login: (email: string, password: string) => Promise<void>;
     register: (email: string, password: string) => Promise<void>;
     logout: () => Promise<void>;
-    deleteAccount: () => Promise<void>;
+    deleteAccount: (deleteHousehold?: boolean) => Promise<void>;
     changePassword: (newPassword: string) => Promise<void>;
     resetMemberPassword: (memberId: string, newPassword: string) => Promise<void>;
     removeMember: (memberId: string) => Promise<void>;
     toggleMemberAccess: (memberId: string, active: boolean) => Promise<void>;
     clearMustChangePassword: () => void;
+    completeSetup: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -49,6 +51,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [userRole, setUserRole] = useState<'admin' | 'user' | null>(null);
     const [mustChangePassword, setMustChangePassword] = useState(false);
+    const [needsSetup, setNeedsSetup] = useState(false);
     const [isBiometricsSupported, setIsBiometricsSupported] = useState(false);
     const [isBiometricsEnabled, setIsBiometricsEnabled] = useState(false);
 
@@ -297,6 +300,26 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     };
 
     const register = async (email: string, password: string) => {
+        // 1. Check if email already exists in a household
+        try {
+            const { data: existsInHousehold, error: rpcError } = await supabase.rpc(
+                'check_email_in_household',
+                { p_email: email }
+            );
+
+            if (rpcError) {
+                console.warn('Household check failed:', rpcError.message);
+                // Continue with registration if RPC fails (function might not exist yet)
+            } else if (existsInHousehold === true) {
+                throw new Error('Diese E-Mail ist bereits einer Home Assistant Instanz zugeordnet. Bitte melde dich stattdessen an.');
+            }
+        } catch (e: any) {
+            // Re-throw if it's our custom error
+            if (e.message?.includes('bereits einer Home Assistant')) throw e;
+            console.warn('Household check error:', e);
+        }
+
+        // 2. Sign up
         const { data, error } = await supabase.auth.signUp({
             email,
             password,
@@ -305,12 +328,45 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         if (error) throw error;
 
         // Supabase might require email confirmation, handle both cases
-        if (data.session) {
+        if (data.session && data.user) {
             setSession(data.session);
             setUser(data.user);
             if (isBiometricsEnabled) {
                 await storeCredentials(email, password);
             }
+
+            // 3. Create household + family_member entry for new user
+            try {
+                const { data: household, error: householdError } = await supabase
+                    .from('households')
+                    .insert({ name: 'Mein Zuhause' })
+                    .select('id')
+                    .single();
+
+                if (householdError) {
+                    console.error('Failed to create household:', householdError);
+                } else if (household) {
+                    const { error: memberError } = await supabase
+                        .from('family_members')
+                        .insert({
+                            user_id: data.user.id,
+                            household_id: household.id,
+                            email: email,
+                            role: 'admin',
+                        });
+
+                    if (memberError) {
+                        console.error('Failed to create family member:', memberError);
+                    } else {
+                        console.log('✅ Household + family_member created for new user');
+                    }
+                }
+            } catch (e) {
+                console.error('Error creating household:', e);
+            }
+
+            // 4. Mark user as needing setup
+            setNeedsSetup(true);
         } else {
             throw new Error('Bitte bestätige deine Email-Adresse');
         }
@@ -324,8 +380,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setMustChangePassword(false);
     };
 
-    const deleteAccount = async () => {
-        const { error } = await supabase.rpc('delete_user_account');
+    const deleteAccount = async (deleteHousehold: boolean = false) => {
+        const { error } = await supabase.rpc('delete_user_account', {
+            delete_household: deleteHousehold
+        });
         if (error) throw error;
         setSession(null);
         setUser(null);
@@ -365,6 +423,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setMustChangePassword(false);
     };
 
+    const completeSetup = () => {
+        setNeedsSetup(false);
+    };
+
     return (
         <AuthContext.Provider value={{
             user,
@@ -385,7 +447,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             removeMember,
             toggleMemberAccess,
             mustChangePassword,
-            clearMustChangePassword
+            clearMustChangePassword,
+            needsSetup,
+            completeSetup
         }}>
             {children}
         </AuthContext.Provider>

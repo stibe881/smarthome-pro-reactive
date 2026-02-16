@@ -1,20 +1,22 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, Pressable, ActivityIndicator } from 'react-native';
 import { useAuth } from '../../contexts/AuthContext';
-import { House, LogIn, Mail, Lock, AlertTriangle, ScanFace } from 'lucide-react-native';
+import { House, LogIn, Mail, Lock, AlertTriangle, ScanFace, UserPlus } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
 
 export default function LoginScreen() {
-    const { login, isBiometricsEnabled, biometricLogin } = useAuth();
+    const { login, register, isBiometricsEnabled, biometricLogin } = useAuth();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [isRegisterMode, setIsRegisterMode] = useState(false);
 
     // Auto-login with biometrics if enabled
     React.useEffect(() => {
-        if (isBiometricsEnabled) {
+        if (isBiometricsEnabled && !isRegisterMode) {
             handleBiometricLogin();
         }
     }, [isBiometricsEnabled]);
@@ -22,8 +24,6 @@ export default function LoginScreen() {
     const handleBiometricLogin = async () => {
         setLoading(true);
         const success = await biometricLogin();
-        // If success, AuthContext (onAuthStateChange) will handle navigation
-        // If fail, we just stop loading
         if (!success) {
             setLoading(false);
         }
@@ -31,14 +31,40 @@ export default function LoginScreen() {
 
     const handleSubmit = async () => {
         setError('');
+
+        if (isRegisterMode) {
+            if (!email.trim() || !password.trim()) {
+                setError('Bitte fülle alle Felder aus');
+                return;
+            }
+            if (password.length < 6) {
+                setError('Das Passwort muss mindestens 6 Zeichen lang sein');
+                return;
+            }
+            if (password !== confirmPassword) {
+                setError('Die Passwörter stimmen nicht überein');
+                return;
+            }
+        }
+
         setLoading(true);
         try {
-            await login(email, password);
+            if (isRegisterMode) {
+                await register(email, password);
+            } else {
+                await login(email, password);
+            }
         } catch (err: any) {
             setError(err.message || 'Ein Fehler ist aufgetreten');
         } finally {
             setLoading(false);
         }
+    };
+
+    const toggleMode = () => {
+        setIsRegisterMode(!isRegisterMode);
+        setError('');
+        setConfirmPassword('');
     };
 
     return (
@@ -58,8 +84,12 @@ export default function LoginScreen() {
 
                 {/* Form */}
                 <View style={styles.formCard}>
-                    <Text style={styles.cardTitle}>Willkommen</Text>
-                    <Text style={styles.cardSubtitle}>Melde dich an</Text>
+                    <Text style={styles.cardTitle}>
+                        {isRegisterMode ? 'Registrieren' : 'Willkommen'}
+                    </Text>
+                    <Text style={styles.cardSubtitle}>
+                        {isRegisterMode ? 'Erstelle ein neues Konto' : 'Melde dich an'}
+                    </Text>
 
                     <View style={styles.formGroup}>
                         <View style={styles.inputContainer}>
@@ -93,6 +123,23 @@ export default function LoginScreen() {
                             </View>
                         </View>
 
+                        {isRegisterMode && (
+                            <View style={styles.inputContainer}>
+                                <Text style={styles.label}>PASSWORT BESTÄTIGEN</Text>
+                                <View style={styles.inputWrapper}>
+                                    <Lock stroke="#94a3b8" size={20} />
+                                    <TextInput
+                                        value={confirmPassword}
+                                        onChangeText={setConfirmPassword}
+                                        placeholder="••••••••"
+                                        placeholderTextColor="#64748b"
+                                        secureTextEntry
+                                        style={styles.input}
+                                    />
+                                </View>
+                            </View>
+                        )}
+
                         {error ? (
                             <View style={styles.errorBox}>
                                 <AlertTriangle stroke="#f87171" size={20} />
@@ -110,15 +157,17 @@ export default function LoginScreen() {
                         >
                             {loading ? (
                                 <ActivityIndicator color="white" />
+                            ) : isRegisterMode ? (
+                                <UserPlus stroke="white" size={24} />
                             ) : (
                                 <LogIn stroke="white" size={24} />
                             )}
                             <Text style={[styles.buttonText, loading && styles.buttonTextDisabled]}>
-                                {loading ? 'BITTE WARTEN...' : 'ANMELDEN'}
+                                {loading ? 'BITTE WARTEN...' : isRegisterMode ? 'REGISTRIEREN' : 'ANMELDEN'}
                             </Text>
                         </Pressable>
 
-                        {isBiometricsEnabled && (
+                        {!isRegisterMode && isBiometricsEnabled && (
                             <Pressable
                                 onPress={handleBiometricLogin}
                                 style={styles.biometricButton}
@@ -127,6 +176,18 @@ export default function LoginScreen() {
                                 <Text style={styles.biometricText}>Or use Face ID</Text>
                             </Pressable>
                         )}
+
+                        {/* Toggle between Login and Register */}
+                        <Pressable onPress={toggleMode} style={styles.toggleButton}>
+                            <Text style={styles.toggleText}>
+                                {isRegisterMode
+                                    ? 'Bereits ein Konto? '
+                                    : 'Noch kein Konto? '}
+                                <Text style={styles.toggleHighlight}>
+                                    {isRegisterMode ? 'Anmelden' : 'Registrieren'}
+                                </Text>
+                            </Text>
+                        </Pressable>
                     </View>
                 </View>
             </View>
@@ -280,5 +341,17 @@ const styles = StyleSheet.create({
         color: '#3B82F6',
         fontSize: 14,
         fontWeight: '600'
-    }
+    },
+    toggleButton: {
+        alignItems: 'center',
+        paddingVertical: 8,
+    },
+    toggleText: {
+        color: '#94A3B8',
+        fontSize: 14,
+    },
+    toggleHighlight: {
+        color: '#3B82F6',
+        fontWeight: '700',
+    },
 });
