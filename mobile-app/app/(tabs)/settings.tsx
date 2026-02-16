@@ -13,6 +13,7 @@ import Constants from 'expo-constants';
 import { DashboardConfigModal } from '../../components/DashboardConfigModal';
 import { FamilyManagement } from '../../components/FamilyManagement';
 import { ConnectionWizard } from '../../components/ConnectionWizard';
+import { AutomationsModal } from '../../components/AutomationsModal';
 import { Activity, ShieldCheck, Zap, Blinds, AlertTriangle, Baby, Plus } from 'lucide-react-native';
 import { useKidsMode } from '../../contexts/KidsContext';
 
@@ -807,7 +808,11 @@ export default function Settings() {
     const [isSaving, setIsSaving] = useState(false);
     const [testResult, setTestResult] = useState<'success' | 'error' | null>(null);
     const [notificationModalVisible, setNotificationModalVisible] = useState(false);
-    const [configModalVisible, setConfigModalVisible] = useState(false);
+    const [configModalVisible, setConfigModalVisible] = useState(false); // Restored
+    const [automationsModalVisible, setAutomationsModalVisible] = useState(false);
+
+    // ... existing ...
+
     const [changePasswordModalVisible, setChangePasswordModalVisible] = useState(false);
     const [isHAExpanded, setIsHAExpanded] = useState(false);
     const [isFamilyExpanded, setIsFamilyExpanded] = useState(false);
@@ -1072,6 +1077,14 @@ export default function Settings() {
                                 colors={colors}
                             />
                             <SettingsRow
+                                icon={<Zap size={20} color={colors.accent} />}
+                                iconColor={colors.accent}
+                                label="Automationen"
+                                showChevron
+                                onPress={() => setAutomationsModalVisible(true)}
+                                colors={colors}
+                            />
+                            <SettingsRow
                                 icon={<Bell size={20} color={notificationSettings.enabled ? colors.accent : colors.subtext} />}
                                 iconColor={notificationSettings.enabled ? colors.accent : colors.subtext}
                                 label="Benachrichtigungen"
@@ -1311,6 +1324,10 @@ export default function Settings() {
                 <KidsSettingsModal
                     visible={kidsModalVisible}
                     onClose={() => setKidsModalVisible(false)}
+                />
+                <AutomationsModal
+                    visible={automationsModalVisible}
+                    onClose={() => setAutomationsModalVisible(false)}
                 />
             </SafeAreaView>
         </View>

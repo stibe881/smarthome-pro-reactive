@@ -564,6 +564,17 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
     };
 
     const handleStateChange = useCallback((newEntities: any[]) => {
+        // Sync Shopping Count for Background Task
+        const shoppingEntity = newEntities.find(e => e.entity_id === 'todo.google_keep_einkaufsliste');
+        if (shoppingEntity) {
+            // For todo entities, state is often the count of incomplete items. 
+            // However, check if it is a valid number string first.
+            const stateCnt = parseInt(shoppingEntity.state);
+            if (!isNaN(stateCnt)) {
+                AsyncStorage.setItem(SHOPPING_COUNT_KEY, stateCnt.toString());
+            }
+        }
+
         // MY_POSITION_MAPPING by entity_id for reliable matching
         const MY_POSITION_MAPPING: Record<string, string> = {
             'cover.essbereich': 'button.evb_essbereich_my_position',
@@ -1415,7 +1426,14 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
         fetchCalendarEvents,
         setHomeLocation,
         isGeofencingActive,
-        fetchTodoItems: async (entityId: string) => serviceRef.current?.fetchTodoItems(entityId) || [],
+        fetchTodoItems: async (entityId: string) => {
+            const items = await serviceRef.current?.fetchTodoItems(entityId) || [];
+            if (entityId === 'todo.google_keep_einkaufsliste') {
+                const count = items.filter((i: any) => i.status === 'needs_action').length;
+                AsyncStorage.setItem(SHOPPING_COUNT_KEY, count.toString());
+            }
+            return items;
+        },
         updateTodoItem: async (entityId: string, item: string, status: any) => serviceRef.current?.updateTodoItem(entityId, item, status),
         addTodoItem: async (entityId: string, item: string) => serviceRef.current?.addTodoItem(entityId, item),
         shoppingListVisible,
