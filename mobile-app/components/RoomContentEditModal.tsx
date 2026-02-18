@@ -758,85 +758,80 @@ export function RoomContentEditModal({ visible, onClose, room, colors, allEntiti
 
                     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
                         {/* Groups (predefined + custom) */}
-                        {orderedGroupIds.map((groupId, groupIndex) => {
-                            const entities = roomEntities[groupId] || [];
-                            const isHidden = override.hiddenGroups.includes(groupId);
-                            const isExpanded = expandedGroup === groupId;
-                            const isCustom = override.customGroups.some(g => g.id === groupId);
-                            const Icon = GROUP_ICONS[groupId] || GripVertical;
-                            const label = getGroupLabel(groupId);
-                            const isFirst = groupIndex === 0;
-                            const isLast = groupIndex === orderedGroupIds.length - 1;
+                        {orderedGroupIds
+                            .filter(gId => !override.hiddenGroups.includes(gId)) // Don't show hidden groups
+                            .map((groupId, groupIndex, filteredIds) => {
+                                const allEntitiesInGroup = roomEntities[groupId] || [];
+                                // Filter out removed entities
+                                const entities = allEntitiesInGroup.filter(e => !override.removedEntities.includes(e.entity_id));
+                                const isExpanded = expandedGroup === groupId;
+                                const isCustom = override.customGroups.some(g => g.id === groupId);
+                                const Icon = GROUP_ICONS[groupId] || GripVertical;
+                                const label = getGroupLabel(groupId);
+                                const isFirst = groupIndex === 0;
+                                const isLast = groupIndex === filteredIds.length - 1;
 
-                            // Hide empty predefined groups unless they are hidden (so user can unhide)
-                            if (entities.length === 0 && !isHidden && !isCustom) return null;
+                                // Hide empty predefined groups
+                                if (entities.length === 0 && !isCustom) return null;
 
-                            return (
-                                <View key={groupId} style={[modalStyles.groupCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                                    <Pressable
-                                        onPress={() => setExpandedGroup(isExpanded ? null : groupId)}
-                                        style={modalStyles.groupHeader}
-                                    >
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                                            <Icon size={18} color={isHidden ? colors.subtext : colors.accent} />
-                                            <Text style={[modalStyles.groupTitle, { color: isHidden ? colors.subtext : colors.text }]}>
-                                                {label} ({entities.length})
-                                            </Text>
-                                        </View>
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                                            {/* Move up/down */}
-                                            <Pressable
-                                                onPress={(e) => { e.stopPropagation(); handleMoveGroup(groupId, 'up'); }}
-                                                style={[modalStyles.miniBtn, { backgroundColor: colors.background, opacity: isFirst ? 0.3 : 1 }]}
-                                                disabled={isFirst}
-                                            >
-                                                <ArrowUp size={12} color={colors.subtext} />
-                                            </Pressable>
-                                            <Pressable
-                                                onPress={(e) => { e.stopPropagation(); handleMoveGroup(groupId, 'down'); }}
-                                                style={[modalStyles.miniBtn, { backgroundColor: colors.background, opacity: isLast ? 0.3 : 1 }]}
-                                                disabled={isLast}
-                                            >
-                                                <ArrowDown size={12} color={colors.subtext} />
-                                            </Pressable>
-                                            <Pressable
-                                                onPress={(e) => { e.stopPropagation(); handleRenameGroup(groupId); }}
-                                                style={[modalStyles.miniBtn, { backgroundColor: colors.accent + '15' }]}
-                                            >
-                                                <Edit3 size={12} color={colors.accent} />
-                                            </Pressable>
-                                            <Pressable
-                                                onPress={(e) => { e.stopPropagation(); handleDeleteGroup(groupId); }}
-                                                style={[modalStyles.miniBtn, { backgroundColor: colors.error + '15' }]}
-                                            >
-                                                <Trash2 size={12} color={colors.error} />
-                                            </Pressable>
-                                            <Pressable
-                                                onPress={(e) => { e.stopPropagation(); handleToggleGroup(groupId); }}
-                                                style={[modalStyles.toggleBtn, { backgroundColor: isHidden ? colors.error + '20' : colors.success + '20' }]}
-                                            >
-                                                <Text style={{ color: isHidden ? colors.error : colors.success, fontSize: 11, fontWeight: '600' }}>
-                                                    {isHidden ? 'Aus' : 'An'}
+                                return (
+                                    <View key={groupId} style={[modalStyles.groupCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                                        <Pressable
+                                            onPress={() => setExpandedGroup(isExpanded ? null : groupId)}
+                                            style={modalStyles.groupHeader}
+                                        >
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                                                <Icon size={18} color={colors.accent} />
+                                                <Text style={[modalStyles.groupTitle, { color: colors.text }]}>
+                                                    {label} ({entities.length})
                                                 </Text>
-                                            </Pressable>
-                                            {isExpanded ? <ChevronUp size={16} color={colors.subtext} /> : <ChevronDown size={16} color={colors.subtext} />}
-                                        </View>
-                                    </Pressable>
+                                            </View>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                                {/* Move up/down */}
+                                                <Pressable
+                                                    onPress={(e) => { e.stopPropagation(); handleMoveGroup(groupId, 'up'); }}
+                                                    style={[modalStyles.miniBtn, { backgroundColor: colors.background, opacity: isFirst ? 0.3 : 1 }]}
+                                                    disabled={isFirst}
+                                                >
+                                                    <ArrowUp size={12} color={colors.subtext} />
+                                                </Pressable>
+                                                <Pressable
+                                                    onPress={(e) => { e.stopPropagation(); handleMoveGroup(groupId, 'down'); }}
+                                                    style={[modalStyles.miniBtn, { backgroundColor: colors.background, opacity: isLast ? 0.3 : 1 }]}
+                                                    disabled={isLast}
+                                                >
+                                                    <ArrowDown size={12} color={colors.subtext} />
+                                                </Pressable>
+                                                <Pressable
+                                                    onPress={(e) => { e.stopPropagation(); handleRenameGroup(groupId); }}
+                                                    style={[modalStyles.miniBtn, { backgroundColor: colors.accent + '15' }]}
+                                                >
+                                                    <Edit3 size={12} color={colors.accent} />
+                                                </Pressable>
+                                                <Pressable
+                                                    onPress={(e) => { e.stopPropagation(); handleDeleteGroup(groupId); }}
+                                                    style={[modalStyles.miniBtn, { backgroundColor: colors.error + '15' }]}
+                                                >
+                                                    <Trash2 size={12} color={colors.error} />
+                                                </Pressable>
+                                                {isExpanded ? <ChevronUp size={16} color={colors.subtext} /> : <ChevronDown size={16} color={colors.subtext} />}
+                                            </View>
+                                        </Pressable>
 
-                                    {isExpanded && !isHidden && (
-                                        <View style={{ paddingHorizontal: 12, paddingBottom: 12 }}>
-                                            {entities.length === 0 ? (
-                                                <Text style={{ color: colors.subtext, fontSize: 13, fontStyle: 'italic', paddingVertical: 8 }}>
-                                                    Keine Entities in dieser Gruppe
-                                                </Text>
-                                            ) : (
-                                                entities.map((entity: any) => renderEntityRow(entity, groupId))
-                                            )}
-                                        </View>
-                                    )}
-                                </View>
-                            );
-                        })}
+                                        {isExpanded && (
+                                            <View style={{ paddingHorizontal: 12, paddingBottom: 12 }}>
+                                                {entities.length === 0 ? (
+                                                    <Text style={{ color: colors.subtext, fontSize: 13, fontStyle: 'italic', paddingVertical: 8 }}>
+                                                        Keine Entities in dieser Gruppe
+                                                    </Text>
+                                                ) : (
+                                                    entities.map((entity: any) => renderEntityRow(entity, groupId))
+                                                )}
+                                            </View>
+                                        )}
+                                    </View>
+                                );
+                            })}
 
                         {/* New Group Button */}
                         {!showNewGroup ? (
@@ -986,10 +981,11 @@ export function RoomContentEditModal({ visible, onClose, room, colors, allEntiti
                         </View>
                     </ScrollView>
                 </View>
-            </View>
+            </View >
 
             {/* Rename Entity Modal */}
-            <Modal visible={!!editingEntityId} transparent animationType="fade" onRequestClose={() => setEditingEntityId(null)}>
+            < Modal visible={!!editingEntityId
+            } transparent animationType="fade" onRequestClose={() => setEditingEntityId(null)}>
                 <View style={[modalStyles.overlay, { backgroundColor: 'rgba(0,0,0,0.6)' }]}>
                     <View style={[modalStyles.renameCard, { backgroundColor: colors.card }]}>
                         <Text style={[modalStyles.renameTitle, { color: colors.text }]}>Anzeigename bearbeiten</Text>
@@ -1013,10 +1009,10 @@ export function RoomContentEditModal({ visible, onClose, room, colors, allEntiti
                         </View>
                     </View>
                 </View>
-            </Modal>
+            </Modal >
 
             {/* Rename Group Modal */}
-            <Modal visible={!!editingGroupId} transparent animationType="fade" onRequestClose={() => setEditingGroupId(null)}>
+            < Modal visible={!!editingGroupId} transparent animationType="fade" onRequestClose={() => setEditingGroupId(null)}>
                 <View style={[modalStyles.overlay, { backgroundColor: 'rgba(0,0,0,0.6)' }]}>
                     <View style={[modalStyles.renameCard, { backgroundColor: colors.card }]}>
                         <Text style={[modalStyles.renameTitle, { color: colors.text }]}>Gruppe umbenennen</Text>
@@ -1039,10 +1035,10 @@ export function RoomContentEditModal({ visible, onClose, room, colors, allEntiti
                         </View>
                     </View>
                 </View>
-            </Modal>
+            </Modal >
 
             {/* Assign Entity to Group Modal */}
-            <Modal visible={!!assigningEntityId} transparent animationType="fade" onRequestClose={() => setAssigningEntityId(null)}>
+            < Modal visible={!!assigningEntityId} transparent animationType="fade" onRequestClose={() => setAssigningEntityId(null)}>
                 <View style={[modalStyles.overlay, { backgroundColor: 'rgba(0,0,0,0.6)' }]}>
                     <View style={[modalStyles.renameCard, { backgroundColor: colors.card, maxHeight: '70%' }]}>
                         <Text style={[modalStyles.renameTitle, { color: colors.text }]}>Gruppe zuweisen</Text>
@@ -1083,10 +1079,10 @@ export function RoomContentEditModal({ visible, onClose, room, colors, allEntiti
                         </Pressable>
                     </View>
                 </View>
-            </Modal>
+            </Modal >
 
             {/* Entity Display Type Picker Modal */}
-            <Modal visible={!!typingEntityId} transparent animationType="fade" onRequestClose={() => setTypingEntityId(null)}>
+            < Modal visible={!!typingEntityId} transparent animationType="fade" onRequestClose={() => setTypingEntityId(null)}>
                 <View style={[modalStyles.overlay, { backgroundColor: 'rgba(0,0,0,0.6)' }]}>
                     <View style={[modalStyles.renameCard, { backgroundColor: colors.card, maxHeight: '70%' }]}>
                         <Text style={[modalStyles.renameTitle, { color: colors.text }]}>Anzeige-Typ wählen</Text>
@@ -1137,10 +1133,10 @@ export function RoomContentEditModal({ visible, onClose, room, colors, allEntiti
                         </Pressable>
                     </View>
                 </View>
-            </Modal>
+            </Modal >
 
             {/* Add Entity → Pick Group Modal */}
-            <Modal visible={!!pendingAddEntityId} transparent animationType="fade" onRequestClose={() => setPendingAddEntityId(null)}>
+            < Modal visible={!!pendingAddEntityId} transparent animationType="fade" onRequestClose={() => setPendingAddEntityId(null)}>
                 <View style={[modalStyles.overlay, { backgroundColor: 'rgba(0,0,0,0.6)' }]}>
                     <View style={[modalStyles.renameCard, { backgroundColor: colors.card, maxHeight: '70%' }]}>
                         <Text style={[modalStyles.renameTitle, { color: colors.text }]}>Zu welcher Gruppe?</Text>
@@ -1174,8 +1170,8 @@ export function RoomContentEditModal({ visible, onClose, room, colors, allEntiti
                         </Pressable>
                     </View>
                 </View>
-            </Modal>
-        </Modal>
+            </Modal >
+        </Modal >
     );
 }
 
