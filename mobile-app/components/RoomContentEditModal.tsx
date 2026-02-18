@@ -528,26 +528,15 @@ export function RoomContentEditModal({ visible, onClose, room, colors, allEntiti
     };
 
     const handleRemoveEntity = (entityId: string) => {
-        Alert.alert(
-            'Entity entfernen',
-            'Soll diese Entity aus dem Raum ausgeblendet werden?',
-            [
-                { text: 'Abbrechen', style: 'cancel' },
-                {
-                    text: 'Entfernen', style: 'destructive', onPress: () => {
-                        // Also remove group override if exists
-                        const newGroupOverrides = { ...override.groupOverrides };
-                        delete newGroupOverrides[entityId];
-                        updateOverride({
-                            removedEntities: override.removedEntities.includes(entityId)
-                                ? override.removedEntities
-                                : [...override.removedEntities, entityId],
-                            groupOverrides: newGroupOverrides,
-                        });
-                    }
-                }
-            ]
-        );
+        // Remove entity from room (no confirmation dialog)
+        const newGroupOverrides = { ...override.groupOverrides };
+        delete newGroupOverrides[entityId];
+        updateOverride({
+            removedEntities: override.removedEntities.includes(entityId)
+                ? override.removedEntities
+                : [...override.removedEntities, entityId],
+            groupOverrides: newGroupOverrides,
+        });
     };
 
     const handleRestoreEntity = (entityId: string) => {
@@ -648,34 +637,21 @@ export function RoomContentEditModal({ visible, onClose, room, colors, allEntiti
 
     const handleDeleteGroup = (groupId: string) => {
         const isCustom = override.customGroups.some(g => g.id === groupId);
-        const label = getGroupLabel(groupId);
 
         if (isCustom) {
-            Alert.alert(
-                `"${label}" löschen?`,
-                'Entities in dieser Gruppe werden zurück in ihre Standard-Gruppe verschoben.',
-                [
-                    { text: 'Abbrechen', style: 'cancel' },
-                    {
-                        text: 'Löschen', style: 'destructive', onPress: () => {
-                            // Remove custom group + reset group overrides pointing to it
-                            const newGroupOverrides = { ...override.groupOverrides };
-                            for (const [entityId, target] of Object.entries(newGroupOverrides)) {
-                                if (target === groupId) delete newGroupOverrides[entityId];
-                            }
-                            // Also remove from groupOrder
-                            const newOrder = (override.groupOrder || []).filter(g => g !== groupId);
-                            updateOverride({
-                                customGroups: override.customGroups.filter(g => g.id !== groupId),
-                                groupOverrides: newGroupOverrides,
-                                groupOrder: newOrder as EntityGroup[],
-                            });
-                        }
-                    }
-                ]
-            );
+            // Remove custom group directly (no confirmation dialog)
+            const newGroupOverrides = { ...override.groupOverrides };
+            for (const [entityId, target] of Object.entries(newGroupOverrides)) {
+                if (target === groupId) delete newGroupOverrides[entityId];
+            }
+            const newOrder = (override.groupOrder || []).filter(g => g !== groupId);
+            updateOverride({
+                customGroups: override.customGroups.filter(g => g.id !== groupId),
+                groupOverrides: newGroupOverrides,
+                groupOrder: newOrder as EntityGroup[],
+            });
         } else {
-            // Predefined groups: hide AND remove from groupOrder so it disappears
+            // Predefined groups: hide AND remove from groupOrder
             const hidden = [...override.hiddenGroups];
             if (!hidden.includes(groupId)) hidden.push(groupId);
             const newOrder = (override.groupOrder || []).filter(g => g !== groupId);
