@@ -5,7 +5,8 @@ import {
 } from 'react-native';
 import {
     X, Plus, Trash2, Edit3, Search, ChevronDown, ChevronUp,
-    Lightbulb, Blinds, Thermometer, Music, Film, Camera, Activity, Zap, GripVertical, Save, Check, ArrowRightLeft
+    Lightbulb, Blinds, Thermometer, Music, Film, Camera, Activity, Zap, GripVertical, Save, Check, ArrowRightLeft,
+    ArrowUp, ArrowDown, Power
 } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -13,7 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // Types
 // ========================================================
 
-export type EntityGroup = 'lights' | 'covers' | 'climates' | 'mediaPlayers' | 'scripts' | 'scenes' | 'sensors' | 'cameras' | 'helpers';
+export type EntityGroup = 'lights' | 'covers' | 'climates' | 'mediaPlayers' | 'scripts' | 'scenes' | 'sensors' | 'cameras' | 'helpers' | 'switches';
 
 export interface CustomGroup {
     id: string;
@@ -37,6 +38,8 @@ export interface RoomOverride {
     customGroups: CustomGroup[];
     /** Custom labels for predefined groups */
     groupLabels: Record<string, string>;
+    /** Entity-ID -> display type override (e.g. 'light', 'switch', 'scene', 'cover', 'mediaPlayer') */
+    entityDisplayTypes: Record<string, string>;
 }
 
 const EMPTY_OVERRIDE: RoomOverride = {
@@ -48,6 +51,7 @@ const EMPTY_OVERRIDE: RoomOverride = {
     removedEntities: [],
     customGroups: [],
     groupLabels: {},
+    entityDisplayTypes: {},
 };
 
 const DEFAULT_GROUP_LABELS: Record<EntityGroup, string> = {
@@ -60,6 +64,7 @@ const DEFAULT_GROUP_LABELS: Record<EntityGroup, string> = {
     sensors: 'Status',
     cameras: 'Kameras',
     helpers: 'Einstellungen',
+    switches: 'Schalter',
 };
 
 const GROUP_ICONS: Record<string, any> = {
@@ -72,17 +77,68 @@ const GROUP_ICONS: Record<string, any> = {
     sensors: Activity,
     cameras: Camera,
     helpers: GripVertical,
+    switches: Power,
 };
 
-const ALL_GROUPS: EntityGroup[] = ['lights', 'covers', 'climates', 'mediaPlayers', 'scripts', 'scenes', 'sensors', 'cameras', 'helpers'];
+const ALL_GROUPS: EntityGroup[] = ['lights', 'covers', 'climates', 'mediaPlayers', 'scripts', 'scenes', 'sensors', 'cameras', 'helpers', 'switches'];
+
+const DISPLAY_TYPE_OPTIONS = [
+    { key: 'auto', label: 'Auto' },
+    { key: 'light', label: 'Licht' },
+    { key: 'switch', label: 'Schalter' },
+    { key: 'cover', label: 'Rollladen' },
+    { key: 'scene', label: 'Szene' },
+    { key: 'mediaPlayer', label: 'Media Player' },
+    { key: 'climate', label: 'Klima' },
+    { key: 'sensor', label: 'Sensor' },
+    { key: 'camera', label: 'Kamera' },
+];
 
 // ========================================================
-// Storage
+// Storage (Supabase-first, AsyncStorage fallback)
 // ========================================================
+
+import { supabase } from '../lib/supabase';
 
 const getOverrideKey = (roomName: string) => `@smarthome_room_overrides_${roomName.replace(/\s/g, '_').toLowerCase()}`;
 
+/** Get the current user's household_id from Supabase */
+async function getHouseholdId(): Promise<string | null> {
+    try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return null;
+        const { data } = await supabase
+            .from('family_members')
+            .select('household_id')
+            .eq('user_id', user.id)
+            .single();
+        return data?.household_id || null;
+    } catch {
+        return null;
+    }
+}
+
 export async function loadRoomOverride(roomName: string): Promise<RoomOverride> {
+    // Try Supabase first (instance-wide)
+    try {
+        const householdId = await getHouseholdId();
+        if (householdId) {
+            const { data, error } = await supabase
+                .from('room_overrides')
+                .select('override_data')
+                .eq('household_id', householdId)
+                .eq('room_name', roomName)
+                .single();
+            if (data?.override_data && !error) {
+                const override = { ...EMPTY_OVERRIDE, ...data.override_data };
+                // Cache locally
+                AsyncStorage.setItem(getOverrideKey(roomName), JSON.stringify(override)).catch(() => { });
+                return override;
+            }
+        }
+    } catch { }
+
+    // Fallback: AsyncStorage (offline / no household)
     try {
         const stored = await AsyncStorage.getItem(getOverrideKey(roomName));
         if (stored) return { ...EMPTY_OVERRIDE, ...JSON.parse(stored) };
@@ -91,10 +147,32 @@ export async function loadRoomOverride(roomName: string): Promise<RoomOverride> 
 }
 
 export async function saveRoomOverride(roomName: string, override: RoomOverride): Promise<void> {
+    // Always save to AsyncStorage as cache
     try {
         await AsyncStorage.setItem(getOverrideKey(roomName), JSON.stringify(override));
     } catch (e) {
-        console.error('Failed to save room override', e);
+        console.error('Failed to save room override to local storage', e);
+    }
+
+    // Save to Supabase (instance-wide)
+    try {
+        const householdId = await getHouseholdId();
+        if (householdId) {
+            const { error } = await supabase
+                .from('room_overrides')
+                .upsert({
+                    household_id: householdId,
+                    room_name: roomName,
+                    override_data: override,
+                }, {
+                    onConflict: 'household_id,room_name',
+                });
+            if (error) {
+                console.error('Failed to save room override to Supabase:', error);
+            }
+        }
+    } catch (e) {
+        console.error('Failed to save room override to Supabase:', e);
     }
 }
 
@@ -219,6 +297,12 @@ export function applyRoomOverrides(room: any, override: RoomOverride, allEntitie
         });
     }
 
+    // Pass group order to result
+    result._groupOrder = (o.groupOrder || []).length > 0 ? o.groupOrder : ALL_GROUPS;
+
+    // Pass entity display types
+    result._entityDisplayTypes = o.entityDisplayTypes || {};
+
     return result;
 }
 
@@ -254,6 +338,8 @@ export function RoomContentEditModal({ visible, onClose, room, colors, allEntiti
     const [assigningEntityId, setAssigningEntityId] = useState<string | null>(null);
     // Pending add entity (staged for group selection)
     const [pendingAddEntityId, setPendingAddEntityId] = useState<string | null>(null);
+    // Entity display type picker
+    const [typingEntityId, setTypingEntityId] = useState<string | null>(null);
 
     // Load override when modal opens
     React.useEffect(() => {
@@ -359,16 +445,31 @@ export function RoomContentEditModal({ visible, onClose, room, colors, allEntiti
         return ids;
     }, [override.customGroups]);
 
+    // Ordered group IDs: use saved order, then append any new groups not in order
+    const orderedGroupIds = useMemo(() => {
+        const order = override.groupOrder || [];
+        const result: string[] = [];
+        // First add groups from saved order that still exist
+        for (const gId of order) {
+            if (allGroupIds.includes(gId as EntityGroup)) result.push(gId);
+        }
+        // Then add any groups not in saved order
+        for (const gId of allGroupIds) {
+            if (!result.includes(gId)) result.push(gId);
+        }
+        return result;
+    }, [override.groupOrder, allGroupIds]);
+
     // Only groups that exist in this room (have entities or are custom)
     const existingGroupIds = useMemo(() => {
-        return allGroupIds.filter(gId => {
+        return orderedGroupIds.filter(gId => {
             const entities = roomEntities[gId] || [];
             if (entities.length > 0) return true;
             // Always show custom groups
             if (override.customGroups.some(cg => cg.id === gId)) return true;
             return false;
         });
-    }, [allGroupIds, roomEntities, override.customGroups]);
+    }, [orderedGroupIds, roomEntities, override.customGroups]);
 
     // Available entities for adding (not already in room)
     const currentEntityIds = useMemo(() => {
@@ -546,32 +647,55 @@ export function RoomContentEditModal({ visible, onClose, room, colors, allEntiti
         const isCustom = override.customGroups.some(g => g.id === groupId);
         const label = getGroupLabel(groupId);
 
-        Alert.alert(
-            `"${label}" löschen?`,
-            isCustom
-                ? 'Entities in dieser Gruppe werden zurück in ihre Standard-Gruppe verschoben.'
-                : 'Diese Gruppe wird ausgeblendet.',
-            [
-                { text: 'Abbrechen', style: 'cancel' },
-                {
-                    text: 'Löschen', style: 'destructive', onPress: () => {
-                        if (isCustom) {
+        if (isCustom) {
+            Alert.alert(
+                `"${label}" löschen?`,
+                'Entities in dieser Gruppe werden zurück in ihre Standard-Gruppe verschoben.',
+                [
+                    { text: 'Abbrechen', style: 'cancel' },
+                    {
+                        text: 'Löschen', style: 'destructive', onPress: () => {
                             // Remove custom group + reset group overrides pointing to it
                             const newGroupOverrides = { ...override.groupOverrides };
                             for (const [entityId, target] of Object.entries(newGroupOverrides)) {
                                 if (target === groupId) delete newGroupOverrides[entityId];
                             }
+                            // Also remove from groupOrder
+                            const newOrder = (override.groupOrder || []).filter(g => g !== groupId);
                             updateOverride({
                                 customGroups: override.customGroups.filter(g => g.id !== groupId),
                                 groupOverrides: newGroupOverrides,
+                                groupOrder: newOrder as EntityGroup[],
                             });
-                        } else {
+                        }
+                    }
+                ]
+            );
+        } else {
+            Alert.alert(
+                `"${label}" ausblenden?`,
+                'Die Gruppe wird nicht mehr angezeigt. Du kannst sie jederzeit wieder einblenden.',
+                [
+                    { text: 'Abbrechen', style: 'cancel' },
+                    {
+                        text: 'Ausblenden', style: 'default', onPress: () => {
                             handleToggleGroup(groupId);
                         }
                     }
-                }
-            ]
-        );
+                ]
+            );
+        }
+    };
+
+    const handleMoveGroup = (groupId: string, direction: 'up' | 'down') => {
+        const current = [...orderedGroupIds];
+        const idx = current.indexOf(groupId);
+        if (idx < 0) return;
+        const newIdx = direction === 'up' ? idx - 1 : idx + 1;
+        if (newIdx < 0 || newIdx >= current.length) return;
+        // Swap
+        [current[idx], current[newIdx]] = [current[newIdx], current[idx]];
+        updateOverride({ groupOrder: current as EntityGroup[] });
     };
 
     if (!room || !loaded) return null;
@@ -579,15 +703,27 @@ export function RoomContentEditModal({ visible, onClose, room, colors, allEntiti
     // Render an entity row
     const renderEntityRow = (entity: any, groupId: string) => {
         const displayName = override.nameOverrides[entity.entity_id] || entity.attributes.friendly_name || entity.entity_id;
+        const currentType = override.entityDisplayTypes?.[entity.entity_id] || 'auto';
+        const typeLabel = DISPLAY_TYPE_OPTIONS.find(t => t.key === currentType)?.label || 'Auto';
         return (
             <View key={entity.entity_id} style={[modalStyles.entityRow, { borderBottomColor: colors.border }]}>
                 <View style={{ flex: 1 }}>
                     <Text style={[modalStyles.entityName, { color: colors.text }]} numberOfLines={1}>
                         {displayName}
                     </Text>
-                    <Text style={[modalStyles.entityId, { color: colors.subtext }]} numberOfLines={1}>
-                        {entity.entity_id}
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                        <Text style={[modalStyles.entityId, { color: colors.subtext }]} numberOfLines={1}>
+                            {entity.entity_id}
+                        </Text>
+                        <Pressable
+                            onPress={() => setTypingEntityId(entity.entity_id)}
+                            style={{ backgroundColor: colors.accent + '20', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}
+                        >
+                            <Text style={{ color: colors.accent, fontSize: 10, fontWeight: '600' }}>
+                                {typeLabel}
+                            </Text>
+                        </Pressable>
+                    </View>
                 </View>
                 <View style={{ flexDirection: 'row', gap: 6 }}>
                     <Pressable onPress={() => setAssigningEntityId(entity.entity_id)} style={[modalStyles.actionBtn, { backgroundColor: colors.accent + '15' }]}>
@@ -636,13 +772,15 @@ export function RoomContentEditModal({ visible, onClose, room, colors, allEntiti
 
                     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
                         {/* Groups (predefined + custom) */}
-                        {allGroupIds.map(groupId => {
+                        {orderedGroupIds.map((groupId, groupIndex) => {
                             const entities = roomEntities[groupId] || [];
                             const isHidden = override.hiddenGroups.includes(groupId);
                             const isExpanded = expandedGroup === groupId;
                             const isCustom = override.customGroups.some(g => g.id === groupId);
                             const Icon = GROUP_ICONS[groupId] || GripVertical;
                             const label = getGroupLabel(groupId);
+                            const isFirst = groupIndex === 0;
+                            const isLast = groupIndex === orderedGroupIds.length - 1;
 
                             // Hide empty predefined groups unless they are hidden (so user can unhide)
                             if (entities.length === 0 && !isHidden && !isCustom) return null;
@@ -659,7 +797,22 @@ export function RoomContentEditModal({ visible, onClose, room, colors, allEntiti
                                                 {label} ({entities.length})
                                             </Text>
                                         </View>
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                            {/* Move up/down */}
+                                            <Pressable
+                                                onPress={(e) => { e.stopPropagation(); handleMoveGroup(groupId, 'up'); }}
+                                                style={[modalStyles.miniBtn, { backgroundColor: colors.background, opacity: isFirst ? 0.3 : 1 }]}
+                                                disabled={isFirst}
+                                            >
+                                                <ArrowUp size={12} color={colors.subtext} />
+                                            </Pressable>
+                                            <Pressable
+                                                onPress={(e) => { e.stopPropagation(); handleMoveGroup(groupId, 'down'); }}
+                                                style={[modalStyles.miniBtn, { backgroundColor: colors.background, opacity: isLast ? 0.3 : 1 }]}
+                                                disabled={isLast}
+                                            >
+                                                <ArrowDown size={12} color={colors.subtext} />
+                                            </Pressable>
                                             <Pressable
                                                 onPress={(e) => { e.stopPropagation(); handleRenameGroup(groupId); }}
                                                 style={[modalStyles.miniBtn, { backgroundColor: colors.accent + '15' }]}
@@ -940,6 +1093,60 @@ export function RoomContentEditModal({ visible, onClose, room, colors, allEntiti
                             })}
                         </ScrollView>
                         <Pressable onPress={() => setAssigningEntityId(null)} style={[modalStyles.renameBtn, { backgroundColor: colors.background, marginTop: 12 }]}>
+                            <Text style={{ color: colors.text, fontWeight: '600' }}>Abbrechen</Text>
+                        </Pressable>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Entity Display Type Picker Modal */}
+            <Modal visible={!!typingEntityId} transparent animationType="fade" onRequestClose={() => setTypingEntityId(null)}>
+                <View style={[modalStyles.overlay, { backgroundColor: 'rgba(0,0,0,0.6)' }]}>
+                    <View style={[modalStyles.renameCard, { backgroundColor: colors.card, maxHeight: '70%' }]}>
+                        <Text style={[modalStyles.renameTitle, { color: colors.text }]}>Anzeige-Typ wählen</Text>
+                        <Text style={[modalStyles.entityId, { color: colors.subtext, marginBottom: 4 }]}>
+                            {typingEntityId ? findFriendlyName(typingEntityId) : ''}
+                        </Text>
+                        <Text style={[modalStyles.entityId, { color: colors.subtext, marginBottom: 12 }]}>
+                            {typingEntityId}
+                        </Text>
+                        <ScrollView style={{ maxHeight: 400 }}>
+                            {DISPLAY_TYPE_OPTIONS.map(opt => {
+                                const isCurrent = typingEntityId
+                                    ? (override.entityDisplayTypes?.[typingEntityId] || 'auto') === opt.key
+                                    : false;
+                                return (
+                                    <Pressable
+                                        key={opt.key}
+                                        onPress={() => {
+                                            if (typingEntityId) {
+                                                const newTypes = { ...override.entityDisplayTypes };
+                                                if (opt.key === 'auto') {
+                                                    delete newTypes[typingEntityId];
+                                                } else {
+                                                    newTypes[typingEntityId] = opt.key;
+                                                }
+                                                updateOverride({ entityDisplayTypes: newTypes });
+                                            }
+                                            setTypingEntityId(null);
+                                        }}
+                                        style={[
+                                            modalStyles.groupPickerRow,
+                                            {
+                                                backgroundColor: isCurrent ? colors.accent + '20' : colors.background,
+                                                borderColor: isCurrent ? colors.accent : colors.border,
+                                            }
+                                        ]}
+                                    >
+                                        <Text style={{ color: isCurrent ? colors.accent : colors.text, fontWeight: isCurrent ? '700' : '500', fontSize: 14 }}>
+                                            {opt.label}
+                                        </Text>
+                                        {isCurrent && <Check size={16} color={colors.accent} />}
+                                    </Pressable>
+                                );
+                            })}
+                        </ScrollView>
+                        <Pressable onPress={() => setTypingEntityId(null)} style={[modalStyles.renameBtn, { backgroundColor: colors.background, marginTop: 12 }]}>
                             <Text style={{ color: colors.text, fontWeight: '600' }}>Abbrechen</Text>
                         </Pressable>
                     </View>

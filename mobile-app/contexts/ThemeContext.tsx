@@ -188,6 +188,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
                 ]);
                 if (saved && Object.keys(THEMES).includes(saved)) {
                     setThemeState(saved as ThemeType);
+                } else if (saved) {
+                    // Invalid stored theme, reset to default
+                    await AsyncStorage.removeItem(THEME_KEY);
                 }
                 if (autoSaved) {
                     const parsed = JSON.parse(autoSaved) as AutoThemeConfig;
@@ -233,11 +236,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         }
     }, []);
 
+    const currentColors = THEMES[theme] || THEMES.ocean;
+
     return (
-        <ThemeContext.Provider value={{ theme, colors: THEMES[theme], setTheme, autoTheme, setAutoTheme, setSunState }}>
+        <ThemeContext.Provider value={{ theme, colors: currentColors, setTheme, autoTheme, setAutoTheme, setSunState }}>
             <StatusBar
                 style={LIGHT_THEMES.includes(theme) ? 'dark' : 'light'}
-                backgroundColor={THEMES[theme].background}
+                backgroundColor={currentColors.background}
             />
             {children}
         </ThemeContext.Provider>

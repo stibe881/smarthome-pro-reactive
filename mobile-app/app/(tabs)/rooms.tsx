@@ -935,200 +935,253 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, on
                     )}
 
                     <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
-                        {/* Sensors Section (Moved to TOP per user request) - Subtle display */}
-                        {displayRoom.sensors?.length > 0 && (
-                            <View style={[styles.section, { marginTop: 16 }]}>
-                                {/* Tiny Header or no header for "decent"? User said "dezent angezeigt". Let's use a smaller header or just the grid. */}
-                                {/* Using standard SectionHeader but maybe users means just top row. */}
-                                <SectionHeader title={displayRoom._groupLabels?.sensors || "Status"} />
-                                <ScrollView
-                                    horizontal
-                                    showsHorizontalScrollIndicator={false}
-                                    contentContainerStyle={{ gap: 8, paddingHorizontal: 4 }}
-                                >
-                                    {displayRoom.sensors.map((s: any) => (
-                                        <SensorTile
-                                            key={s.entity_id}
-                                            sensor={s}
-                                        />
-                                    ))}
-                                </ScrollView>
-                            </View>
-                        )}
+                        {/* Dynamic sections based on group order */}
+                        {(displayRoom._groupOrder || ['sensors', 'scripts', 'climates', 'lights', 'helpers', 'covers', 'mediaPlayers', 'cameras']).map((groupId: string) => {
+                            // --- Sensors ---
+                            if (groupId === 'sensors' && displayRoom.sensors?.length > 0) {
+                                return (
+                                    <View key="sensors" style={[styles.section, { marginTop: 16 }]}>
+                                        <SectionHeader title={displayRoom._groupLabels?.sensors || "Status"} />
+                                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 4 }}>
+                                            {displayRoom.sensors.map((s: any) => (
+                                                <SensorTile key={s.entity_id} sensor={s} />
+                                            ))}
+                                        </ScrollView>
+                                    </View>
+                                );
+                            }
 
+                            // --- Scripts / Scenes ---
+                            if (groupId === 'scripts' && (displayRoom.scripts?.length > 0 || displayRoom.scenes?.length > 0)) {
+                                return (
+                                    <View key="scripts" style={styles.section}>
+                                        <SectionHeader title={displayRoom._groupLabels?.scripts || "Szenen"} />
+                                        <View style={styles.grid}>
+                                            {displayRoom.scripts?.map((s: any) => (
+                                                <SceneTile key={s.entity_id} scene={s} activateScene={(id: string) => api.callService('script', 'turn_on', id)} width={tileWidth} />
+                                            ))}
+                                            {displayRoom.scenes?.map((s: any) => (
+                                                <SceneTile key={s.entity_id} scene={s} activateScene={(id: string) => api.activateScene(id)} width={tileWidth} />
+                                            ))}
+                                        </View>
+                                    </View>
+                                );
+                            }
 
+                            // --- Climates ---
+                            if (groupId === 'climates' && displayRoom.climates?.length > 0) {
+                                return (
+                                    <View key="climates" style={styles.section}>
+                                        <SectionHeader title={displayRoom._groupLabels?.climates || "Klima"} />
+                                        <View style={styles.grid}>
+                                            {displayRoom.climates.map((c: any) => (
+                                                <ClimateTile key={c.entity_id} climate={c} setTemp={api.setClimateTemperature} width={isTablet ? tileWidth : '100%'} theme={theme} />
+                                            ))}
+                                        </View>
+                                    </View>
+                                );
+                            }
 
-                        {/* Scenes/Scripts Section (Moved to TOP) */}
-                        {displayRoom.scripts?.length > 0 && (
-                            <View style={styles.section}>
-                                <SectionHeader title={displayRoom._groupLabels?.scripts || "Szenen"} />
-                                <View style={styles.grid}>
-                                    {displayRoom.scripts.map((s: any) => (
-                                        <SceneTile
-                                            key={s.entity_id}
-                                            scene={s}
-                                            activateScene={(id: string) => api.callService('script', 'turn_on', id)}
-                                            width={tileWidth}
-                                        />
-                                    ))}
-                                    {displayRoom.scenes?.map((s: any) => (
-                                        <SceneTile
-                                            key={s.entity_id}
-                                            scene={s}
-                                            activateScene={(id: string) => api.activateScene(id)}
-                                            width={tileWidth}
-                                        />
-                                    ))}
-                                </View>
-                            </View>
-                        )}
+                            // --- Lights ---
+                            if (groupId === 'lights' && displayRoom.lights?.length > 0) {
+                                return (
+                                    <View key="lights" style={styles.section}>
+                                        <SectionHeader title={displayRoom._groupLabels?.lights || "Beleuchtung"} />
+                                        <View style={styles.grid}>
+                                            {displayRoom.lights.map((l: any) => (
+                                                <LightTile key={l.entity_id} light={l} toggleLight={api.toggleLight} setBrightness={api.setLightBrightness} width={l.fullWidth ? '100%' : tileWidth} onLongPress={setSelectedLight} theme={theme} />
+                                            ))}
+                                        </View>
+                                    </View>
+                                );
+                            }
 
+                            // --- Helpers ---
+                            if (groupId === 'helpers' && displayRoom.helpers?.length > 0) {
+                                return (
+                                    <View key="helpers" style={styles.section}>
+                                        <SectionHeader title={displayRoom._groupLabels?.helpers || "Einstellungen"} />
+                                        <View style={styles.grid}>
+                                            {displayRoom.helpers.map((h: any) => (
+                                                <HelperTile key={h.entity_id} entity={h} api={api} width={isTablet ? tileWidth : '100%'} theme={theme} />
+                                            ))}
+                                        </View>
+                                    </View>
+                                );
+                            }
 
+                            // --- Covers ---
+                            if (groupId === 'covers' && displayRoom.covers?.length > 0) {
+                                return (
+                                    <View key="covers" style={styles.section}>
+                                        <SectionHeader title={displayRoom._groupLabels?.covers || "Rollläden"} />
+                                        <View style={styles.grid}>
+                                            {displayRoom.covers.map((c: any) => (
+                                                <CoverTile key={c.entity_id} cover={c} openCover={api.openCover} closeCover={api.closeCover} stopCover={api.stopCover} pressButton={api.pressButton} onPress={onSelectCover} width={tileWidth} theme={theme} />
+                                            ))}
+                                        </View>
+                                    </View>
+                                );
+                            }
 
-                        {/* Climate Section */}
-                        {displayRoom.climates?.length > 0 && (
-                            <View style={styles.section}>
-                                <SectionHeader title={displayRoom._groupLabels?.climates || "Klima"} />
-                                <View style={styles.grid}>
-                                    {displayRoom.climates.map((c: any) => (
-                                        <ClimateTile
-                                            key={c.entity_id}
-                                            climate={c}
-                                            setTemp={api.setClimateTemperature}
-                                            width={isTablet ? tileWidth : '100%'} // Full width for climate on mobile
-                                            theme={theme}
-                                        />
-                                    ))}
-                                </View>
-                            </View>
-                        )}
+                            // --- Media Players ---
+                            if (groupId === 'mediaPlayers' && displayRoom.mediaPlayers?.length > 0) {
+                                return (
+                                    <View key="mediaPlayers" style={styles.section}>
+                                        <SectionHeader title={displayRoom._groupLabels?.mediaPlayers || "Medien"} />
+                                        <View style={styles.grid}>
+                                            {displayRoom.mediaPlayers.map((m: any) => (
+                                                <MediaTile key={m.entity_id} player={m} api={api} width={isTablet ? tileWidth : '100%'} theme={theme} />
+                                            ))}
+                                        </View>
+                                    </View>
+                                );
+                            }
 
-                        {/* Lights Section */}
-                        {displayRoom.lights?.length > 0 && (
-                            <View style={styles.section}>
-                                <SectionHeader title={displayRoom._groupLabels?.lights || "Beleuchtung"} />
-                                <View style={styles.grid}>
-                                    {displayRoom.lights.map((l: any) => (
-                                        <LightTile
-                                            key={l.entity_id}
-                                            light={l}
-                                            toggleLight={api.toggleLight}
-                                            setBrightness={api.setLightBrightness}
-                                            width={l.fullWidth ? '100%' : tileWidth}
-                                            onLongPress={setSelectedLight}
-                                            theme={theme}
-                                        />
-                                    ))}
-                                </View>
-                            </View>
-                        )}
+                            // --- Cameras ---
+                            if (groupId === 'cameras' && displayRoom.cameras?.length > 0) {
+                                return (
+                                    <View key="cameras" style={styles.section}>
+                                        <SectionHeader title={displayRoom._groupLabels?.cameras || "Kameras"} />
+                                        <View style={styles.grid}>
+                                            {displayRoom.cameras.map((c: any) => (
+                                                <CameraTile key={c.entity_id} camera={c} width="100%" />
+                                            ))}
+                                        </View>
+                                    </View>
+                                );
+                            }
 
+                            // --- Switches ---
+                            if (groupId === 'switches' && displayRoom.switches?.length > 0) {
+                                return (
+                                    <View key="switches" style={styles.section}>
+                                        <SectionHeader title={displayRoom._groupLabels?.switches || "Schalter"} />
+                                        <View style={styles.grid}>
+                                            {displayRoom.switches.map((sw: any) => {
+                                                const isOn = sw.state === 'on';
+                                                return (
+                                                    <View key={sw.entity_id} style={[styles.tile, { width: tileWidth, backgroundColor: colors.card, borderColor: colors.border }]}>
+                                                        <Pressable
+                                                            onPress={() => api.callService('switch', isOn ? 'turn_off' : 'turn_on', sw.entity_id)}
+                                                            style={[styles.tileContent, isOn && { backgroundColor: colors.accent + '20' }]}
+                                                        >
+                                                            <View style={styles.tileHeader}>
+                                                                <View style={[styles.tileIcon, { backgroundColor: isOn ? colors.accent : colors.background }]}>
+                                                                    <Power size={18} color={isOn ? '#FFF' : colors.subtext} />
+                                                                </View>
+                                                            </View>
+                                                            <Text style={[styles.tileName, { color: colors.text }]} numberOfLines={1}>
+                                                                {sw.attributes?.friendly_name || sw.entity_id}
+                                                            </Text>
+                                                            <Text style={[styles.tileState, { color: colors.subtext }]}>
+                                                                {isOn ? 'An' : 'Aus'}
+                                                            </Text>
+                                                        </Pressable>
+                                                    </View>
+                                                );
+                                            })}
+                                        </View>
+                                    </View>
+                                );
+                            }
+
+                            // --- Custom Groups: render entities with correct tile type ---
+                            const customGroup = displayRoom._customGroups?.find((cg: any) => cg.id === groupId);
+                            if (customGroup && customGroup.entities?.length > 0) {
+                                const displayTypes = displayRoom._entityDisplayTypes || {};
+                                return (
+                                    <View key={customGroup.id} style={styles.section}>
+                                        <SectionHeader title={customGroup.label} />
+                                        <View style={styles.grid}>
+                                            {customGroup.entities.map((e: any) => {
+                                                const eid = e.entity_id;
+                                                // Use manual override first, then infer from entity_id
+                                                let dtype = displayTypes[eid] || '';
+                                                if (!dtype) {
+                                                    if (eid.startsWith('light.')) dtype = 'light';
+                                                    else if (eid.startsWith('cover.')) dtype = 'cover';
+                                                    else if (eid.startsWith('script.') || eid.startsWith('scene.')) dtype = 'scene';
+                                                    else if (eid.startsWith('media_player.')) dtype = 'mediaPlayer';
+                                                    else if (eid.startsWith('climate.')) dtype = 'climate';
+                                                    else if (eid.startsWith('switch.')) dtype = 'switch';
+                                                    else if (eid.startsWith('sensor.') || eid.startsWith('binary_sensor.')) dtype = 'sensor';
+                                                    else if (eid.startsWith('camera.')) dtype = 'camera';
+                                                    else dtype = 'generic';
+                                                }
+
+                                                if (dtype === 'light') {
+                                                    return <LightTile key={eid} light={e} toggleLight={api.toggleLight} setBrightness={api.setLightBrightness} width={tileWidth} onLongPress={setSelectedLight} theme={theme} />;
+                                                }
+                                                if (dtype === 'cover') {
+                                                    return <CoverTile key={eid} cover={e} openCover={api.openCover} closeCover={api.closeCover} stopCover={api.stopCover} pressButton={api.pressButton} onPress={onSelectCover} width={tileWidth} theme={theme} />;
+                                                }
+                                                if (dtype === 'scene') {
+                                                    const isScript = eid.startsWith('script.');
+                                                    return <SceneTile key={eid} scene={e} activateScene={(id: string) => isScript ? api.callService('script', 'turn_on', id) : api.activateScene(id)} width={tileWidth} />;
+                                                }
+                                                if (dtype === 'mediaPlayer') {
+                                                    return <MediaTile key={eid} player={e} api={api} width={isTablet ? tileWidth : '100%'} theme={theme} />;
+                                                }
+                                                if (dtype === 'climate') {
+                                                    return <ClimateTile key={eid} climate={e} setTemp={api.setClimateTemperature} width={isTablet ? tileWidth : '100%'} theme={theme} />;
+                                                }
+                                                if (dtype === 'switch') {
+                                                    const isOn = e.state === 'on';
+                                                    return (
+                                                        <View key={eid} style={[styles.tile, { width: tileWidth, backgroundColor: colors.card, borderColor: colors.border }]}>
+                                                            <Pressable
+                                                                onPress={() => api.callService('switch', isOn ? 'turn_off' : 'turn_on', eid)}
+                                                                style={[styles.tileContent, isOn && { backgroundColor: colors.accent + '20' }]}
+                                                            >
+                                                                <View style={styles.tileHeader}>
+                                                                    <View style={[styles.tileIcon, { backgroundColor: isOn ? colors.accent : colors.background }]}>
+                                                                        <Power size={18} color={isOn ? '#FFF' : colors.subtext} />
+                                                                    </View>
+                                                                </View>
+                                                                <Text style={[styles.tileName, { color: colors.text }]} numberOfLines={1}>
+                                                                    {e.attributes?.friendly_name || eid}
+                                                                </Text>
+                                                                <Text style={[styles.tileState, { color: colors.subtext }]}>
+                                                                    {isOn ? 'An' : 'Aus'}
+                                                                </Text>
+                                                            </Pressable>
+                                                        </View>
+                                                    );
+                                                }
+                                                if (dtype === 'sensor') {
+                                                    return <SensorTile key={eid} sensor={e} />;
+                                                }
+                                                if (dtype === 'camera') {
+                                                    return <CameraTile key={eid} camera={e} width="100%" />;
+                                                }
+                                                // Fallback: generic tile
+                                                return (
+                                                    <View key={eid} style={{ width: tileWidth, backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: 12, padding: 12 }}>
+                                                        <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600' }} numberOfLines={1}>
+                                                            {e.attributes?.friendly_name || eid}
+                                                        </Text>
+                                                        <Text style={{ color: colors.subtext, fontSize: 10, marginTop: 2 }} numberOfLines={1}>
+                                                            {e.state}
+                                                        </Text>
+                                                    </View>
+                                                );
+                                            })}
+                                        </View>
+                                    </View>
+                                );
+                            }
+
+                            return null;
+                        })}
+
+                        {/* LightControlModal (rendered outside the loop) */}
                         <LightControlModal
                             visible={!!selectedLight}
                             light={selectedLight}
                             onClose={() => setSelectedLight(null)}
                             callService={api.callService}
                         />
-
-                        {/* Helpers Section (TV Timer etc) */}
-                        {displayRoom.helpers?.length > 0 && (
-                            <View style={styles.section}>
-                                <SectionHeader title="Einstellungen" />
-                                <View style={styles.grid}>
-                                    {displayRoom.helpers.map((h: any) => (
-                                        <HelperTile
-                                            key={h.entity_id}
-                                            entity={h}
-                                            api={api}
-                                            width={isTablet ? tileWidth : '100%'}
-                                            theme={theme}
-                                        />
-                                    ))}
-                                </View>
-                            </View>
-                        )}
-
-                        {/* Covers Section */}
-                        {displayRoom.covers?.length > 0 && (
-                            <View style={styles.section}>
-                                <SectionHeader title={displayRoom._groupLabels?.covers || "Rollläden"} />
-                                <View style={styles.grid}>
-                                    {displayRoom.covers.map((c: any) => (
-                                        <CoverTile
-                                            key={c.entity_id}
-                                            cover={c}
-                                            openCover={api.openCover}
-                                            closeCover={api.closeCover}
-                                            stopCover={api.stopCover}
-                                            pressButton={api.pressButton}
-                                            onPress={onSelectCover}
-                                            width={tileWidth}
-                                            theme={theme}
-                                        />
-                                    ))}
-                                </View>
-                            </View>
-                        )}
-
-                        {/* Media Section */}
-                        {displayRoom.mediaPlayers?.length > 0 && (
-                            <View style={styles.section}>
-                                <SectionHeader title={displayRoom._groupLabels?.mediaPlayers || "Medien"} />
-                                <View style={styles.grid}>
-                                    {displayRoom.mediaPlayers.map((m: any) => (
-                                        <MediaTile
-                                            key={m.entity_id}
-                                            player={m}
-                                            api={api}
-                                            width={isTablet ? tileWidth : '100%'}
-                                            theme={theme}
-                                        />
-                                    ))}
-                                </View>
-                            </View>
-                        )}
-
-
-                        {/* Custom Groups */}
-                        {displayRoom._customGroups?.map((cg: any) => (
-                            cg.entities?.length > 0 && (
-                                <View key={cg.id} style={styles.section}>
-                                    <SectionHeader title={cg.label} />
-                                    <View style={styles.grid}>
-                                        {cg.entities.map((e: any) => (
-                                            <View key={e.entity_id} style={[styles.tile || {}, { width: tileWidth, backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: 12, padding: 12 }]}>
-                                                <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600' }} numberOfLines={1}>
-                                                    {e.attributes?.friendly_name || e.entity_id}
-                                                </Text>
-                                                <Text style={{ color: colors.subtext, fontSize: 10, marginTop: 2 }} numberOfLines={1}>
-                                                    {e.state}
-                                                </Text>
-                                            </View>
-                                        ))}
-                                    </View>
-                                </View>
-                            )
-                        ))}
-
-                        <View style={{ height: 40 }} />
-
-                        {/* Cameras Section (Moved to BOTTOM and Full Width) */}
-                        {displayRoom.cameras?.length > 0 && (
-                            <View style={styles.section}>
-                                <SectionHeader title={displayRoom._groupLabels?.cameras || "Kameras"} />
-                                <View style={styles.grid}>
-                                    {displayRoom.cameras.map((c: any) => (
-                                        <CameraTile
-                                            key={c.entity_id}
-                                            camera={c}
-                                            width="100%" // Full width as requested
-                                        />
-                                    ))}
-                                </View>
-                            </View>
-                        )}
-
-
 
                         <View style={{ height: 40 }} />
                     </ScrollView>
