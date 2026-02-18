@@ -941,16 +941,26 @@ const HeroPlayer = ({ player, imageUrl, onSelect, onSpotify, onPlayPause, onNext
 }) => {
     const { colors } = useTheme();
     // Track the last successfully loaded image to prevent flash during transitions
+    // NEVER reset to undefined — always keep the last known good image
     const [loadedImage, setLoadedImage] = useState<string | undefined>(imageUrl);
+    const lastKnownImage = useRef<string | undefined>(imageUrl);
 
     // When a new image loads successfully, update loadedImage
     const handleImageLoaded = useCallback((url: string) => {
         setLoadedImage(url);
+        lastKnownImage.current = url;
     }, []);
 
-    // The stable display image: only show images that have been loaded
-    // This prevents flash because we never render an unloaded URL
-    const stableImage = loadedImage;
+    // Keep lastKnownImage updated when imageUrl changes to a valid value
+    useEffect(() => {
+        if (imageUrl) {
+            lastKnownImage.current = imageUrl;
+        }
+    }, [imageUrl]);
+
+    // The stable display image: prefer loadedImage, fall back to last known
+    // This prevents the music note from flashing during track transitions
+    const stableImage = loadedImage || lastKnownImage.current;
 
     // Optimistic state for shuffle/repeat (immediate visual feedback)
     const [optShuffle, setOptShuffle] = useState(player?.attributes?.shuffle || false);
