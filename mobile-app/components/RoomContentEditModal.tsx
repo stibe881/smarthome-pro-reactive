@@ -672,18 +672,8 @@ export function RoomContentEditModal({ visible, onClose, room, colors, allEntiti
                 ]
             );
         } else {
-            Alert.alert(
-                `"${label}" ausblenden?`,
-                'Die Gruppe wird nicht mehr angezeigt. Du kannst sie jederzeit wieder einblenden.',
-                [
-                    { text: 'Abbrechen', style: 'cancel' },
-                    {
-                        text: 'Ausblenden', style: 'default', onPress: () => {
-                            handleToggleGroup(groupId);
-                        }
-                    }
-                ]
-            );
+            // Predefined groups: just hide immediately
+            handleToggleGroup(groupId);
         }
     };
 
@@ -711,19 +701,30 @@ export function RoomContentEditModal({ visible, onClose, room, colors, allEntiti
                     <Text style={[modalStyles.entityName, { color: colors.text }]} numberOfLines={1}>
                         {displayName}
                     </Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                        <Text style={[modalStyles.entityId, { color: colors.subtext }]} numberOfLines={1}>
-                            {entity.entity_id}
+                    <Text style={[modalStyles.entityId, { color: colors.subtext }]} numberOfLines={1}>
+                        {entity.entity_id}
+                    </Text>
+                    <Pressable
+                        onPress={() => setTypingEntityId(entity.entity_id)}
+                        style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 4,
+                            marginTop: 4,
+                            backgroundColor: colors.accent + '15',
+                            paddingHorizontal: 10,
+                            paddingVertical: 5,
+                            borderRadius: 8,
+                            alignSelf: 'flex-start',
+                            borderWidth: 1,
+                            borderColor: colors.accent + '30',
+                        }}
+                    >
+                        <Text style={{ color: colors.accent, fontSize: 12, fontWeight: '600' }}>
+                            Typ: {typeLabel}
                         </Text>
-                        <Pressable
-                            onPress={() => setTypingEntityId(entity.entity_id)}
-                            style={{ backgroundColor: colors.accent + '20', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}
-                        >
-                            <Text style={{ color: colors.accent, fontSize: 10, fontWeight: '600' }}>
-                                {typeLabel}
-                            </Text>
-                        </Pressable>
-                    </View>
+                        <ChevronDown size={12} color={colors.accent} />
+                    </Pressable>
                 </View>
                 <View style={{ flexDirection: 'row', gap: 6 }}>
                     <Pressable onPress={() => setAssigningEntityId(entity.entity_id)} style={[modalStyles.actionBtn, { backgroundColor: colors.accent + '15' }]}>
