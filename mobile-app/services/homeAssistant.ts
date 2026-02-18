@@ -68,7 +68,7 @@ export class HomeAssistantService {
                 // Create WebSocket URL
                 const wsUrl = cleanUrl.replace(/^http/, 'ws').replace(/^https/, 'wss') + '/api/websocket';
 
-                 console.log('Connecting to:', wsUrl);
+                 // console.log('Connecting to:', wsUrl);
 
                 // Set connection timeout (30 seconds)
                 this.token = token;
@@ -88,7 +88,7 @@ export class HomeAssistantService {
                 this.socket = new WebSocket(wsUrl);
 
                 this.socket.onopen = () => {
-                   console.log("WebSocket opened, waiting for auth_required...");
+                   // console.log("WebSocket opened, waiting for auth_required...");
                 };
 
                 this.socket.onmessage = (event) => {
@@ -100,7 +100,7 @@ export class HomeAssistantService {
                         // console.log('Sending auth token...');
                         this.send({ type: 'auth', access_token: token });
                     } else if (data.type === 'auth_ok') {
-                         console.log('✅ HA Auth erfolgreich (Version: ' + data.ha_version + ')');
+                         // console.log('✅ HA Auth erfolgreich (Version: ' + data.ha_version + ')');
                         if (this.connectionTimeout) {
                             clearTimeout(this.connectionTimeout);
                             this.connectionTimeout = null;
@@ -133,7 +133,7 @@ export class HomeAssistantService {
                 };
 
                 this.socket.onclose = (event) => {
-                    console.log("WebSocket closed:", event.code, event.reason);
+                    // console.log("WebSocket closed:", event.code, event.reason);
                     this.stopPingInterval();
                     if (this.connectionTimeout) {
                         clearTimeout(this.connectionTimeout);
@@ -143,7 +143,7 @@ export class HomeAssistantService {
                     if (this.onConnectionChange) this.onConnectionChange(false);
 
                     if (this.shouldReconnect && this.credentials) {
-                        console.log("🔄 Auto-Reconnecting in 5s...");
+                        // console.log("🔄 Auto-Reconnecting in 5s...");
                         this.reconnectTimer = setTimeout(() => {
                             if (this.shouldReconnect && this.credentials) {
                                 this.connect(this.credentials.url, this.credentials.token);
@@ -242,11 +242,11 @@ export class HomeAssistantService {
 
     callService(domain: string, service: string, entityId: string, data: any = {}): Promise<any> {
         if (!this.isConnected()) {
-            console.warn('Cannot call service - not connected to HA');
+            // console.warn('Cannot call service - not connected to HA');
             return Promise.reject(new Error('Not connected'));
         }
 
-        console.log(`📤 Calling service: ${domain}.${service} for ${entityId}`, data);
+        // console.log(`📤 Calling service: ${domain}.${service} for ${entityId}`, data);
 
         return new Promise((resolve, reject) => {
             this.send({
@@ -256,7 +256,7 @@ export class HomeAssistantService {
                 service_data: { entity_id: entityId, ...data }
             }, (response) => {
                 if (response.success) {
-                    console.log(`✅ Service ${domain}.${service} executed successfully for ${entityId}`);
+                    // console.log(`✅ Service ${domain}.${service} executed successfully for ${entityId}`);
                     resolve(response.result);
                 } else {
                     console.warn(`❌ Service ${domain}.${service} failed for ${entityId}:`, response.error);
@@ -396,7 +396,7 @@ export class HomeAssistantService {
             return null;
         }
 
-        console.log(`🔍 Browsing Media for ${entityId}`, { mediaContentId, mediaContentType });
+        // console.log(`🔍 Browsing Media for ${entityId}`, { mediaContentId, mediaContentType });
 
         return new Promise((resolve) => {
             this.send({
@@ -429,7 +429,7 @@ export class HomeAssistantService {
                         }
                     }
 
-                    console.log(`✅ Found ${result.children?.length || 0} items for ${result.title}`);
+                    // console.log(`✅ Found ${result.children?.length || 0} items for ${result.title}`);
                     resolve(result);
                 } else {
                     console.warn('❌ Browse media failed or empty', response);

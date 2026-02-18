@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 
@@ -19,60 +19,48 @@ export interface ThemeColors {
 }
 
 export type ThemeType =
-    | 'classic' | 'cyber' | 'nature' | 'luxury' | 'ocean'
+    | 'nature' | 'vulkan' | 'ocean'
     | 'minimal' | 'cozy' | 'fresh' | 'elegant';
 
+// Theme display names for UI
+export const THEME_DISPLAY_NAMES: Record<ThemeType, string> = {
+    nature: 'Nature',
+    vulkan: 'Vulkan',
+    ocean: 'Ocean',
+    minimal: 'Minimal',
+    cozy: 'Cozy',
+    fresh: 'Fresh',
+    elegant: 'Elegant',
+};
+
+// Theme categories
+export const DARK_THEMES: ThemeType[] = ['nature', 'vulkan', 'ocean'];
+export const LIGHT_THEMES: ThemeType[] = ['minimal', 'cozy', 'fresh', 'elegant'];
+
 export const THEMES: Record<ThemeType, ThemeColors> = {
-    classic: {
-        background: '#020617', // Original Background
-        card: '#1E293B',       // Original Card
-        text: '#fff',          // Original White Text
-        subtext: '#94A3B8',    // Original Subtext
-        accent: '#3B82F6',     // Original Blue Accent
-        border: 'rgba(255,255,255,0.05)', // Original Border
-        success: '#10B981',
-        error: '#EF4444',
-        warning: '#F59E0B',
-        tint: '#38BDF8',
-        tabBar: '#1E293B', // Match Card/Nav Bar
-        backgroundImage: null, // No background image for Classic
-    },
-    cyber: {
-        background: '#09090B', // Zinc 950
-        card: '#18181B',       // Zinc 900
-        text: '#FAFAFA',       // Zinc 50
-        subtext: '#A1A1AA',    // Zinc 400
-        accent: '#D946EF',     // Fuchsia 500
-        border: '#27272A',     // Zinc 800
-        success: '#22C55E',
-        error: '#F43F5E',
-        warning: '#EAB308',
-        tint: '#E879F9',
-        tabBar: '#000000',
-        backgroundImage: require('../assets/themes/cyber.png'),
-    },
+    // --- DARK THEMES ---
     nature: {
-        background: '#022C22', // Emerald 950
-        card: '#064E3B',       // Emerald 900
-        text: '#ECFDF5',       // Emerald 50
-        subtext: '#6EE7B7',    // Emerald 300
-        accent: '#10B981',     // Emerald 500
-        border: '#065F46',     // Emerald 800
-        success: '#34D399',
+        background: '#1B3D2F',
+        card: '#2A5740',
+        text: '#F0F7F0',
+        subtext: '#A8D5A2',
+        accent: '#5DBB63',
+        border: '#3A6B4A',
+        success: '#7BC67E',
         error: '#F87171',
         warning: '#FBBF24',
-        tint: '#34D399',
-        tabBar: '#022C22',
+        tint: '#7BC67E',
+        tabBar: '#1B3D2F',
         backgroundImage: require('../assets/themes/nature.png'),
     },
-    luxury: {
-        background: '#1C1917', // Stone 950
-        card: '#292524',       // Stone 900
-        text: '#FAFAF9',       // Stone 50
-        subtext: '#A8A29E',    // Stone 400
-        accent: '#D97706',     // Amber 600
-        border: '#44403C',     // Stone 700
-        success: '#BEF264',    // Lime
+    vulkan: {
+        background: '#1C1917',
+        card: '#292524',
+        text: '#FAFAF9',
+        subtext: '#A8A29E',
+        accent: '#D97706',
+        border: '#44403C',
+        success: '#BEF264',
         error: '#EF4444',
         warning: '#F59E0B',
         tint: '#F59E0B',
@@ -80,12 +68,12 @@ export const THEMES: Record<ThemeType, ThemeColors> = {
         backgroundImage: require('../assets/themes/luxury.png'),
     },
     ocean: {
-        background: '#0B1120', // Navy 950
-        card: '#172554',       // Blue 900
-        text: '#F0F9FF',       // Sky 50
-        subtext: '#94A3B8',    // Slate 400
-        accent: '#0EA5E9',     // Sky 500
-        border: '#1E3A8A',     // Blue 800
+        background: '#0B1120',
+        card: '#172554',
+        text: '#F0F9FF',
+        subtext: '#94A3B8',
+        accent: '#0EA5E9',
+        border: '#1E3A8A',
         success: '#22C55E',
         error: '#EF4444',
         warning: '#FBBF24',
@@ -93,13 +81,14 @@ export const THEMES: Record<ThemeType, ThemeColors> = {
         tabBar: '#0B1120',
         backgroundImage: require('../assets/themes/ocean.png'),
     },
+    // --- LIGHT THEMES ---
     minimal: {
-        background: '#F8FAFC', // Slate 50
-        card: '#FFFFFF',       // White
-        text: '#0F172A',       // Slate 900
-        subtext: '#64748B',    // Slate 500
-        accent: '#000000',     // Black
-        border: '#E2E8F0',     // Slate 200
+        background: '#F8FAFC',
+        card: '#FFFFFF',
+        text: '#0F172A',
+        subtext: '#64748B',
+        accent: '#000000',
+        border: '#E2E8F0',
         success: '#10B981',
         error: '#EF4444',
         warning: '#F59E0B',
@@ -108,12 +97,12 @@ export const THEMES: Record<ThemeType, ThemeColors> = {
         backgroundImage: require('../assets/themes/light_minimal.png'),
     },
     cozy: {
-        background: '#FFF7ED', // Orange 50
-        card: '#FFEDD5',       // Orange 100
-        text: '#431407',       // Orange 950
-        subtext: '#9A3412',    // Orange 700
-        accent: '#EA580C',     // Orange 600
-        border: '#FED7AA',     // Orange 200
+        background: '#FFF7ED',
+        card: '#FFEDD5',
+        text: '#431407',
+        subtext: '#9A3412',
+        accent: '#EA580C',
+        border: '#FED7AA',
         success: '#16A34A',
         error: '#DC2626',
         warning: '#D97706',
@@ -122,12 +111,12 @@ export const THEMES: Record<ThemeType, ThemeColors> = {
         backgroundImage: require('../assets/themes/light_cozy.png'),
     },
     fresh: {
-        background: '#F0FDF4', // Green 50
-        card: '#DCFCE7',       // Green 100
-        text: '#064E3B',       // Green 950
-        subtext: '#15803D',    // Green 700
-        accent: '#10B981',     // Emerald 500
-        border: '#BBF7D0',     // Green 200
+        background: '#F0FDF4',
+        card: '#DCFCE7',
+        text: '#064E3B',
+        subtext: '#15803D',
+        accent: '#10B981',
+        border: '#BBF7D0',
         success: '#16A34A',
         error: '#EF4444',
         warning: '#F59E0B',
@@ -136,47 +125,75 @@ export const THEMES: Record<ThemeType, ThemeColors> = {
         backgroundImage: require('../assets/themes/light_fresh.png'),
     },
     elegant: {
-        background: '#FAFAF9', // Stone 50
-        card: '#FFFFFF',       // White
-        text: '#1C1917',       // Stone 900
-        subtext: '#57534E',    // Stone 500
-        accent: '#D97706',     // Amber 600
-        border: '#E7E5E4',     // Stone 200
+        background: '#FAFAF9',
+        card: '#FFFFFF',
+        text: '#1C1917',
+        subtext: '#57534E',
+        accent: '#D97706',
+        border: '#E7E5E4',
         success: '#10B981',
         error: '#EF4444',
         warning: '#F59E0B',
         tint: '#D97706',
         tabBar: '#FAFAF9',
         backgroundImage: require('../assets/themes/light_elegant.png'),
-    }
+    },
 };
 
 const THEME_KEY = '@smarthome_theme_preference';
+const AUTO_THEME_KEY = '@smarthome_auto_theme';
+
+export interface AutoThemeConfig {
+    enabled: boolean;
+    dayTheme: ThemeType;
+    nightTheme: ThemeType;
+}
 
 interface ThemeContextType {
     theme: ThemeType;
     colors: ThemeColors;
     setTheme: (type: ThemeType) => void;
+    autoTheme: AutoThemeConfig;
+    setAutoTheme: (config: AutoThemeConfig) => void;
+    setSunState: (state: 'above_horizon' | 'below_horizon') => void;
 }
 
 const ThemeContext = createContext<ThemeContextType>({
-    theme: 'classic',
-    colors: THEMES.classic,
+    theme: 'ocean',
+    colors: THEMES.ocean,
     setTheme: () => { },
+    autoTheme: { enabled: false, dayTheme: 'minimal', nightTheme: 'ocean' },
+    setAutoTheme: () => { },
+    setSunState: () => { },
 });
 
 export const useTheme = () => useContext(ThemeContext);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-    const [theme, setThemeState] = useState<ThemeType>('classic');
+    const [theme, setThemeState] = useState<ThemeType>('ocean');
+    const [autoTheme, setAutoThemeState] = useState<AutoThemeConfig>({
+        enabled: false,
+        dayTheme: 'minimal',
+        nightTheme: 'ocean',
+    });
+    const sunStateRef = useRef<'above_horizon' | 'below_horizon' | null>(null);
 
-    // Load saved theme
+    // Load saved theme + auto config
     useEffect(() => {
         (async () => {
             try {
-                const saved = await AsyncStorage.getItem(THEME_KEY);
+                const [saved, autoSaved] = await Promise.all([
+                    AsyncStorage.getItem(THEME_KEY),
+                    AsyncStorage.getItem(AUTO_THEME_KEY),
+                ]);
                 if (saved && Object.keys(THEMES).includes(saved)) {
                     setThemeState(saved as ThemeType);
+                }
+                if (autoSaved) {
+                    const parsed = JSON.parse(autoSaved) as AutoThemeConfig;
+                    if (parsed && typeof parsed.enabled === 'boolean') {
+                        setAutoThemeState(parsed);
+                    }
                 }
             } catch (e) {
                 console.warn('Failed to load theme', e);
@@ -184,15 +201,42 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         })();
     }, []);
 
-    const setTheme = async (newTheme: ThemeType) => {
+    const setTheme = useCallback(async (newTheme: ThemeType) => {
         setThemeState(newTheme);
         await AsyncStorage.setItem(THEME_KEY, newTheme);
-    };
+    }, []);
+
+    const setAutoTheme = useCallback(async (config: AutoThemeConfig) => {
+        setAutoThemeState(config);
+        await AsyncStorage.setItem(AUTO_THEME_KEY, JSON.stringify(config));
+        // Apply immediately if enabled and sun state is known
+        if (config.enabled && sunStateRef.current) {
+            const target = sunStateRef.current === 'above_horizon' ? config.dayTheme : config.nightTheme;
+            setThemeState(target);
+            await AsyncStorage.setItem(THEME_KEY, target);
+        }
+    }, []);
+
+    const setSunState = useCallback((state: 'above_horizon' | 'below_horizon') => {
+        const prev = sunStateRef.current;
+        sunStateRef.current = state;
+        // Only switch if auto is enabled AND the sun state actually changed
+        if (prev !== state) {
+            setAutoThemeState(current => {
+                if (current.enabled) {
+                    const target = state === 'above_horizon' ? current.dayTheme : current.nightTheme;
+                    setThemeState(target);
+                    AsyncStorage.setItem(THEME_KEY, target);
+                }
+                return current;
+            });
+        }
+    }, []);
 
     return (
-        <ThemeContext.Provider value={{ theme, colors: THEMES[theme], setTheme }}>
+        <ThemeContext.Provider value={{ theme, colors: THEMES[theme], setTheme, autoTheme, setAutoTheme, setSunState }}>
             <StatusBar
-                style={['minimal', 'cozy', 'fresh', 'elegant'].includes(theme) ? 'dark' : 'light'}
+                style={LIGHT_THEMES.includes(theme) ? 'dark' : 'light'}
                 backgroundColor={THEMES[theme].background}
             />
             {children}

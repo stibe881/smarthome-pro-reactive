@@ -4,8 +4,8 @@ import { View, Text, TextInput, Pressable, Alert, ActivityIndicator, ScrollView,
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { useHomeAssistant } from '../../contexts/HomeAssistantContext';
-import { useTheme, THEMES, ThemeType } from '../../contexts/ThemeContext';
-import { Wifi, WifiOff, Save, LogOut, User, Server, Key, CheckCircle, XCircle, Shield, Bell, Palette, ChevronRight, LucideIcon, X, ScanFace, MapPin, Smartphone, Search, Calendar, Trash2, Users, Eye, EyeOff } from 'lucide-react-native';
+import { useTheme, THEMES, ThemeType, AutoThemeConfig, THEME_DISPLAY_NAMES, DARK_THEMES, LIGHT_THEMES } from '../../contexts/ThemeContext';
+import { Wifi, WifiOff, Save, LogOut, User, Server, Key, CheckCircle, XCircle, Shield, Bell, Palette, ChevronRight, LucideIcon, X, ScanFace, MapPin, Smartphone, Search, Calendar, Trash2, Users, Eye, EyeOff, Sun, Moon } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
@@ -14,19 +14,63 @@ import { DashboardConfigModal } from '../../components/DashboardConfigModal';
 import { FamilyManagement } from '../../components/FamilyManagement';
 import { ConnectionWizard } from '../../components/ConnectionWizard';
 import { AutomationsModal } from '../../components/AutomationsModal';
-import { Activity, ShieldCheck, Zap, Blinds, AlertTriangle, Baby, Plus } from 'lucide-react-native';
+import { NotificationTypesManager } from '../../components/NotificationTypesManager';
+import { Activity, ShieldCheck, Zap, Blinds, AlertTriangle, Baby, Plus, Settings as SettingsIcon } from 'lucide-react-native';
 import { useKidsMode } from '../../contexts/KidsContext';
+import { supabase } from '../../lib/supabase';
+
+// Icon mapping for dynamic notification types
+const DYNAMIC_ICON_MAP: Record<string, any> = {
+    bell: Bell,
+    shield: Shield,
+    baby: Baby,
+    calendar: Calendar,
+    'cloud-lightning': CloudLightning,
+    eye: Eye,
+    zap: Zap,
+    home: HomeLucide,
+    thermometer: Thermometer,
+    droplets: Droplets,
+    'scan-face': ScanFace,
+    'check-circle': CheckCircle,
+    'map-pin': MapPin,
+};
+
+import { CloudLightning, House as HomeLucide, Thermometer, Droplets } from 'lucide-react-native';
+
+interface DynamicNotifType {
+    id: string;
+    name: string;
+    description: string | null;
+    icon: string;
+    color: string;
+    category_key: string;
+    is_active: boolean;
+}
+
+interface UserNotifPref {
+    notification_type_id: string;
+    enabled: boolean;
+}
 
 const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onClose: () => void }) => {
     const { notificationSettings, updateNotificationSettings } = useHomeAssistant();
     const { theme, setTheme, colors } = useTheme();
+    const { user, userRole } = useAuth();
     const [token, setToken] = useState<string | null>(null);
     const [isTesting, setIsTesting] = useState(false);
+    const [showManager, setShowManager] = useState(false);
+
+    // Dynamic notification types from DB
+    const [dynamicTypes, setDynamicTypes] = useState<DynamicNotifType[]>([]);
+    const [userPrefs, setUserPrefs] = useState<Record<string, boolean>>({});
+    const [loadingDynamic, setLoadingDynamic] = useState(false);
 
     // Load Token for display
     useEffect(() => {
         if (visible) {
             loadToken();
+            fetchDynamicTypes();
         }
     }, [visible]);
 
@@ -43,17 +87,77 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
         } catch (e) { console.warn('Failed to load token for settings display', e); }
     };
 
+    const fetchDynamicTypes = async () => {
+        if (!user) return;
+        setLoadingDynamic(true);
+        try {
+            // Fetch active notification types
+            const { data: types, error: typesError } = await supabase
+                .from('notification_types')
+                .select('id, name, description, icon, color, category_key, is_active')
+                .eq('is_active', true)
+                .order('created_at', { ascending: true });
+
+            if (typesError) {
+                console.warn('Failed to fetch notification types:', typesError);
+            } else {
+                setDynamicTypes(types || []);
+            }
+
+            // Fetch user preferences
+            const { data: prefs, error: prefsError } = await supabase
+                .from('user_notification_preferences')
+                .select('notification_type_id, enabled')
+                .eq('user_id', user.id);
+
+            if (!prefsError && prefs) {
+                const prefMap: Record<string, boolean> = {};
+                for (const p of prefs) {
+                    prefMap[p.notification_type_id] = p.enabled;
+                }
+                setUserPrefs(prefMap);
+            }
+        } catch (e) {
+            console.warn('Error loading dynamic notification types:', e);
+        } finally {
+            setLoadingDynamic(false);
+        }
+    };
+
+    const toggleDynamicPref = async (typeId: string) => {
+        if (!user) return;
+        const currentValue = userPrefs[typeId] ?? true; // default enabled
+        const newValue = !currentValue;
+
+        // Optimistic update
+        setUserPrefs(prev => ({ ...prev, [typeId]: newValue }));
+
+        try {
+            // Upsert preference
+            const { error } = await supabase
+                .from('user_notification_preferences')
+                .upsert({
+                    user_id: user.id,
+                    notification_type_id: typeId,
+                    enabled: newValue,
+                }, { onConflict: 'user_id,notification_type_id' });
+
+            if (error) {
+                console.error('Failed to save preference:', error);
+                // Revert on error
+                setUserPrefs(prev => ({ ...prev, [typeId]: currentValue }));
+            }
+        } catch (e) {
+            console.error('Error toggling preference:', e);
+            setUserPrefs(prev => ({ ...prev, [typeId]: currentValue }));
+        }
+    };
+
     const toggleSetting = async (category: 'security' | 'household' | 'home' | 'weather' | 'baby' | 'calendar', key: string) => {
-        // Deep copy to prevent mutation of existing state causing comparison failure
         let newSettings = JSON.parse(JSON.stringify(notificationSettings));
-
-        // Ensure category exists (migration safety)
         if (!newSettings[category]) newSettings[category] = {} as any;
-
-        // Toggle
-        // @ts-ignore - Dynamic access is safe here given our structure
+        // @ts-ignore
         newSettings[category][key] = !newSettings[category][key];
-
         await updateNotificationSettings(newSettings);
     };
 
@@ -101,15 +205,11 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
 
                 <ScrollView style={[styles.modalContent, { backgroundColor: colors.background }]}>
 
-                    {/* DESIGN SELECTOR - MOVED TO MAIN SETTINGS */}
-
-                    {/* INFO BOX REMOVED - NO LONGER NEEDED */}
-
                     <View style={styles.settingGroup}>
                         <View style={styles.settingRow}>
                             <View style={{ flex: 1 }}>
                                 <Text style={styles.settingLabel}>Alle Benachrichtigungen</Text>
-                                <Text style={styles.settingDescription}>Globaler Schalter für dieses Gerät</Text>
+                                <Text style={styles.settingDescription}>Globaler Schalter für deinen Account</Text>
                             </View>
                             <Switch
                                 value={notificationSettings.enabled}
@@ -122,145 +222,47 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
 
                     {notificationSettings.enabled && (
                         <>
-                            {/* SICHERHEIT */}
-                            <View style={styles.settingGroup}>
-                                <Text style={styles.groupTitle}>SICHERHEIT</Text>
-                                <View style={styles.settingRow}>
-                                    <View style={styles.iconBadge}>
-                                        <Shield size={20} color="#EF4444" />
-                                    </View>
-                                    <View style={{ flex: 1, marginLeft: 12 }}>
-                                        <Text style={styles.settingLabel}>Türen UG</Text>
-                                        <Text style={styles.settingDescription}>Waschküche & Highlight</Text>
-                                    </View>
-                                    <Switch
-                                        value={notificationSettings.security?.doors_ug ?? true}
-                                        onValueChange={() => toggleSetting('security', 'doors_ug')}
-                                        trackColor={{ false: '#334155', true: '#3B82F6' }}
-                                        thumbColor={'#fff'}
-                                    />
+                            {/* ===== DYNAMISCHE PUSH-KATEGORIEN AUS DB ===== */}
+                            {dynamicTypes.length > 0 && (
+                                <View style={styles.settingGroup}>
+                                    <Text style={styles.groupTitle}>PUSH-BENACHRICHTIGUNGEN</Text>
+                                    {dynamicTypes.map((dtype, index) => {
+                                        const IconComp = DYNAMIC_ICON_MAP[dtype.icon] || Bell;
+                                        const isEnabled = userPrefs[dtype.id] ?? true;
+                                        return (
+                                            <View
+                                                key={dtype.id}
+                                                style={[
+                                                    styles.settingRow,
+                                                    index > 0 && { borderTopWidth: 1, borderTopColor: '#1E293B' }
+                                                ]}
+                                            >
+                                                <View style={[styles.iconBadge, { backgroundColor: dtype.color + '25' }]}>
+                                                    <IconComp size={20} color={dtype.color} />
+                                                </View>
+                                                <View style={{ flex: 1, marginLeft: 12 }}>
+                                                    <Text style={styles.settingLabel}>{dtype.name}</Text>
+                                                    {dtype.description && (
+                                                        <Text style={styles.settingDescription}>{dtype.description}</Text>
+                                                    )}
+                                                </View>
+                                                <Switch
+                                                    value={isEnabled}
+                                                    onValueChange={() => toggleDynamicPref(dtype.id)}
+                                                    trackColor={{ false: '#334155', true: '#3B82F6' }}
+                                                    thumbColor={'#fff'}
+                                                />
+                                            </View>
+                                        );
+                                    })}
                                 </View>
-                            </View>
+                            )}
 
-                            {/* HAUSHALT */}
-                            <View style={styles.settingGroup}>
-                                <Text style={styles.groupTitle}>HAUSHALT</Text>
-                                <View style={styles.settingRow}>
-                                    <View style={[styles.iconBadge, { backgroundColor: 'rgba(16, 185, 129, 0.15)' }]}>
-                                        <CheckCircle size={20} color="#10B981" />
-                                    </View>
-                                    <View style={{ flex: 1, marginLeft: 12 }}>
-                                        <Text style={styles.settingLabel}>Einkaufs-Erinnerung</Text>
-                                        <Text style={styles.settingDescription}>Wenn du im Laden bist</Text>
-                                    </View>
-                                    <Switch
-                                        value={notificationSettings.household?.shopping ?? true}
-                                        onValueChange={() => toggleSetting('household', 'shopping')}
-                                        trackColor={{ false: '#334155', true: '#3B82F6' }}
-                                        thumbColor={'#fff'}
-                                    />
-                                </View>
-                            </View>
-
-                            {/* ZUHAUSE */}
-                            <View style={styles.settingGroup}>
-                                <Text style={styles.groupTitle}>ZUHAUSE</Text>
-                                <View style={styles.settingRow}>
-                                    <View style={[styles.iconBadge, { backgroundColor: 'rgba(59, 130, 246, 0.15)' }]}>
-                                        <MapPin size={20} color="#3B82F6" />
-                                    </View>
-                                    <View style={{ flex: 1, marginLeft: 12 }}>
-                                        <Text style={styles.settingLabel}>Willkommen Zuhause</Text>
-                                        <Text style={styles.settingDescription}>Geofencing (100m Radius)</Text>
-                                    </View>
-                                    <Switch
-                                        value={notificationSettings.home?.welcome ?? true}
-                                        onValueChange={() => toggleSetting('home', 'welcome')}
-                                        trackColor={{ false: '#334155', true: '#3B82F6' }}
-                                        thumbColor={'#fff'}
-                                    />
-                                </View>
-
-                                <View style={[styles.settingRow, { borderTopWidth: 1, borderTopColor: '#1E293B' }]}>
-                                    <View style={[styles.iconBadge, { backgroundColor: 'rgba(245, 158, 11, 0.15)' }]}>
-                                        <Bell size={20} color="#F59E0B" />
-                                    </View>
-                                    <View style={{ flex: 1, marginLeft: 12 }}>
-                                        <Text style={styles.settingLabel}>Türklingel</Text>
-                                        <Text style={styles.settingDescription}>Wenn jemand klingelt</Text>
-                                    </View>
-                                    <Switch
-                                        value={notificationSettings.home?.doorbell ?? true}
-                                        onValueChange={() => toggleSetting('home', 'doorbell')}
-                                        trackColor={{ false: '#334155', true: '#3B82F6' }}
-                                        thumbColor={'#fff'}
-                                    />
-                                </View>
-                            </View>
-
-                            {/* WETTER */}
-                            <View style={styles.settingGroup}>
-                                <Text style={styles.groupTitle}>WETTER</Text>
-                                <View style={styles.settingRow}>
-                                    <View style={[styles.iconBadge, { backgroundColor: 'rgba(99, 102, 241, 0.15)' }]}>
-                                        <Shield size={20} color="#6366F1" />
-                                    </View>
-                                    <View style={{ flex: 1, marginLeft: 12 }}>
-                                        <Text style={styles.settingLabel}>Wetterwarnung</Text>
-                                        <Text style={styles.settingDescription}>Sturm, Gewitter, etc.</Text>
-                                    </View>
-                                    <Switch
-                                        value={notificationSettings.weather?.warning ?? true}
-                                        onValueChange={() => toggleSetting('weather', 'warning')}
-                                        trackColor={{ false: '#334155', true: '#3B82F6' }}
-                                        thumbColor={'#fff'}
-                                    />
-                                </View>
-                            </View>
-
-                            {/* BABY */}
-                            <View style={styles.settingGroup}>
-                                <Text style={styles.groupTitle}>BABYPHONE</Text>
-                                <View style={styles.settingRow}>
-                                    <View style={[styles.iconBadge, { backgroundColor: 'rgba(236, 72, 153, 0.15)' }]}>
-                                        <ScanFace size={20} color="#EC4899" />
-                                    </View>
-                                    <View style={{ flex: 1, marginLeft: 12 }}>
-                                        <Text style={styles.settingLabel}>Baby Weint</Text>
-                                        <Text style={styles.settingDescription}>Benachrichtigung bei Schreien</Text>
-                                    </View>
-                                    <Switch
-                                        value={notificationSettings.baby?.cry ?? true}
-                                        onValueChange={() => toggleSetting('baby', 'cry')}
-                                        trackColor={{ false: '#334155', true: '#3B82F6' }}
-                                        thumbColor={'#fff'}
-                                    />
-                                </View>
-                            </View>
-
-
-                            {/* KALENDER */}
-                            <View style={styles.settingGroup}>
-                                <Text style={styles.groupTitle}>KALENDER</Text>
-                                <View style={styles.settingRow}>
-                                    <View style={[styles.iconBadge, { backgroundColor: 'rgba(168, 85, 247, 0.15)' }]}>
-                                        <Calendar size={20} color="#A855F7" />
-                                    </View>
-                                    <View style={{ flex: 1, marginLeft: 12 }}>
-                                        <Text style={styles.settingLabel}>Geburtstage</Text>
-                                        <Text style={styles.settingDescription}>Benachrichtigung bei Geburtstagen</Text>
-                                    </View>
-                                    <Switch
-                                        value={notificationSettings.calendar?.birthday ?? true}
-                                        onValueChange={() => toggleSetting('calendar', 'birthday')}
-                                        trackColor={{ false: '#334155', true: '#3B82F6' }}
-                                        thumbColor={'#fff'}
-                                    />
-                                </View>
-                            </View>
+                            {loadingDynamic && dynamicTypes.length === 0 && (
+                                <ActivityIndicator style={{ marginVertical: 20 }} color={colors.accent} />
+                            )}
                         </>
-                    )
-                    }
+                    )}
 
                     <View style={styles.settingGroup}>
                         <Text style={styles.groupTitle}>DIAGNOSE</Text>
@@ -288,13 +290,34 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
                         </Pressable>
                     </View>
 
+                    {/* Admin: Benachrichtigungen verwalten */}
+                    {userRole === 'admin' && (
+                        <View style={styles.settingGroup}>
+                            <Text style={styles.groupTitle}>ADMIN</Text>
+                            <Pressable
+                                onPress={() => setShowManager(true)}
+                                style={[styles.saveButton, { backgroundColor: colors.accent }]}
+                            >
+                                <SettingsIcon size={20} color="#fff" />
+                                <Text style={styles.saveButtonText}>Benachrichtigungen verwalten</Text>
+                            </Pressable>
+                        </View>
+                    )}
+
                     <View style={styles.infoBox}>
                         <Text style={styles.infoText}>
-                            Hinweis: Diese Einstellungen gelten nur für dieses Gerät.
+                            Hinweis: Deine Einstellungen gelten für deinen Account
+                            und werden auf allen Geräten synchronisiert.
                         </Text>
                     </View>
                 </ScrollView >
             </View >
+
+            {/* Admin Manager Modal */}
+            <NotificationTypesManager
+                visible={showManager}
+                onClose={() => { setShowManager(false); fetchDynamicTypes(); }}
+            />
         </Modal >
     );
 };
@@ -801,7 +824,7 @@ export default function Settings() {
         entities,
         isConnecting
     } = useHomeAssistant();
-    const { theme, setTheme, colors } = useTheme();
+    const { theme, setTheme, colors, autoTheme, setAutoTheme } = useTheme();
 
     const [haUrl, setHaUrl] = useState('');
     const [haToken, setHaToken] = useState('');
@@ -990,7 +1013,7 @@ export default function Settings() {
                         textAlign: 'center',
                         textTransform: 'capitalize'
                     }}>
-                        {itemTheme}
+                        {THEME_DISPLAY_NAMES[itemTheme]}
                     </Text>
                 </View>
 
@@ -1045,14 +1068,107 @@ export default function Settings() {
                             </View>
                         </View>
 
-                        {/* THEME SELECTION - MOVED TO MAIN SCREEN */}
+                        {/* THEME SELECTION */}
                         <View style={styles.section}>
                             <Text style={[styles.sectionTitle, { color: colors.subtext }]}>DESIGN</Text>
+                            <Text style={{ color: colors.subtext, fontSize: 12, fontWeight: '600', marginBottom: 8, letterSpacing: 0.5 }}>DARK THEMES</Text>
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -4, paddingHorizontal: 4, paddingBottom: 8 }}>
-                                {(Object.keys(THEMES) as ThemeType[]).map((t) => (
+                                {DARK_THEMES.map((t) => (
                                     <ThemeCard key={t} itemTheme={t} />
                                 ))}
                             </ScrollView>
+                            <Text style={{ color: colors.subtext, fontSize: 12, fontWeight: '600', marginBottom: 8, marginTop: 8, letterSpacing: 0.5 }}>LIGHT THEMES</Text>
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -4, paddingHorizontal: 4, paddingBottom: 8 }}>
+                                {LIGHT_THEMES.map((t) => (
+                                    <ThemeCard key={t} itemTheme={t} />
+                                ))}
+                            </ScrollView>
+
+                            {/* Auto Theme Toggle */}
+                            <View style={{
+                                flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                                backgroundColor: colors.card, borderRadius: 16, padding: 16, marginTop: 16,
+                                borderWidth: 1, borderColor: colors.border,
+                            }}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
+                                    <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: autoTheme.enabled ? '#F59E0B' : 'rgba(255,255,255,0.05)', alignItems: 'center', justifyContent: 'center' }}>
+                                        {autoTheme.enabled ? <Sun size={20} color="#FFF" /> : <Moon size={20} color={colors.subtext} />}
+                                    </View>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={{ color: colors.text, fontSize: 15, fontWeight: '600' }}>Automatischer Wechsel</Text>
+                                        <Text style={{ color: colors.subtext, fontSize: 12, marginTop: 2 }}>Theme nach Sonnenauf-/untergang</Text>
+                                    </View>
+                                </View>
+                                <Switch
+                                    value={autoTheme.enabled}
+                                    onValueChange={(val) => setAutoTheme({ ...autoTheme, enabled: val })}
+                                    trackColor={{ false: '#334155', true: '#F59E0B' }}
+                                    thumbColor="#FFF"
+                                />
+                            </View>
+
+                            {/* Day/Night Theme Pickers */}
+                            {autoTheme.enabled && (
+                                <View style={{ marginTop: 12, gap: 12 }}>
+                                    {/* Day Theme */}
+                                    <View>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                                            <Sun size={14} color="#F59E0B" />
+                                            <Text style={{ color: colors.subtext, fontSize: 13, fontWeight: '600' }}>Tagsüber (nach Sonnenaufgang)</Text>
+                                        </View>
+                                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -4, paddingHorizontal: 4 }}>
+                                            {([...DARK_THEMES, ...LIGHT_THEMES]).map((t) => {
+                                                const isActive = autoTheme.dayTheme === t;
+                                                const tc = THEMES[t];
+                                                return (
+                                                    <Pressable key={t} onPress={() => setAutoTheme({ ...autoTheme, dayTheme: t })} style={{
+                                                        marginRight: 8, width: 72, height: 100, borderRadius: 12,
+                                                        backgroundColor: tc.card, borderWidth: isActive ? 2 : 1,
+                                                        borderColor: isActive ? '#F59E0B' : tc.border, overflow: 'hidden',
+                                                    }}>
+                                                        <View style={{ flex: 1, backgroundColor: tc.background, alignItems: 'center', justifyContent: 'center' }}>
+                                                            <View style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: tc.accent }} />
+                                                        </View>
+                                                        <View style={{ padding: 6, backgroundColor: tc.card }}>
+                                                            <Text style={{ color: tc.text, fontSize: 9, fontWeight: '600', textAlign: 'center' }}>{THEME_DISPLAY_NAMES[t]}</Text>
+                                                        </View>
+                                                        {isActive && <View style={{ position: 'absolute', top: 4, right: 4, backgroundColor: '#F59E0B', borderRadius: 8, padding: 1 }}><CheckCircle size={10} color="#FFF" /></View>}
+                                                    </Pressable>
+                                                );
+                                            })}
+                                        </ScrollView>
+                                    </View>
+
+                                    {/* Night Theme */}
+                                    <View>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                                            <Moon size={14} color="#818CF8" />
+                                            <Text style={{ color: colors.subtext, fontSize: 13, fontWeight: '600' }}>Nachts (nach Sonnenuntergang)</Text>
+                                        </View>
+                                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -4, paddingHorizontal: 4 }}>
+                                            {([...DARK_THEMES, ...LIGHT_THEMES]).map((t) => {
+                                                const isActive = autoTheme.nightTheme === t;
+                                                const tc = THEMES[t];
+                                                return (
+                                                    <Pressable key={t} onPress={() => setAutoTheme({ ...autoTheme, nightTheme: t })} style={{
+                                                        marginRight: 8, width: 72, height: 100, borderRadius: 12,
+                                                        backgroundColor: tc.card, borderWidth: isActive ? 2 : 1,
+                                                        borderColor: isActive ? '#818CF8' : tc.border, overflow: 'hidden',
+                                                    }}>
+                                                        <View style={{ flex: 1, backgroundColor: tc.background, alignItems: 'center', justifyContent: 'center' }}>
+                                                            <View style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: tc.accent }} />
+                                                        </View>
+                                                        <View style={{ padding: 6, backgroundColor: tc.card }}>
+                                                            <Text style={{ color: tc.text, fontSize: 9, fontWeight: '600', textAlign: 'center' }}>{THEME_DISPLAY_NAMES[t]}</Text>
+                                                        </View>
+                                                        {isActive && <View style={{ position: 'absolute', top: 4, right: 4, backgroundColor: '#818CF8', borderRadius: 8, padding: 1 }}><CheckCircle size={10} color="#FFF" /></View>}
+                                                    </Pressable>
+                                                );
+                                            })}
+                                        </ScrollView>
+                                    </View>
+                                </View>
+                            )}
                         </View>
 
                         <SettingsSection title="Kindermodus" colors={colors}>
@@ -1090,10 +1206,34 @@ export default function Settings() {
                                 label="Benachrichtigungen"
                                 showChevron
                                 onPress={() => setNotificationModalVisible(true)}
-                                isLast
                                 colors={colors}
                             />
+                            {userRole === 'admin' && (
+                                <SettingsRow
+                                    icon={<Users size={20} color={colors.accent} />}
+                                    iconColor={colors.accent}
+                                    label="Familienmitglieder"
+                                    value="Verwalten & Einladen"
+                                    showChevron
+                                    onPress={() => setIsFamilyExpanded(!isFamilyExpanded)}
+                                    isLast
+                                    colors={colors}
+                                />
+                            )}
                         </SettingsSection>
+
+                        {/* Family Management - Inline under APP, admin only */}
+                        {userRole === 'admin' && isFamilyExpanded && (
+                            <View style={[styles.section, { marginTop: -8 }]}>
+                                <View style={[styles.sectionContent, {
+                                    backgroundColor: colors.card,
+                                    borderColor: colors.border,
+                                    padding: 8
+                                }]}>
+                                    <FamilyManagement colors={colors} />
+                                </View>
+                            </View>
+                        )}
 
                         <SettingsSection title="Standort" colors={colors}>
                             <SettingsRow
@@ -1144,44 +1284,7 @@ export default function Settings() {
                             />
                         </SettingsSection>
 
-                        {/* FAMILY Management - COLLAPSIBLE */}
-                        <View style={styles.section}>
-                            <Pressable
-                                onPress={() => setIsFamilyExpanded(!isFamilyExpanded)}
-                                style={[styles.sectionContent, {
-                                    backgroundColor: colors.card,
-                                    borderColor: colors.border,
-                                    flexDirection: 'row',
-                                    alignItems: 'center',
-                                    padding: 16,
-                                    justifyContent: 'space-between'
-                                }]}
-                            >
-                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                    <View style={[styles.iconContainer, { backgroundColor: colors.accent + '20' }]}>
-                                        <Users size={20} color={colors.accent} />
-                                    </View>
-                                    <View>
-                                        <Text style={[styles.rowLabel, { color: colors.text }]}>Familienmitglieder</Text>
-                                        <Text style={[styles.rowValue, { color: colors.subtext, marginTop: 2 }]}>
-                                            Verwalten & Einladen
-                                        </Text>
-                                    </View>
-                                </View>
-                                {isFamilyExpanded ? <ChevronRight size={20} color={colors.subtext} style={{ transform: [{ rotate: '90deg' }] }} /> : <ChevronRight size={20} color={colors.subtext} />}
-                            </Pressable>
 
-                            {isFamilyExpanded && (
-                                <View style={[styles.sectionContent, {
-                                    marginTop: 8,
-                                    backgroundColor: colors.card,
-                                    borderColor: colors.border,
-                                    padding: 8
-                                }]}>
-                                    <FamilyManagement colors={colors} />
-                                </View>
-                            )}
-                        </View>
 
                         {/* HOME ASSISTANT - COLLAPSIBLE AT BOTTOM */}
                         <View style={styles.section}>

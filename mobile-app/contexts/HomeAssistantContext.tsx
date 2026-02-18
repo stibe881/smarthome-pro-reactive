@@ -476,15 +476,15 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
                 // e.g., input_text.push_token_stibe
                 const inputTextEntityId = `input_text.push_token_${userSlug}`;
 
-                console.log(`[Push Token] Syncing to HA: ${inputTextEntityId}`);
+                // console.log(`[Push Token] Syncing to HA: ${inputTextEntityId}`);
 
                 await serviceRef.current.callService('input_text', 'set_value', inputTextEntityId, {
                     value: expoPushToken
                 });
 
-                console.log(`[Push Token] Successfully synced to HA`);
+                // console.log(`[Push Token] Successfully synced to HA`);
             } catch (e) {
-                console.warn('[Push Token] Failed to sync to HA:', e);
+                // console.warn('[Push Token] Failed to sync to HA:', e);
             }
         };
 
@@ -513,7 +513,7 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
 
             const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
             const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
-            console.log("🔥 Expo Push Token:", token);
+            // console.log("🔥 Expo Push Token:", token);
             return token;
         } catch (e) {
             console.error("Error getting push token:", e);
@@ -521,9 +521,9 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
     }
 
     useEffect(() => {
-        console.log("🔵 HomeAssistantProvider MOUNTED");
+        // console.log("🔵 HomeAssistantProvider MOUNTED");
         return () => {
-            console.log("🔴 HomeAssistantProvider UNMOUNTED - This causes disconnect!");
+            // console.log("🔴 HomeAssistantProvider UNMOUNTED - This causes disconnect!");
         };
     }, []);
 
@@ -731,7 +731,7 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
                     disconnectTimer.current = setTimeout(() => {
                         setIsConnected(false);
                         disconnectTimer.current = null;
-                        console.log('🔌 Connection confirmed LOST after delay');
+                        // console.log('🔌 Connection confirmed LOST after delay');
                     }, 2000);
                 }
             }
@@ -746,6 +746,17 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
                 shouldShowBanner: true,
                 shouldShowList: true
             }),
+        });
+
+        // Listen for foreground push notifications to trigger Doorbell Popup
+        const doorbellPushSub = Notifications.addNotificationReceivedListener(notification => {
+            const data = notification.request.content.data;
+            const categoryKey = data?.category_key || '';
+            if (categoryKey === 'doorbell' && !isDoorbellRinging) {
+                console.log('🔔 DOORBELL PUSH received in foreground! Showing Popup.');
+                setIsDoorbellRinging(true);
+                setTimeout(() => setIsDoorbellRinging(false), 120000);
+            }
         });
 
         // Register Action Category
@@ -857,6 +868,7 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
         return () => {
             serviceRef.current?.disconnect();
             subscription.unsubscribe();
+            doorbellPushSub.remove();
         };
     }, []);
 
@@ -1007,7 +1019,7 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
         } catch (e: any) {
             // Suppress error in Expo Go client (expected due to missing background update permissions)
             if (Constants.appOwnership === 'expo') {
-                console.log("Shopping Geofence skipped in Expo Go:", e.message);
+                // console.log("Shopping Geofence skipped in Expo Go:", e.message);
                 return;
             }
 
@@ -1256,7 +1268,7 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
         // 2. App State Change (Reconnect on resume)
         const subscriptionAppState = AppState.addEventListener('change', nextAppState => {
             if (nextAppState === 'active') {
-                console.log('📱 App came to foreground. Checking connection...');
+                // console.log('📱 App came to foreground. Checking connection...');
                 if (!serviceRef.current?.isConnected()) {
                     console.log('🔌 Reconnecting to Home Assistant...');
                     setIsConnecting(true); // Prevent "Not Connected" flash
@@ -1328,10 +1340,10 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
 
     const callService = useCallback((domain: string, service: string, entityId: string, data: any = {}) => {
         if (!serviceRef.current || !serviceRef.current.isConnected()) {
-            console.warn('Cannot call service - HA not connected');
-            return;
+            // Silently ignore - connection will auto-recover
+            return Promise.resolve();
         }
-        serviceRef.current.callService(domain, service, entityId, data);
+        return serviceRef.current.callService(domain, service, entityId, data);
     }, []);
     const setClimateTemperature = useCallback((entityId: string, temperature: number) => {
         serviceRef.current?.callService('climate', 'set_temperature', entityId, { temperature });

@@ -10,7 +10,7 @@ import {
     Lightbulb, Blinds, ChevronRight, WifiOff, X,
     Briefcase, Baby, Dumbbell, Shirt, TreeDeciduous, Droplets,
     Thermometer, Gamepad2, BookOpen, Armchair, DoorOpen, ChevronUp,
-    ParkingSquare, Flower2, Sun, Moon, LucideIcon,
+    ParkingSquare, Flower2, Sun, Moon, LucideIcon, Edit3,
     Wind, Fan, Play, Pause, Square, Volume2, Tv, Timer, Heart, Music, Coffee, Zap, Camera,
     SkipBack, SkipForward, Palette, DoorClosed, Rocket, Star, Crown, Power
 } from 'lucide-react-native';
@@ -20,6 +20,7 @@ import Slider from '@react-native-community/slider';
 import LightControlModal from '../../components/LightControlModal';
 import ShutterControlModal from '../../components/ShutterControlModal';
 import { RoomEditModal } from '../../components/RoomEditModal';
+import { RoomContentEditModal, loadRoomOverride, applyRoomOverrides } from '../../components/RoomContentEditModal';
 import { EntityState } from '../../contexts/HomeAssistantContext';
 
 // Theme Types
@@ -779,12 +780,29 @@ const HelperTile = memo(({ entity, api, width, theme }: any) => {
     return null;
 });
 
-const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, onSelectCover }: any) => {
+const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, onSelectCover, userRole, allEntities }: any) => {
     const { width } = useWindowDimensions();
     const { colors } = useTheme();
     const isTablet = width >= 768;
     const tileWidth = isTablet ? (width - 64 - 24) / 3 : (width - 32 - 12) / 2;
     const [selectedLight, setSelectedLight] = useState<any>(null);
+    const [showContentEdit, setShowContentEdit] = useState(false);
+    const [overrideVersion, setOverrideVersion] = useState(0);
+    const [roomOverride, setRoomOverride] = useState<any>(null);
+
+    // Load overrides when room opens
+    React.useEffect(() => {
+        if (visible && room) {
+            loadRoomOverride(room.name).then(setRoomOverride);
+        }
+    }, [visible, room?.name, overrideVersion]);
+
+    // Apply overrides to room data
+    const displayRoom = useMemo(() => {
+        if (!room) return room;
+        if (!roomOverride) return room;
+        return applyRoomOverrides(room, roomOverride, allEntities);
+    }, [room, roomOverride, allEntities]);
 
     const shutdownRoom = () => {
         if (!room) return;
@@ -874,6 +892,11 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, on
                                 <Text style={styles.modalTitleText}>{room.name}</Text>
                             </View>
                             <View style={{ flexDirection: 'row', gap: 12 }}>
+                                {userRole === 'admin' && (
+                                    <Pressable onPress={() => setShowContentEdit(true)} style={[styles.closeButton, { backgroundColor: 'rgba(255,255,255,0.15)' }]}>
+                                        <Edit3 size={22} color="#FFF" />
+                                    </Pressable>
+                                )}
                                 <Pressable onPress={shutdownRoom} style={[styles.closeButton, { backgroundColor: 'rgba(255,255,255,0.15)' }]}>
                                     <Moon size={24} color={isRoomQuiet ? "#FDB813" : "#FFF"} fill={isRoomQuiet ? "#FDB813" : "transparent"} />
                                 </Pressable>
@@ -896,6 +919,11 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, on
                                 <Text style={[styles.modalTitleText, { color: theme.textColor }]}>{room.name}</Text>
                             </View>
                             <View style={{ flexDirection: 'row', gap: 12 }}>
+                                {userRole === 'admin' && (
+                                    <Pressable onPress={() => setShowContentEdit(true)} style={[styles.closeButton, { backgroundColor: theme.isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}>
+                                        <Edit3 size={22} color={theme.iconColor} />
+                                    </Pressable>
+                                )}
                                 <Pressable onPress={shutdownRoom} style={[styles.closeButton, { backgroundColor: theme.isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}>
                                     <MoonIcon size={24} color={theme.iconColor} />
                                 </Pressable>
@@ -908,17 +936,17 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, on
 
                     <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
                         {/* Sensors Section (Moved to TOP per user request) - Subtle display */}
-                        {room.sensors?.length > 0 && (
+                        {displayRoom.sensors?.length > 0 && (
                             <View style={[styles.section, { marginTop: 16 }]}>
                                 {/* Tiny Header or no header for "decent"? User said "dezent angezeigt". Let's use a smaller header or just the grid. */}
                                 {/* Using standard SectionHeader but maybe users means just top row. */}
-                                <SectionHeader title="Status" />
+                                <SectionHeader title={displayRoom._groupLabels?.sensors || "Status"} />
                                 <ScrollView
                                     horizontal
                                     showsHorizontalScrollIndicator={false}
                                     contentContainerStyle={{ gap: 8, paddingHorizontal: 4 }}
                                 >
-                                    {room.sensors.map((s: any) => (
+                                    {displayRoom.sensors.map((s: any) => (
                                         <SensorTile
                                             key={s.entity_id}
                                             sensor={s}
@@ -931,11 +959,11 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, on
 
 
                         {/* Scenes/Scripts Section (Moved to TOP) */}
-                        {room.scripts?.length > 0 && (
+                        {displayRoom.scripts?.length > 0 && (
                             <View style={styles.section}>
-                                <SectionHeader title="Szenen" />
+                                <SectionHeader title={displayRoom._groupLabels?.scripts || "Szenen"} />
                                 <View style={styles.grid}>
-                                    {room.scripts.map((s: any) => (
+                                    {displayRoom.scripts.map((s: any) => (
                                         <SceneTile
                                             key={s.entity_id}
                                             scene={s}
@@ -943,7 +971,7 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, on
                                             width={tileWidth}
                                         />
                                     ))}
-                                    {room.scenes?.map((s: any) => (
+                                    {displayRoom.scenes?.map((s: any) => (
                                         <SceneTile
                                             key={s.entity_id}
                                             scene={s}
@@ -958,11 +986,11 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, on
 
 
                         {/* Climate Section */}
-                        {room.climates?.length > 0 && (
+                        {displayRoom.climates?.length > 0 && (
                             <View style={styles.section}>
-                                <SectionHeader title="Klima" />
+                                <SectionHeader title={displayRoom._groupLabels?.climates || "Klima"} />
                                 <View style={styles.grid}>
-                                    {room.climates.map((c: any) => (
+                                    {displayRoom.climates.map((c: any) => (
                                         <ClimateTile
                                             key={c.entity_id}
                                             climate={c}
@@ -976,11 +1004,11 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, on
                         )}
 
                         {/* Lights Section */}
-                        {room.lights?.length > 0 && (
+                        {displayRoom.lights?.length > 0 && (
                             <View style={styles.section}>
-                                <SectionHeader title="Beleuchtung" />
+                                <SectionHeader title={displayRoom._groupLabels?.lights || "Beleuchtung"} />
                                 <View style={styles.grid}>
-                                    {room.lights.map((l: any) => (
+                                    {displayRoom.lights.map((l: any) => (
                                         <LightTile
                                             key={l.entity_id}
                                             light={l}
@@ -1003,11 +1031,11 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, on
                         />
 
                         {/* Helpers Section (TV Timer etc) */}
-                        {room.helpers?.length > 0 && (
+                        {displayRoom.helpers?.length > 0 && (
                             <View style={styles.section}>
                                 <SectionHeader title="Einstellungen" />
                                 <View style={styles.grid}>
-                                    {room.helpers.map((h: any) => (
+                                    {displayRoom.helpers.map((h: any) => (
                                         <HelperTile
                                             key={h.entity_id}
                                             entity={h}
@@ -1021,11 +1049,11 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, on
                         )}
 
                         {/* Covers Section */}
-                        {room.covers?.length > 0 && (
+                        {displayRoom.covers?.length > 0 && (
                             <View style={styles.section}>
-                                <SectionHeader title="Rollläden" />
+                                <SectionHeader title={displayRoom._groupLabels?.covers || "Rollläden"} />
                                 <View style={styles.grid}>
-                                    {room.covers.map((c: any) => (
+                                    {displayRoom.covers.map((c: any) => (
                                         <CoverTile
                                             key={c.entity_id}
                                             cover={c}
@@ -1043,11 +1071,11 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, on
                         )}
 
                         {/* Media Section */}
-                        {room.mediaPlayers?.length > 0 && (
+                        {displayRoom.mediaPlayers?.length > 0 && (
                             <View style={styles.section}>
-                                <SectionHeader title="Medien" />
+                                <SectionHeader title={displayRoom._groupLabels?.mediaPlayers || "Medien"} />
                                 <View style={styles.grid}>
-                                    {room.mediaPlayers.map((m: any) => (
+                                    {displayRoom.mediaPlayers.map((m: any) => (
                                         <MediaTile
                                             key={m.entity_id}
                                             player={m}
@@ -1061,16 +1089,35 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, on
                         )}
 
 
-
+                        {/* Custom Groups */}
+                        {displayRoom._customGroups?.map((cg: any) => (
+                            cg.entities?.length > 0 && (
+                                <View key={cg.id} style={styles.section}>
+                                    <SectionHeader title={cg.name} />
+                                    <View style={styles.grid}>
+                                        {cg.entities.map((e: any) => (
+                                            <View key={e.entity_id} style={[styles.tile || {}, { width: tileWidth, backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: 12, padding: 12 }]}>
+                                                <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600' }} numberOfLines={1}>
+                                                    {e.attributes?.friendly_name || e.entity_id}
+                                                </Text>
+                                                <Text style={{ color: colors.subtext, fontSize: 10, marginTop: 2 }} numberOfLines={1}>
+                                                    {e.state}
+                                                </Text>
+                                            </View>
+                                        ))}
+                                    </View>
+                                </View>
+                            )
+                        ))}
 
                         <View style={{ height: 40 }} />
 
                         {/* Cameras Section (Moved to BOTTOM and Full Width) */}
-                        {room.cameras?.length > 0 && (
+                        {displayRoom.cameras?.length > 0 && (
                             <View style={styles.section}>
-                                <SectionHeader title="Kameras" />
+                                <SectionHeader title={displayRoom._groupLabels?.cameras || "Kameras"} />
                                 <View style={styles.grid}>
-                                    {room.cameras.map((c: any) => (
+                                    {displayRoom.cameras.map((c: any) => (
                                         <CameraTile
                                             key={c.entity_id}
                                             camera={c}
@@ -1087,6 +1134,16 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, on
                     </ScrollView>
                 </View >
             </View >
+
+            {/* Room Content Edit Modal (Admin only) */}
+            <RoomContentEditModal
+                visible={showContentEdit}
+                onClose={() => setShowContentEdit(false)}
+                room={room}
+                colors={colors}
+                allEntities={allEntities || []}
+                onOverrideChanged={() => setOverrideVersion(v => v + 1)}
+            />
         </Modal >
     );
 });
@@ -1208,7 +1265,7 @@ export default function Rooms() {
         // Initialize with allowed rooms to preserve order
         const areaMap = new Map<string, any>();
         ALLOWED_ROOMS.forEach(room => {
-            areaMap.set(room, { lights: [], covers: [], sensors: [], climates: [], mediaPlayers: [], scripts: [], scenes: [], cameras: [], helpers: [] });
+            areaMap.set(room, { lights: [], covers: [], sensors: [], climates: [], mediaPlayers: [], scripts: [], scenes: [], cameras: [], helpers: [], switches: [] });
         });
 
         // Helper to find room for entity
@@ -1253,6 +1310,7 @@ export default function Rooms() {
             else if (entity.entity_id.startsWith('script.')) room.scripts.push(entity);
             // else if (entity.entity_id.startsWith('camera.')) room.cameras.push(entity);
             else if (entity.entity_id.startsWith('input_select.')) room.helpers.push(entity);
+            else if (entity.entity_id.startsWith('switch.')) room.switches.push(entity);
         });
 
         // CUSTOMIZATION: Wohnzimmer strict filtering
@@ -1934,6 +1992,8 @@ export default function Rooms() {
                                         if (temp) secondaryInfo = `${temp}°`;
                                     }
 
+                                    const isMediaPlaying = room.mediaPlayers.some((m: any) => m.state === 'playing');
+
                                     return (
                                         <Pressable
                                             key={room.name}
@@ -1970,7 +2030,7 @@ export default function Rooms() {
                                                 </View>
                                             )}
                                             <LinearGradient
-                                                colors={hasActive ? room.gradient : [colors.card, colors.background]} // Theme aware inactive state
+                                                colors={hasActive ? room.gradient : [colors.card, colors.background]}
                                                 start={{ x: 0, y: 0 }}
                                                 end={{ x: 1, y: 1 }}
                                                 style={styles.cardGradient}
@@ -1990,6 +2050,13 @@ export default function Rooms() {
                                                         )}
                                                     </View>
                                                 </View>
+
+                                                {/* Music playing indicator */}
+                                                {isMediaPlaying && (
+                                                    <View style={{ position: 'absolute', bottom: 8, right: 8, backgroundColor: 'rgba(255,255,255,0.25)', borderRadius: 10, padding: 4 }}>
+                                                        <Music size={12} color={hasActive ? '#FFF' : room.gradient[0]} />
+                                                    </View>
+                                                )}
                                             </LinearGradient>
                                         </Pressable>
                                     )
@@ -2113,6 +2180,8 @@ export default function Rooms() {
                 api={api}
                 sleepTimerState={sleepTimerState}
                 onSelectCover={setSelectedCoverForModal}
+                userRole={userRole}
+                allEntities={entities}
             />
 
             <ShutterControlModal

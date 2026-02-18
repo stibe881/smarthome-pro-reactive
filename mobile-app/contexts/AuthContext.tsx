@@ -218,26 +218,29 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         try {
             const token = await registerForPushNotificationsAsync();
             if (token) {
-                console.log('[Push Token] Attempting to save token:', token);
+                // console.log('[Push Token] Attempting to save token:', token);
 
-                // Use upsert to ensure we either update or create the entry
-                // We assume user_id is unique in family_members or at least identifying
+                // Upsert into push_tokens table (supports multiple devices per user)
                 const { error } = await supabase
-                    .from('family_members')
-                    .update({
-                        push_token: token,
+                    .from('push_tokens')
+                    .upsert({
+                        user_id: userId,
+                        token: token,
                         updated_at: new Date().toISOString()
-                    })
-                    .eq('user_id', userId);
+                    }, { onConflict: 'user_id,token' });
 
                 if (error) {
-                    console.warn('[Push Token] Update failed, trying fallback log:', error.message);
-                    // If update failed (maybe no entry yet), we might want to know
+                    console.warn('[Push Token] Upsert failed:', error.message);
+                    // Fallback: also try old family_members column
+                    await supabase
+                        .from('family_members')
+                        .update({ push_token: token, updated_at: new Date().toISOString() })
+                        .eq('user_id', userId);
                 } else {
-                    console.log('[Push Token] Saved successfully to family_members');
+                    // console.log('[Push Token] Saved successfully to push_tokens');
                 }
 
-                // Save to optional metadata as well for redundancy
+                // Save to metadata for redundancy
                 await supabase.auth.updateUser({
                     data: { last_push_token: token }
                 });

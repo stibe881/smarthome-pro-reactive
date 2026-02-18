@@ -4,6 +4,30 @@ import { makeRedirectUri, useAuthRequest, ResponseType } from 'expo-auth-session
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
+// Platform-safe storage helpers (SecureStore doesn't work on web)
+const storeSet = async (key: string, value: string) => {
+  if (Platform.OS === 'web') {
+    localStorage.setItem(key, value);
+  } else {
+    await SecureStore.setItemAsync(key, value);
+  }
+};
+
+const storeGet = async (key: string): Promise<string | null> => {
+  if (Platform.OS === 'web') {
+    return localStorage.getItem(key);
+  }
+  return await SecureStore.getItemAsync(key);
+};
+
+const storeDelete = async (key: string) => {
+  if (Platform.OS === 'web') {
+    localStorage.removeItem(key);
+  } else {
+    await SecureStore.deleteItemAsync(key);
+  }
+};
+
 // Allow WebBrowser to complete auth session
 WebBrowser.maybeCompleteAuthSession();
 
@@ -75,13 +99,13 @@ export const saveSpotifyToken = async (
   expiresIn: number
 ) => {
   const expirationTime = Date.now() + (expiresIn * 1000);
-  await SecureStore.setItemAsync(STORE_KEY_ACCESS, accessToken);
-  if (refreshToken) await SecureStore.setItemAsync(STORE_KEY_REFRESH, refreshToken);
-  await SecureStore.setItemAsync(STORE_KEY_EXPIRATION, expirationTime.toString());
+  await storeSet(STORE_KEY_ACCESS, accessToken);
+  if (refreshToken) await storeSet(STORE_KEY_REFRESH, refreshToken);
+  await storeSet(STORE_KEY_EXPIRATION, expirationTime.toString());
 };
 
 export const getSpotifyToken = async (): Promise<string | null> => {
-  const expiration = await SecureStore.getItemAsync(STORE_KEY_EXPIRATION);
+  const expiration = await storeGet(STORE_KEY_EXPIRATION);
   const now = Date.now();
 
   if (!expiration || now >= parseInt(expiration, 10)) {
@@ -90,12 +114,12 @@ export const getSpotifyToken = async (): Promise<string | null> => {
     return await refreshSpotifyToken();
   }
 
-  return await SecureStore.getItemAsync(STORE_KEY_ACCESS);
+  return await storeGet(STORE_KEY_ACCESS);
 };
 
 const refreshSpotifyToken = async (): Promise<string | null> => {
   try {
-    const refreshToken = await SecureStore.getItemAsync(STORE_KEY_REFRESH);
+    const refreshToken = await storeGet(STORE_KEY_REFRESH);
     if (!refreshToken) return null;
 
     const tokenResponse = await fetch(discovery.tokenEndpoint, {
@@ -130,7 +154,7 @@ const refreshSpotifyToken = async (): Promise<string | null> => {
 };
 
 export const logoutSpotify = async () => {
-    await SecureStore.deleteItemAsync(STORE_KEY_ACCESS);
-    await SecureStore.deleteItemAsync(STORE_KEY_REFRESH);
-    await SecureStore.deleteItemAsync(STORE_KEY_EXPIRATION);
+    await storeDelete(STORE_KEY_ACCESS);
+    await storeDelete(STORE_KEY_REFRESH);
+    await storeDelete(STORE_KEY_EXPIRATION);
 };

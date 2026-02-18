@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, Modal, StyleSheet, Pressable, ScrollView, ActivityIndicator, Switch, TextInput } from 'react-native';
-import { X, Speaker, Pencil, Check } from 'lucide-react-native';
+import { X, Speaker, Tv, Users as UsersIcon, Pencil, Check } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useHomeAssistant } from '../contexts/HomeAssistantContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { MEDIA_PLAYER_CONFIG } from '../config/mediaPlayers';
+
+export type PlayerType = 'speaker' | 'tv' | 'group';
 
 interface MediaPlayerSelectionModalProps {
     visible: boolean;
@@ -12,17 +14,25 @@ interface MediaPlayerSelectionModalProps {
     onUpdateSelection?: () => void;
 }
 
+const VISIBLE_PLAYERS_KEY = '@smarthome_visible_media_players';
+const CUSTOM_NAMES_KEY = '@smarthome_media_player_names';
+export const PLAYER_TYPES_KEY = '@smarthome_media_player_types';
+
+const TYPE_OPTIONS: { value: PlayerType; label: string; icon: any; color: string }[] = [
+    { value: 'group', label: 'Gruppe', icon: UsersIcon, color: '#F59E0B' },
+    { value: 'speaker', label: 'Speaker', icon: Speaker, color: '#3B82F6' },
+    { value: 'tv', label: 'TV', icon: Tv, color: '#8B5CF6' },
+];
+
 export function MediaPlayerSelectionModal({ visible, onClose, onUpdateSelection }: MediaPlayerSelectionModalProps) {
     const { entities } = useHomeAssistant();
     const { colors } = useTheme();
     const [visiblePlayers, setVisiblePlayers] = useState<string[]>([]);
     const [loading, setLoading] = useState(true);
     const [customNames, setCustomNames] = useState<Record<string, string>>({});
+    const [playerTypes, setPlayerTypes] = useState<Record<string, PlayerType>>({});
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editName, setEditName] = useState('');
-
-    const VISIBLE_PLAYERS_KEY = '@smarthome_visible_media_players';
-    const CUSTOM_NAMES_KEY = '@smarthome_media_player_names';
 
     useEffect(() => {
         if (visible) {
@@ -32,9 +42,10 @@ export function MediaPlayerSelectionModal({ visible, onClose, onUpdateSelection 
 
     const loadData = async () => {
         try {
-            const [visibleStored, namesStored] = await Promise.all([
+            const [visibleStored, namesStored, typesStored] = await Promise.all([
                 AsyncStorage.getItem(VISIBLE_PLAYERS_KEY),
-                AsyncStorage.getItem(CUSTOM_NAMES_KEY)
+                AsyncStorage.getItem(CUSTOM_NAMES_KEY),
+                AsyncStorage.getItem(PLAYER_TYPES_KEY),
             ]);
 
             if (visibleStored) {
@@ -46,6 +57,22 @@ export function MediaPlayerSelectionModal({ visible, onClose, onUpdateSelection 
 
             if (namesStored) {
                 setCustomNames(JSON.parse(namesStored));
+            }
+
+            if (typesStored) {
+                setPlayerTypes(JSON.parse(typesStored));
+            } else {
+                // Migrate from hardcoded config as initial defaults
+                const migrated: Record<string, PlayerType> = {};
+                for (const [id, cfg] of Object.entries(MEDIA_PLAYER_CONFIG)) {
+                    if (cfg.isGroup) {
+                        migrated[id] = 'group';
+                    } else {
+                        migrated[id] = cfg.type;
+                    }
+                }
+                setPlayerTypes(migrated);
+                await AsyncStorage.setItem(PLAYER_TYPES_KEY, JSON.stringify(migrated));
             }
         } catch (e) {
             console.warn('Failed to load player data', e);
@@ -65,9 +92,7 @@ export function MediaPlayerSelectionModal({ visible, onClose, onUpdateSelection 
     const saveVisiblePlayers = async (newVisible: string[]) => {
         setVisiblePlayers(newVisible);
         await AsyncStorage.setItem(VISIBLE_PLAYERS_KEY, JSON.stringify(newVisible));
-        if (onUpdateSelection) {
-            onUpdateSelection();
-        }
+        if (onUpdateSelection) onUpdateSelection();
     };
 
     const toggleVisibility = (entityId: string) => {
@@ -78,9 +103,24 @@ export function MediaPlayerSelectionModal({ visible, onClose, onUpdateSelection 
         }
     };
 
+    const setPlayerType = async (entityId: string, type: PlayerType) => {
+        const updated = { ...playerTypes, [entityId]: type };
+        setPlayerTypes(updated);
+        await AsyncStorage.setItem(PLAYER_TYPES_KEY, JSON.stringify(updated));
+        if (onUpdateSelection) onUpdateSelection();
+    };
+
+    const getPlayerType = (entityId: string): PlayerType => {
+        if (playerTypes[entityId]) return playerTypes[entityId];
+        // Fallback to hardcoded config for migration
+        const cfg = MEDIA_PLAYER_CONFIG[entityId];
+        if (cfg?.isGroup) return 'group';
+        if (cfg?.type === 'tv') return 'tv';
+        return 'speaker';
+    };
+
     const allPlayers = entities.filter(e => e.entity_id.startsWith('media_player.'));
 
-    // Sort alphabetically by friendly name (using custom name if available)
     allPlayers.sort((a, b) => {
         const nameA = customNames[a.entity_id] || MEDIA_PLAYER_CONFIG[a.entity_id]?.name || a.attributes.friendly_name || a.entity_id;
         const nameB = customNames[b.entity_id] || MEDIA_PLAYER_CONFIG[b.entity_id]?.name || b.attributes.friendly_name || b.entity_id;
@@ -99,7 +139,7 @@ export function MediaPlayerSelectionModal({ visible, onClose, onUpdateSelection 
 
                 <View style={{ padding: 16 }}>
                     <Text style={{ color: colors.subtext }}>
-                        Wähle aus, welche Lautsprecher in der Liste angezeigt werden sollen.
+                        Wähle aus, welche Lautsprecher angezeigt werden und ordne sie einer Gruppe zu.
                     </Text>
                 </View>
 
@@ -111,56 +151,91 @@ export function MediaPlayerSelectionModal({ visible, onClose, onUpdateSelection 
                             {allPlayers.map((player) => {
                                 const name = MEDIA_PLAYER_CONFIG[player.entity_id]?.name || player.attributes.friendly_name || player.entity_id;
                                 const isVisible = visiblePlayers.includes(player.entity_id);
+                                const currentType = getPlayerType(player.entity_id);
 
                                 return (
                                     <View key={player.entity_id} style={[styles.row, { borderBottomColor: colors.border }]}>
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 12 }}>
-                                            <Speaker size={20} color={isVisible ? colors.accent : colors.subtext} />
-                                            <View style={{ flex: 1 }}>
-                                                {editingId === player.entity_id ? (
-                                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                                                        <TextInput
-                                                            style={{
-                                                                flex: 1,
-                                                                color: colors.text,
-                                                                fontSize: 16,
-                                                                borderBottomWidth: 1,
-                                                                borderBottomColor: colors.accent,
-                                                                paddingVertical: 4
-                                                            }}
-                                                            value={editName}
-                                                            onChangeText={setEditName}
-                                                            autoFocus
-                                                            onSubmitEditing={() => saveCustomName(player.entity_id, editName)}
-                                                        />
-                                                        <Pressable onPress={() => saveCustomName(player.entity_id, editName)}>
-                                                            <Check size={20} color={colors.accent} />
-                                                        </Pressable>
-                                                    </View>
+                                        {/* Top: Name + Visibility Switch */}
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 12 }}>
+                                                {currentType === 'tv' ? (
+                                                    <Tv size={20} color={isVisible ? '#8B5CF6' : colors.subtext} />
+                                                ) : currentType === 'group' ? (
+                                                    <UsersIcon size={20} color={isVisible ? '#F59E0B' : colors.subtext} />
                                                 ) : (
-                                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                                                        <Text style={[styles.label, { color: colors.text }]}>{customNames[player.entity_id] || name}</Text>
-                                                        <Pressable
-                                                            onPress={() => {
-                                                                setEditingId(player.entity_id);
-                                                                setEditName(customNames[player.entity_id] || name);
-                                                            }}
-                                                            hitSlop={8}
-                                                        >
-                                                            <Pencil size={14} color={colors.subtext} />
-                                                        </Pressable>
-                                                    </View>
+                                                    <Speaker size={20} color={isVisible ? colors.accent : colors.subtext} />
                                                 )}
-                                                <Text style={{ fontSize: 12, color: colors.subtext }}>{player.entity_id}</Text>
+                                                <View style={{ flex: 1 }}>
+                                                    {editingId === player.entity_id ? (
+                                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                                            <TextInput
+                                                                style={{
+                                                                    flex: 1, color: colors.text, fontSize: 16,
+                                                                    borderBottomWidth: 1, borderBottomColor: colors.accent, paddingVertical: 4
+                                                                }}
+                                                                value={editName}
+                                                                onChangeText={setEditName}
+                                                                autoFocus
+                                                                onSubmitEditing={() => saveCustomName(player.entity_id, editName)}
+                                                            />
+                                                            <Pressable onPress={() => saveCustomName(player.entity_id, editName)}>
+                                                                <Check size={20} color={colors.accent} />
+                                                            </Pressable>
+                                                        </View>
+                                                    ) : (
+                                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                                            <Text style={[styles.label, { color: colors.text }]}>{customNames[player.entity_id] || name}</Text>
+                                                            <Pressable
+                                                                onPress={() => {
+                                                                    setEditingId(player.entity_id);
+                                                                    setEditName(customNames[player.entity_id] || name);
+                                                                }}
+                                                                hitSlop={8}
+                                                            >
+                                                                <Pencil size={14} color={colors.subtext} />
+                                                            </Pressable>
+                                                        </View>
+                                                    )}
+                                                    <Text style={{ fontSize: 12, color: colors.subtext }}>{player.entity_id}</Text>
+                                                </View>
                                             </View>
+                                            <Switch
+                                                value={isVisible}
+                                                onValueChange={() => toggleVisibility(player.entity_id)}
+                                                trackColor={{ false: colors.border, true: colors.accent }}
+                                                thumbColor="#fff"
+                                                ios_backgroundColor={colors.border}
+                                            />
                                         </View>
-                                        <Switch
-                                            value={isVisible}
-                                            onValueChange={() => toggleVisibility(player.entity_id)}
-                                            trackColor={{ false: colors.border, true: colors.accent }}
-                                            thumbColor="#fff"
-                                            ios_backgroundColor={colors.border}
-                                        />
+
+                                        {/* Bottom: Type Selector Pills */}
+                                        {isVisible && (
+                                            <View style={{ flexDirection: 'row', gap: 8, marginTop: 10, paddingLeft: 32 }}>
+                                                {TYPE_OPTIONS.map(opt => {
+                                                    const isActive = currentType === opt.value;
+                                                    const IconComp = opt.icon;
+                                                    return (
+                                                        <Pressable
+                                                            key={opt.value}
+                                                            onPress={() => setPlayerType(player.entity_id, opt.value)}
+                                                            style={{
+                                                                flexDirection: 'row', alignItems: 'center', gap: 6,
+                                                                paddingHorizontal: 12, paddingVertical: 6,
+                                                                borderRadius: 20,
+                                                                backgroundColor: isActive ? opt.color + '20' : 'transparent',
+                                                                borderWidth: 1,
+                                                                borderColor: isActive ? opt.color : colors.border,
+                                                            }}
+                                                        >
+                                                            <IconComp size={14} color={isActive ? opt.color : colors.subtext} />
+                                                            <Text style={{ fontSize: 12, fontWeight: isActive ? '700' : '500', color: isActive ? opt.color : colors.subtext }}>
+                                                                {opt.label}
+                                                            </Text>
+                                                        </Pressable>
+                                                    );
+                                                })}
+                                            </View>
+                                        )}
                                     </View>
                                 );
                             })}
@@ -197,9 +272,6 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     row: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
         padding: 16,
         borderBottomWidth: 1,
     },

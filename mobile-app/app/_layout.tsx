@@ -1,14 +1,29 @@
 
 import { Slot, useRouter, useSegments } from "expo-router";
 import { AuthProvider, useAuth } from "../contexts/AuthContext";
-import { HomeAssistantProvider } from "../contexts/HomeAssistantContext";
-import { ThemeProvider } from "../contexts/ThemeContext";
+import { HomeAssistantProvider, useHomeAssistant } from "../contexts/HomeAssistantContext";
+import { ThemeProvider, useTheme } from "../contexts/ThemeContext";
 import { KidsProvider } from "../contexts/KidsContext";
 import { useEffect } from "react";
 import { View, ActivityIndicator } from "react-native";
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import ChangePasswordModal from "../components/ChangePasswordModal";
 import { DoorbellModal } from "../components/DoorbellModal";
+
+/** Bridges sun.sun entity from HA to ThemeContext for auto theme switching */
+function SunThemeBridge() {
+    const { entities } = useHomeAssistant();
+    const { setSunState } = useTheme();
+
+    useEffect(() => {
+        const sun = entities.find(e => e.entity_id === 'sun.sun');
+        if (sun && (sun.state === 'above_horizon' || sun.state === 'below_horizon')) {
+            setSunState(sun.state as 'above_horizon' | 'below_horizon');
+        }
+    }, [entities]);
+
+    return null;
+}
 
 function RootLayoutNav() {
     const { session, isLoading, mustChangePassword, clearMustChangePassword, needsSetup } = useAuth();
@@ -65,6 +80,7 @@ export default function Layout() {
                 <AuthProvider>
                     <HomeAssistantProvider>
                         <KidsProvider>
+                            <SunThemeBridge />
                             <RootLayoutNav />
                         </KidsProvider>
                     </HomeAssistantProvider>
