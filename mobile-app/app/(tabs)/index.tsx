@@ -521,7 +521,7 @@ export default function Dashboard() {
 
     // Filter entities
     const lights = useMemo(() => {
-        const allowedLights = dashboardConfig.lights || [
+        const allowedLights = (dashboardConfig.lights?.length > 0 ? dashboardConfig.lights : null) || [
             { id: 'light.wohnzimmer', name: '🛋️ Wohnzimmer' },
             { id: 'light.essbereich', name: '🍽️ Essbereich' },
             { id: 'light.kuche', name: '🍳 Küche' },
@@ -555,7 +555,7 @@ export default function Dashboard() {
     }, [entities, dashboardConfig]);
 
     const covers = useMemo(() => {
-        const allowedCovers = dashboardConfig.covers || [
+        const allowedCovers = (dashboardConfig.covers?.length > 0 ? dashboardConfig.covers : null) || [
             { id: 'cover.alle_storen', name: 'Alle Storen' },
             { id: 'cover.kuche', name: '🍳 Küche' },
             { id: 'cover.ogp_3900159', name: '🍳 Küche Balkon' },

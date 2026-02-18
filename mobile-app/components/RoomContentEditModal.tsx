@@ -260,10 +260,8 @@ export function applyRoomOverrides(room: any, override: RoomOverride, allEntitie
         }
     }
 
-    // Apply hidden groups
-    for (const hidden of (o.hiddenGroups || [])) {
-        if (result[hidden]) result[hidden] = [];
-    }
+    // Pass hidden groups as metadata (don't empty arrays - room view needs the entities)
+    result._hiddenGroups = o.hiddenGroups || [];
 
     // Apply group labels
     if (!result._groupLabels) result._groupLabels = {};

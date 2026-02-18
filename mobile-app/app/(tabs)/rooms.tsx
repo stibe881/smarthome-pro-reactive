@@ -937,6 +937,8 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, on
                     <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
                         {/* Dynamic sections based on group order */}
                         {(displayRoom._groupOrder || ['sensors', 'scripts', 'climates', 'lights', 'helpers', 'covers', 'mediaPlayers', 'cameras']).map((groupId: string) => {
+                            // Skip hidden groups
+                            if (displayRoom._hiddenGroups?.includes(groupId)) return null;
                             // --- Sensors ---
                             if (groupId === 'sensors' && displayRoom.sensors?.length > 0) {
                                 return (
