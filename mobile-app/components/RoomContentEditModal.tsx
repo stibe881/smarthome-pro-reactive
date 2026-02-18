@@ -539,7 +539,9 @@ export function RoomContentEditModal({ visible, onClose, room, colors, allEntiti
                         const newGroupOverrides = { ...override.groupOverrides };
                         delete newGroupOverrides[entityId];
                         updateOverride({
-                            removedEntities: [...override.removedEntities, entityId],
+                            removedEntities: override.removedEntities.includes(entityId)
+                                ? override.removedEntities
+                                : [...override.removedEntities, entityId],
                             groupOverrides: newGroupOverrides,
                         });
                     }
@@ -905,7 +907,7 @@ export function RoomContentEditModal({ visible, onClose, room, colors, allEntiti
                                     </Text>
                                 </View>
                                 <View style={{ paddingHorizontal: 12, paddingBottom: 12 }}>
-                                    {override.removedEntities.map(id => (
+                                    {[...new Set(override.removedEntities)].map(id => (
                                         <View key={id} style={[modalStyles.entityRow, { borderBottomColor: colors.border }]}>
                                             <View style={{ flex: 1 }}>
                                                 <Text style={[modalStyles.entityName, { color: colors.subtext }]} numberOfLines={1}>
