@@ -168,11 +168,12 @@ export async function saveRoomOverride(roomName: string, override: RoomOverride)
                     onConflict: 'household_id,room_name',
                 });
             if (error) {
-                console.error('Failed to save room override to Supabase:', error);
+                // Silently warn - table may not exist yet
+                console.warn('[RoomOverrides] Supabase sync skipped:', error.message);
             }
         }
-    } catch (e) {
-        console.error('Failed to save room override to Supabase:', e);
+    } catch (e: any) {
+        console.warn('[RoomOverrides] Supabase sync skipped:', e?.message || e);
     }
 }
 
@@ -672,8 +673,14 @@ export function RoomContentEditModal({ visible, onClose, room, colors, allEntiti
                 ]
             );
         } else {
-            // Predefined groups: just hide immediately
-            handleToggleGroup(groupId);
+            // Predefined groups: hide AND remove from groupOrder so it disappears
+            const hidden = [...override.hiddenGroups];
+            if (!hidden.includes(groupId)) hidden.push(groupId);
+            const newOrder = (override.groupOrder || []).filter(g => g !== groupId);
+            updateOverride({
+                hiddenGroups: hidden,
+                groupOrder: newOrder as EntityGroup[],
+            });
         }
     };
 

@@ -1128,10 +1128,12 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, on
                                                 }
                                                 if (dtype === 'switch') {
                                                     const isOn = e.state === 'on';
+                                                    // Use the actual entity domain for service calls, not the display type
+                                                    const domain = eid.split('.')[0];
                                                     return (
                                                         <View key={eid} style={[styles.tile, { width: tileWidth, backgroundColor: colors.card, borderColor: colors.border }]}>
                                                             <Pressable
-                                                                onPress={() => api.callService('switch', isOn ? 'turn_off' : 'turn_on', eid)}
+                                                                onPress={() => api.callService(domain, isOn ? 'turn_off' : 'turn_on', eid)}
                                                                 style={[styles.tileContent, isOn && { backgroundColor: colors.accent + '20' }]}
                                                             >
                                                                 <View style={styles.tileHeader}>
