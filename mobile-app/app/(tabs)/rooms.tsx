@@ -1093,7 +1093,7 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, on
                         {displayRoom._customGroups?.map((cg: any) => (
                             cg.entities?.length > 0 && (
                                 <View key={cg.id} style={styles.section}>
-                                    <SectionHeader title={cg.name} />
+                                    <SectionHeader title={cg.label} />
                                     <View style={styles.grid}>
                                         {cg.entities.map((e: any) => (
                                             <View key={e.entity_id} style={[styles.tile || {}, { width: tileWidth, backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: 12, padding: 12 }]}>
