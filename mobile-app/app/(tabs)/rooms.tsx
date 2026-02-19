@@ -12,7 +12,7 @@ import {
     Thermometer, Gamepad2, BookOpen, Armchair, DoorOpen, ChevronUp,
     ParkingSquare, Flower2, Sun, Moon, LucideIcon, Edit3,
     Wind, Fan, Play, Pause, Square, Volume2, Tv, Timer, Heart, Music, Coffee, Zap, Camera,
-    SkipBack, SkipForward, Palette, DoorClosed, Rocket, Star, Crown, Power
+    SkipBack, SkipForward, Palette, DoorClosed, Rocket, Star, Crown, Power, ChevronDown
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -466,7 +466,7 @@ const MediaTile = memo(({ player, api, width, theme }: any) => {
                 />
             ) : (
                 <LinearGradient
-                    colors={['#1e293b', '#0f172a']}
+                    colors={[colors.card, colors.background]}
                     style={StyleSheet.absoluteFill}
                 />
             )}
@@ -500,7 +500,7 @@ const MediaTile = memo(({ player, api, width, theme }: any) => {
                     {/* Floating Artwork */}
                     <View style={{
                         width: 56, height: 56, borderRadius: 14,
-                        backgroundColor: '#334155',
+                        backgroundColor: colors.border,
                         shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 5, elevation: 6,
                         alignItems: 'center', justifyContent: 'center', overflow: 'hidden'
                     }}>
@@ -723,6 +723,7 @@ const CameraTile = memo(({ camera, width, api }: any) => {
 });
 
 const HelperTile = memo(({ entity, api, width, theme }: any) => {
+    const { colors } = useTheme();
     const activeColor = theme ? theme.accentColor : '#8B5CF6';
     const isInputSelect = entity.entity_id.startsWith('input_select.');
     const state = entity.state;
@@ -777,6 +778,75 @@ const HelperTile = memo(({ entity, api, width, theme }: any) => {
             </View>
         );
     }
+
+    // input_boolean: toggle on/off
+    const isInputBoolean = entity.entity_id.startsWith('input_boolean.');
+    if (isInputBoolean) {
+        const isOn = state === 'on';
+        const displayName = entity.attributes?.friendly_name || entity.entity_id;
+
+        return (
+            <View style={[styles.tile, { width, backgroundColor: colors.card }]}>
+                <Pressable
+                    onPress={() => api.callService('input_boolean', 'toggle', entity.entity_id)}
+                    style={[styles.tileContent, isOn && { backgroundColor: activeColor + '20', borderColor: activeColor + '50' }]}
+                >
+                    <View style={styles.tileHeader}>
+                        <View style={[styles.tileIcon, { backgroundColor: isOn ? activeColor : colors.background }]}>
+                            <Power size={24} color={isOn ? '#FFF' : colors.subtext} />
+                        </View>
+                        <Text style={[styles.tileState, { color: colors.subtext }, isOn && styles.textActive]}>
+                            {isOn ? 'An' : 'Aus'}
+                        </Text>
+                    </View>
+                    <Text numberOfLines={2} style={[styles.tileName, { color: colors.text }, isOn && styles.textActive]}>
+                        {displayName}
+                    </Text>
+                </Pressable>
+            </View>
+        );
+    }
+
+    // Generic input_select: show current option + tap to select
+    if (isInputSelect) {
+        const options = entity.attributes?.options || [];
+        const displayName = entity.attributes?.friendly_name || entity.entity_id;
+
+        return (
+            <View style={[styles.tile, { width, backgroundColor: colors.card }]}>
+                <Pressable
+                    onPress={() => {
+                        Alert.alert(
+                            displayName,
+                            `Aktuell: ${state}`,
+                            [
+                                ...options.map((opt: string) => ({
+                                    text: opt,
+                                    onPress: () => api.callService('input_select', 'select_option', entity.entity_id, { option: opt }),
+                                    style: (opt === state) ? 'cancel' : 'default' as any
+                                })),
+                                { text: 'Abbrechen', style: 'cancel' }
+                            ]
+                        );
+                    }}
+                    style={[styles.tileContent]}
+                >
+                    <View style={styles.tileHeader}>
+                        <View style={[styles.tileIcon, { backgroundColor: colors.background }]}>
+                            <ChevronDown size={24} color={colors.subtext} />
+                        </View>
+                        <Text style={[styles.tileState, { color: colors.subtext }]} numberOfLines={1}>
+                            {state}
+                        </Text>
+                    </View>
+                    <Text numberOfLines={2} style={[styles.tileName, { color: colors.text }]}>
+                        {displayName}
+                    </Text>
+                </Pressable>
+            </View>
+        );
+    }
+
     return null;
 });
 
@@ -1109,6 +1179,7 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, on
                                                     else if (eid.startsWith('switch.')) dtype = 'switch';
                                                     else if (eid.startsWith('sensor.') || eid.startsWith('binary_sensor.')) dtype = 'sensor';
                                                     else if (eid.startsWith('camera.')) dtype = 'camera';
+                                                    else if (eid.startsWith('input_select.') || eid.startsWith('input_boolean.') || eid.startsWith('input_number.')) dtype = 'helper';
                                                     else dtype = 'generic';
                                                 }
 
@@ -1158,6 +1229,9 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, on
                                                 }
                                                 if (dtype === 'camera') {
                                                     return <CameraTile key={eid} camera={e} width="100%" />;
+                                                }
+                                                if (dtype === 'helper') {
+                                                    return <HelperTile key={eid} entity={e} api={api} width={tileWidth} theme={theme} />;
                                                 }
                                                 // Fallback: generic tile
                                                 return (
@@ -1367,6 +1441,7 @@ export default function Rooms() {
             else if (entity.entity_id.startsWith('script.')) room.scripts.push(entity);
             // else if (entity.entity_id.startsWith('camera.')) room.cameras.push(entity);
             else if (entity.entity_id.startsWith('input_select.')) room.helpers.push(entity);
+            else if (entity.entity_id.startsWith('input_boolean.')) room.helpers.push(entity);
             else if (entity.entity_id.startsWith('switch.')) room.switches.push(entity);
         });
 
@@ -2417,13 +2492,13 @@ const styles = StyleSheet.create({
         minHeight: 110,
     },
     tileContent: {
-        backgroundColor: '#1E293B',
+        backgroundColor: 'transparent',
         borderRadius: 20,
         padding: 16,
         minHeight: 110,
         justifyContent: 'space-between',
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.05)',
+        borderColor: 'transparent',
     },
     tileActive: {
         backgroundColor: 'rgba(234, 179, 8, 0.15)',
@@ -2450,7 +2525,7 @@ const styles = StyleSheet.create({
         width: 40,
         height: 40,
         borderRadius: 12,
-        backgroundColor: 'rgba(255,255,255,0.05)',
+        backgroundColor: 'rgba(128,128,128,0.1)',
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -2471,7 +2546,7 @@ const styles = StyleSheet.create({
     },
     tileSlider: {
         marginTop: 12,
-        backgroundColor: '#1E293B',
+        backgroundColor: 'rgba(128,128,128,0.1)',
         borderRadius: 16,
         paddingHorizontal: 8,
         paddingVertical: 4,
@@ -2483,7 +2558,7 @@ const styles = StyleSheet.create({
     },
     actionBtn: {
         flex: 1,
-        backgroundColor: 'rgba(255,255,255,0.1)',
+        backgroundColor: 'rgba(128,128,128,0.1)',
         height: 36,
         borderRadius: 10,
         alignItems: 'center',

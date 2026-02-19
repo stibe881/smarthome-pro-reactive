@@ -1403,7 +1403,7 @@ export default function Settings() {
 
                         {/* Version Info */}
                         <Text style={[styles.versionText, { color: colors.subtext }]}>
-                            SmartHome Pro v1.1.0 • Theme: {theme}
+                            HomePilot Pro v1.3.7 • Theme: {theme}
                         </Text>
                     </ScrollView>
                 </KeyboardAvoidingView>

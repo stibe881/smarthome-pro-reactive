@@ -5,6 +5,8 @@ import { House, LogIn, Mail, Lock, AlertTriangle, ScanFace, UserPlus } from 'luc
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
 
+import ForgotPasswordModal from '../../components/ForgotPasswordModal';
+
 export default function LoginScreen() {
     const { login, register, isBiometricsEnabled, biometricLogin } = useAuth();
     const [email, setEmail] = useState('');
@@ -13,6 +15,7 @@ export default function LoginScreen() {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const [isRegisterMode, setIsRegisterMode] = useState(false);
+    const [showForgotPassword, setShowForgotPassword] = useState(false);
 
     // Auto-login with biometrics if enabled
     React.useEffect(() => {
@@ -167,6 +170,12 @@ export default function LoginScreen() {
                             </Text>
                         </Pressable>
 
+                        {!isRegisterMode && (
+                            <Pressable onPress={() => setShowForgotPassword(true)} style={{ alignItems: 'center' }}>
+                                <Text style={{ color: '#94A3B8', fontSize: 14 }}>Passwort vergessen?</Text>
+                            </Pressable>
+                        )}
+
                         {!isRegisterMode && isBiometricsEnabled && (
                             <Pressable
                                 onPress={handleBiometricLogin}
@@ -191,6 +200,11 @@ export default function LoginScreen() {
                     </View>
                 </View>
             </View>
+
+            <ForgotPasswordModal
+                visible={showForgotPassword}
+                onClose={() => setShowForgotPassword(false)}
+            />
         </SafeAreaView>
     );
 }

@@ -501,9 +501,12 @@ export default function Dashboard() {
     // Show wizard if no HA URL is set after initialization
     useEffect(() => {
         if (isHAInitialized) {
-            if (!haBaseUrl && !isConnecting && !isConnected) {
+            // Only show wizard if we have NO URL and are NOT connected
+            if (!haBaseUrl && !isConnected && !isConnecting) {
+                // Double check if we really have no credentials in context (sometimes async state lag)
+                // For now, trust haBaseUrl being null means no config.
                 setShowWizard(true);
-            } else if (haBaseUrl && isConnected) {
+            } else if (haBaseUrl || isConnected) {
                 // Auto-hide if we were auto-opened but now connected
                 setShowWizard(false);
             }
@@ -589,8 +592,24 @@ export default function Dashboard() {
     }, [entities, dashboardConfig]);
     const vacuums = useMemo(() => entities.filter(e => e.entity_id.startsWith('vacuum.')), [entities]);
     const mediaPlayers = useMemo(() => {
+        // Dynamic Config (from Wizard) OR Fallback to Whitelist
+        if (dashboardConfig.mediaPlayers && dashboardConfig.mediaPlayers.length > 0) {
+            return dashboardConfig.mediaPlayers.map((def: any) => {
+                const entity = entities.find(e => e.entity_id === def.id);
+                if (!entity) return null;
+                return {
+                    ...entity,
+                    attributes: {
+                        ...entity.attributes,
+                        friendly_name: def.name
+                    }
+                };
+            }).filter(Boolean);
+        }
+
+        // Fallback: Use Whitelist
         return entities.filter(e => e.entity_id.startsWith('media_player.') && WHITELISTED_PLAYERS.includes(e.entity_id));
-    }, [entities]);
+    }, [entities, dashboardConfig]);
     const climate = useMemo(() => entities.filter(e => e.entity_id.startsWith('climate.')), [entities]);
     // securityEntities is now defined later using the helper
     const calendars = useMemo(() => entities.filter(e => e.entity_id.startsWith('calendar.')).filter(c => c.state === 'on' || c.attributes.message), [entities]);
@@ -1002,12 +1021,12 @@ export default function Dashboard() {
                             >
                                 <WeatherIcon size={14} color={isWeatherWarning ? colors.error : colors.success} />
                                 <Text
-                                    style={[styles.tempText, isWeatherWarning ? { color: colors.error } : { color: colors.success }, { maxWidth: 140 }]}
+                                    style={[styles.tempText, isWeatherWarning ? { color: colors.error } : { color: colors.success }, { maxWidth: width < 380 ? undefined : 70 }]}
                                     numberOfLines={1}
                                     ellipsizeMode="tail"
                                 >
                                     {weatherComposite.attributes.temperature}°
-                                    <Text style={{ fontWeight: '400', opacity: 0.8 }}> {getWeatherText(weatherComposite.state)}</Text>
+                                    {width >= 380 && <Text style={{ fontWeight: '400', opacity: 0.8 }}> {getWeatherText(weatherComposite.state)}</Text>}
                                 </Text>
                             </Pressable>
                         )}

@@ -92,6 +92,7 @@ const DISPLAY_TYPE_OPTIONS = [
     { key: 'climate', label: 'Klima' },
     { key: 'sensor', label: 'Sensor' },
     { key: 'camera', label: 'Kamera' },
+    { key: 'helper', label: 'Einstellung (Input)' },
 ];
 
 // ========================================================
@@ -275,6 +276,8 @@ export function applyRoomOverrides(room: any, override: RoomOverride, allEntitie
             const groupEntities: any[] = [];
             for (const [entityId, targetGroup] of Object.entries(o.groupOverrides || {})) {
                 if (targetGroup === cg.id) {
+                    // Skip removed entities
+                    if ((o.removedEntities || []).includes(entityId)) continue;
                     let entity: any = null;
                     for (const g of ALL_GROUPS) {
                         entity = room[g]?.find((e: any) => e.entity_id === entityId);
@@ -296,8 +299,15 @@ export function applyRoomOverrides(room: any, override: RoomOverride, allEntitie
         });
     }
 
-    // Pass group order to result
-    result._groupOrder = (o.groupOrder || []).length > 0 ? o.groupOrder : ALL_GROUPS;
+    // Pass group order to result (MUST include custom group IDs!)
+    const baseOrder = (o.groupOrder || []).length > 0 ? [...o.groupOrder] : [...ALL_GROUPS];
+    // Append custom group IDs that aren't already in the order
+    for (const cg of (o.customGroups || [])) {
+        if (!baseOrder.includes(cg.id as EntityGroup)) {
+            baseOrder.push(cg.id as EntityGroup);
+        }
+    }
+    result._groupOrder = baseOrder;
 
     // Pass entity display types
     result._entityDisplayTypes = o.entityDisplayTypes || {};
@@ -534,6 +544,8 @@ export function RoomContentEditModal({ visible, onClose, room, colors, allEntiti
                 ? override.removedEntities
                 : [...override.removedEntities, entityId],
             groupOverrides: newGroupOverrides,
+            // Also remove from extraEntities if it was manually added
+            extraEntities: override.extraEntities.filter(id => id !== entityId),
         });
     };
 

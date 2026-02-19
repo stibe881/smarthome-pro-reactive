@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, TextInput, Pressable, Modal, StyleSheet, ScrollView, ActivityIndicator, Alert, useWindowDimensions, Switch } from 'react-native';
 import { useHomeAssistant } from '../contexts/HomeAssistantContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { Server, Key, CheckCircle2, ChevronRight, X, Wifi, Shield, Zap, Sparkles, LogOut, Lightbulb, Blinds, UtensilsCrossed, ChevronLeft, Search, Check } from 'lucide-react-native';
+import { Server, Key, CheckCircle2, ChevronRight, X, Wifi, Shield, Zap, Sparkles, LogOut, Lightbulb, Blinds, UtensilsCrossed, ChevronLeft, Search, Check, Speaker, Tv } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../contexts/AuthContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -15,6 +15,7 @@ interface ConnectionWizardProps {
 interface MappingState {
     lights: { enabled: boolean; entities: { id: string; name: string }[] };
     covers: { enabled: boolean; entities: { id: string; name: string }[] };
+    mediaPlayers: { enabled: boolean; entities: { id: string; name: string }[] };
     appliances: { enabled: boolean; entities: { id: string; name: string }[] };
 }
 
@@ -33,6 +34,7 @@ export const ConnectionWizard = ({ visible, onClose }: ConnectionWizardProps) =>
     const [mapping, setMapping] = useState<MappingState>({
         lights: { enabled: true, entities: [] },
         covers: { enabled: true, entities: [] },
+        mediaPlayers: { enabled: true, entities: [] },
         appliances: { enabled: true, entities: [] }
     });
 
@@ -44,6 +46,7 @@ export const ConnectionWizard = ({ visible, onClose }: ConnectionWizardProps) =>
             setMapping({
                 lights: { enabled: true, entities: dashboardConfig.lights || [] },
                 covers: { enabled: true, entities: dashboardConfig.covers || [] },
+                mediaPlayers: { enabled: true, entities: dashboardConfig.mediaPlayers || [] },
                 appliances: { enabled: true, entities: [] }
             });
         }
@@ -76,6 +79,7 @@ export const ConnectionWizard = ({ visible, onClose }: ConnectionWizardProps) =>
             ...dashboardConfig,
             lights: mapping.lights.enabled ? mapping.lights.entities : [],
             covers: mapping.covers.enabled ? mapping.covers.entities : [],
+            mediaPlayers: mapping.mediaPlayers.enabled ? mapping.mediaPlayers.entities : [],
         };
         await saveDashboardConfig(config);
         onClose();
@@ -263,8 +267,9 @@ export const ConnectionWizard = ({ visible, onClose }: ConnectionWizardProps) =>
             case 1: return renderStep1();
             case 2: return renderMappingStep('lights', 'Beleuchtung', 'Wähle die Lichter aus, die du auf dem Dashboard steuern möchtest.', Lightbulb, 'light');
             case 3: return renderMappingStep('covers', 'Rollläden', 'Wähle deine Storen oder Markisen aus. Diese erscheinen dann in der Übersicht.', Blinds, 'cover');
-            case 4: return renderMappingStep('appliances', 'Hausgeräte', 'Wähle Sensoren für Waschmaschine oder Geschirrspüler aus.', UtensilsCrossed, 'sensor');
-            case 5: return renderStep6();
+            case 4: return renderMappingStep('mediaPlayers', 'Media Player', 'Wähle deine Lautsprecher, Gruppen oder TVs aus.', Speaker, 'media_player');
+            case 5: return renderMappingStep('appliances', 'Hausgeräte', 'Wähle Sensoren für Waschmaschine oder Geschirrspüler aus.', UtensilsCrossed, 'sensor');
+            case 6: return renderStep6();
             default: return null;
         }
     };

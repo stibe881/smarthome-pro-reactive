@@ -29,6 +29,7 @@ interface AuthContextType {
     toggleMemberAccess: (memberId: string, active: boolean) => Promise<void>;
     clearMustChangePassword: () => void;
     completeSetup: () => void;
+    requestPasswordReset: (email: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -430,6 +431,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setNeedsSetup(false);
     };
 
+    const requestPasswordReset = async (email: string) => {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: 'smarthome-pro://(auth)/reset-password',
+        });
+        if (error) throw error;
+    };
+
     return (
         <AuthContext.Provider value={{
             user,
@@ -452,7 +460,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             mustChangePassword,
             clearMustChangePassword,
             needsSetup,
-            completeSetup
+            completeSetup,
+            requestPasswordReset
         }}>
             {children}
         </AuthContext.Provider>

@@ -11,6 +11,7 @@ export const MEDIA_PLAYER_CONFIG: Record<string, { name: string; type: 'speaker'
     'media_player.nest_schlafzimmer': { name: 'Schlafzimmer', type: 'speaker', icon: Speaker },
     'media_player.fernseher_im_wohnzimmer_2': { name: 'Wohnzimmer TV', type: 'tv', icon: Tv },
     'media_player.shield_schlafzimmer': { name: 'Schlafzimmer TV', type: 'tv', icon: Tv },
+    'media_player.wohnzimmer_group': { name: 'Wohnzimmer Gruppe', type: 'speaker', icon: Speaker, isGroup: true }, // Hypothetical ID, will ask user or use wildcard
 };
 
 export const WHITELISTED_PLAYERS = Object.keys(MEDIA_PLAYER_CONFIG);
