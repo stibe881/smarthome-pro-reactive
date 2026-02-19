@@ -17,9 +17,10 @@ const SHOPPING_COUNT_KEY = '@smarthome_shopping_count';
 const SHOP_ENTRY_KEY = '@smarthome_shop_entry';
 const IS_HOME_KEY = '@smarthome_is_at_home';
 const METEO_WARNING_KEY = '@smarthome_last_weather_warning';
+const SHOPS_STORAGE_KEY = '@smarthome_shopping_locations';
 
-// Known shops with GPS coordinates for reliable geofencing
-const KNOWN_SHOPS = [
+// Default shops with GPS coordinates for reliable geofencing (fallback if no custom list saved)
+export const DEFAULT_SHOPS = [
     { name: 'Aldi Sursee', lat: 47.170723963107065, lng: 8.095389675777374 },
     { name: 'Aldi Willisau', lat: 47.12633650391756, lng: 7.996571426910975 },
     { name: 'Coop Willisau', lat: 47.127780306002485, lng: 7.997146443242294 },
@@ -34,6 +35,20 @@ const KNOWN_SHOPS = [
     { name: 'Surseepark', lat: 47.17315292712783, lng: 8.10190380633404 },
 ];
 
+export type ShoppingLocation = { name: string; lat: number; lng: number };
+
+// Load shops from AsyncStorage (or fallback to defaults)
+const getShopList = async (): Promise<ShoppingLocation[]> => {
+    try {
+        const stored = await AsyncStorage.getItem(SHOPS_STORAGE_KEY);
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+    } catch { }
+    return DEFAULT_SHOPS;
+};
+
 // Fallback: Generic shop names for reverse geocoding matching
 const TARGET_SHOPS = ['coop', 'migros', 'volg', 'aldi', 'lidl', 'kaufland', 'denner'];
 
@@ -47,9 +62,10 @@ const haversineDistance = (lat1: number, lng1: number, lat2: number, lng2: numbe
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
 
-// Check if location is near a known shop (within 100m)
-const findNearbyShop = (lat: number, lng: number): string | null => {
-    for (const shop of KNOWN_SHOPS) {
+// Check if location is near a known shop (within 100m) - async to read dynamic list
+const findNearbyShop = async (lat: number, lng: number): Promise<string | null> => {
+    const shops = await getShopList();
+    for (const shop of shops) {
         const distance = haversineDistance(lat, lng, shop.lat, shop.lng);
         if (distance <= 100) { // 100 meters radius
             console.log(`🛒 Near ${shop.name} (${Math.round(distance)}m)`);
@@ -92,7 +108,7 @@ if (Platform.OS !== 'web') TaskManager.defineTask(SHOPPING_TASK, async ({ data, 
             }
 
             // 2. Check if near a known shop (by GPS coordinates - reliable)
-            let matchingShop = findNearbyShop(latitude, longitude);
+            let matchingShop = await findNearbyShop(latitude, longitude);
 
             // 3. Fallback: Reverse Geocode to check if we are at a shop (less reliable)
             if (!matchingShop) {

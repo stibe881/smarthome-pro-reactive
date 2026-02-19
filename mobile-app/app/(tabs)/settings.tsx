@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { useHomeAssistant } from '../../contexts/HomeAssistantContext';
 import { useTheme, THEMES, ThemeType, AutoThemeConfig, THEME_DISPLAY_NAMES, DARK_THEMES, LIGHT_THEMES } from '../../contexts/ThemeContext';
-import { Wifi, WifiOff, Save, LogOut, User, Server, Key, CheckCircle, XCircle, Shield, Bell, Palette, ChevronRight, LucideIcon, X, ScanFace, MapPin, Smartphone, Search, Calendar, Trash2, Users, Eye, EyeOff, Sun, Moon } from 'lucide-react-native';
+import { Wifi, WifiOff, Save, LogOut, User, Server, Key, CheckCircle, XCircle, Shield, Bell, Palette, ChevronRight, LucideIcon, X, ScanFace, MapPin, Smartphone, Search, Calendar, Trash2, Users, Eye, EyeOff, Sun, Moon, Store } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
@@ -14,6 +14,7 @@ import { DashboardConfigModal } from '../../components/DashboardConfigModal';
 import { FamilyManagement } from '../../components/FamilyManagement';
 import { ConnectionWizard } from '../../components/ConnectionWizard';
 import { AutomationsModal } from '../../components/AutomationsModal';
+import { ShoppingLocationsModal } from '../../components/ShoppingLocationsModal';
 import { NotificationTypesManager } from '../../components/NotificationTypesManager';
 import { Activity, ShieldCheck, Zap, Blinds, AlertTriangle, Baby, Plus, Settings as SettingsIcon } from 'lucide-react-native';
 import { useKidsMode } from '../../contexts/KidsContext';
@@ -841,6 +842,7 @@ export default function Settings() {
     const [isFamilyExpanded, setIsFamilyExpanded] = useState(false);
     const [kidsModalVisible, setKidsModalVisible] = useState(false);
     const [showWizard, setShowWizard] = useState(false);
+    const [shoppingLocationsVisible, setShoppingLocationsVisible] = useState(false);
 
     // Effect to update status bar style based on theme
     useEffect(() => {
@@ -1242,6 +1244,15 @@ export default function Settings() {
                                 label="Standort als Zuhause setzen"
                                 value={isGeofencingActive ? 'Aktiv' : 'Inaktiv'}
                                 onPress={setHomeLocation}
+                                colors={colors}
+                            />
+                            <SettingsRow
+                                icon={<Store size={20} color={colors.accent} />}
+                                iconColor={colors.accent}
+                                label="Einkaufsstandorte"
+                                value="Verwalten"
+                                showChevron
+                                onPress={() => setShoppingLocationsVisible(true)}
                                 isLast
                                 colors={colors}
                             />
@@ -1431,6 +1442,10 @@ export default function Settings() {
                 <AutomationsModal
                     visible={automationsModalVisible}
                     onClose={() => setAutomationsModalVisible(false)}
+                />
+                <ShoppingLocationsModal
+                    visible={shoppingLocationsVisible}
+                    onClose={() => setShoppingLocationsVisible(false)}
                 />
             </SafeAreaView>
         </View>
