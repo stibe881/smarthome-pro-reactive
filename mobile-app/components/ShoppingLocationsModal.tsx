@@ -1,12 +1,17 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, Pressable, ScrollView, Modal, TextInput, Alert, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, Pressable, ScrollView, Modal, TextInput, Alert, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { X, Plus, MapPin, Trash2, Navigation, Store } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
-import { DEFAULT_SHOPS, ShoppingLocation } from '../contexts/HomeAssistantContext';
+import { supabase } from '../lib/supabase';
+import { useHousehold } from '../hooks/useHousehold';
 
-const SHOPS_STORAGE_KEY = '@smarthome_shopping_locations';
+interface ShoppingLocation {
+    id: string; // UUID from Supabase
+    name: string;
+    lat: number;
+    lng: number;
+}
 
 interface Props {
     visible: boolean;
@@ -15,43 +20,49 @@ interface Props {
 
 export const ShoppingLocationsModal = ({ visible, onClose }: Props) => {
     const { colors } = useTheme();
+    const { householdId, loading: householdLoading } = useHousehold();
     const [shops, setShops] = useState<ShoppingLocation[]>([]);
+    const [loading, setLoading] = useState(false);
+
     const [showAddForm, setShowAddForm] = useState(false);
     const [newName, setNewName] = useState('');
     const [newLat, setNewLat] = useState('');
     const [newLng, setNewLng] = useState('');
     const [isLocating, setIsLocating] = useState(false);
 
-    // Load shops
+    // Load shops when visible and household is ready
     useEffect(() => {
-        if (visible) loadShops();
-    }, [visible]);
+        if (visible && householdId) {
+            loadShops();
+        }
+    }, [visible, householdId]);
 
     const loadShops = async () => {
+        if (!householdId) return;
+        setLoading(true);
         try {
-            const stored = await AsyncStorage.getItem(SHOPS_STORAGE_KEY);
-            if (stored) {
-                const parsed = JSON.parse(stored);
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                    setShops(parsed);
-                    return;
-                }
-            }
-            // No custom list yet — use defaults
-            setShops([...DEFAULT_SHOPS]);
-        } catch {
-            setShops([...DEFAULT_SHOPS]);
+            const { data, error } = await supabase
+                .from('shopping_locations')
+                .select('*')
+                .eq('household_id', householdId)
+                .order('name', { ascending: true });
+
+            if (error) throw error;
+            setShops(data || []);
+        } catch (e: any) {
+            console.error('Error loading shops:', e);
+            Alert.alert('Fehler', 'Konnte Einkaufsstandorte nicht laden.');
+        } finally {
+            setLoading(false);
         }
     };
 
-    const saveShops = async (updated: ShoppingLocation[]) => {
-        setShops(updated);
-        await AsyncStorage.setItem(SHOPS_STORAGE_KEY, JSON.stringify(updated));
-    };
-
     const handleAddShop = async () => {
+        if (!householdId) return;
+
         const lat = parseFloat(newLat);
         const lng = parseFloat(newLng);
+
         if (!newName.trim()) {
             Alert.alert('Fehler', 'Bitte gib einen Namen ein.');
             return;
@@ -60,25 +71,48 @@ export const ShoppingLocationsModal = ({ visible, onClose }: Props) => {
             Alert.alert('Fehler', 'Ungültige Koordinaten.');
             return;
         }
-        const updated = [...shops, { name: newName.trim(), lat, lng }].sort((a, b) => a.name.localeCompare(b.name, 'de'));
-        await saveShops(updated);
-        setNewName('');
-        setNewLat('');
-        setNewLng('');
-        setShowAddForm(false);
+
+        try {
+            const { error } = await supabase
+                .from('shopping_locations')
+                .insert({
+                    household_id: householdId,
+                    name: newName.trim(),
+                    lat,
+                    lng
+                });
+
+            if (error) throw error;
+
+            await loadShops();
+            setNewName('');
+            setNewLat('');
+            setNewLng('');
+            setShowAddForm(false);
+        } catch (e: any) {
+            Alert.alert('Fehler', 'Konnte Standort nicht speichern: ' + e.message);
+        }
     };
 
-    const handleDelete = (index: number) => {
-        const shop = shops[index];
+    const handleDelete = (id: string, name: string) => {
         Alert.alert(
             'Löschen',
-            `"${shop.name}" wirklich entfernen?`,
+            `"${name}" wirklich entfernen?`,
             [
                 { text: 'Abbrechen', style: 'cancel' },
                 {
                     text: 'Löschen', style: 'destructive', onPress: async () => {
-                        const updated = shops.filter((_, i) => i !== index);
-                        await saveShops(updated);
+                        try {
+                            const { error } = await supabase
+                                .from('shopping_locations')
+                                .delete()
+                                .eq('id', id);
+
+                            if (error) throw error;
+                            loadShops();
+                        } catch (e: any) {
+                            Alert.alert('Fehler', 'Konnte Standort nicht löschen.');
+                        }
                     }
                 },
             ]
@@ -103,21 +137,6 @@ export const ShoppingLocationsModal = ({ visible, onClose }: Props) => {
         }
     };
 
-    const handleResetToDefaults = () => {
-        Alert.alert(
-            'Zurücksetzen',
-            'Alle Standorte auf Standardwerte zurücksetzen?',
-            [
-                { text: 'Abbrechen', style: 'cancel' },
-                {
-                    text: 'Zurücksetzen', style: 'destructive', onPress: async () => {
-                        await saveShops([...DEFAULT_SHOPS]);
-                    }
-                },
-            ]
-        );
-    };
-
     return (
         <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
@@ -135,27 +154,39 @@ export const ShoppingLocationsModal = ({ visible, onClose }: Props) => {
                         </View>
 
                         <Text style={[styles.description, { color: colors.subtext }]}>
-                            Push-Benachrichtigung wenn du dich in der Nähe eines Ladens befindest und Artikel auf der Einkaufsliste stehen.
+                            Push-Benachrichtigung wenn du dich in der Nähe eines Ladens befindest und Artikel auf der Einkaufsliste stehen. (Synchronisiert für alle Nutzer im Haushalt)
                         </Text>
 
                         <ScrollView style={styles.body} contentContainerStyle={{ paddingBottom: 24 }}>
-                            {/* Shop List */}
-                            {shops.map((shop, index) => (
-                                <View key={`${shop.name}-${index}`} style={[styles.shopRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                                    <View style={[styles.shopIcon, { backgroundColor: colors.accent + '20' }]}>
-                                        <MapPin size={18} color={colors.accent} />
-                                    </View>
-                                    <View style={{ flex: 1 }}>
-                                        <Text style={[styles.shopName, { color: colors.text }]}>{shop.name}</Text>
-                                        <Text style={[styles.shopCoords, { color: colors.subtext }]}>
-                                            {shop.lat.toFixed(4)}, {shop.lng.toFixed(4)}
+                            {loading ? (
+                                <ActivityIndicator size="large" color={colors.accent} style={{ marginTop: 20 }} />
+                            ) : (
+                                <>
+                                    {/* Shop List */}
+                                    {shops.map((shop) => (
+                                        <View key={shop.id} style={[styles.shopRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                                            <View style={[styles.shopIcon, { backgroundColor: colors.accent + '20' }]}>
+                                                <MapPin size={18} color={colors.accent} />
+                                            </View>
+                                            <View style={{ flex: 1 }}>
+                                                <Text style={[styles.shopName, { color: colors.text }]}>{shop.name}</Text>
+                                                <Text style={[styles.shopCoords, { color: colors.subtext }]}>
+                                                    {shop.lat.toFixed(4)}, {shop.lng.toFixed(4)}
+                                                </Text>
+                                            </View>
+                                            <Pressable onPress={() => handleDelete(shop.id, shop.name)} hitSlop={8} style={styles.deleteBtn}>
+                                                <Trash2 size={18} color={colors.error || '#EF4444'} />
+                                            </Pressable>
+                                        </View>
+                                    ))}
+
+                                    {shops.length === 0 && !showAddForm && (
+                                        <Text style={{ textAlign: 'center', color: colors.subtext, marginTop: 20 }}>
+                                            Keine Standorte definiert.
                                         </Text>
-                                    </View>
-                                    <Pressable onPress={() => handleDelete(index)} hitSlop={8} style={styles.deleteBtn}>
-                                        <Trash2 size={18} color={colors.error || '#EF4444'} />
-                                    </Pressable>
-                                </View>
-                            ))}
+                                    )}
+                                </>
+                            )}
 
                             {/* Add Form */}
                             {showAddForm ? (
@@ -221,11 +252,6 @@ export const ShoppingLocationsModal = ({ visible, onClose }: Props) => {
                                     <Text style={{ color: colors.accent, fontWeight: '700', fontSize: 15 }}>Standort hinzufügen</Text>
                                 </Pressable>
                             )}
-
-                            {/* Reset to defaults */}
-                            <Pressable onPress={handleResetToDefaults} style={[styles.resetBtn, { borderColor: colors.border }]}>
-                                <Text style={{ color: colors.subtext, fontSize: 13 }}>Auf Standardwerte zurücksetzen</Text>
-                            </Pressable>
                         </ScrollView>
                     </View>
                 </View>

@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, Modal, StyleSheet, Pressable, ScrollView, ActivityIndicator, Switch, TextInput, Alert } from 'react-native';
 import { X, Zap, Search, Pencil } from 'lucide-react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useHomeAssistant } from '../contexts/HomeAssistantContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { supabase } from '../lib/supabase';
+import { useHousehold } from '../hooks/useHousehold';
 
 interface AutomationsModalProps {
     visible: boolean;
@@ -13,67 +14,122 @@ interface AutomationsModalProps {
 export function AutomationsModal({ visible, onClose }: AutomationsModalProps) {
     const { entities, callService } = useHomeAssistant();
     const { colors } = useTheme();
+    const { householdId } = useHousehold();
+
+    // State
     const [visibleAutomations, setVisibleAutomations] = useState<string[]>([]);
+    const [customNames, setCustomNames] = useState<Record<string, string>>({});
     const [showSelection, setShowSelection] = useState(false);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
-    // Custom friendly names
-    const [customNames, setCustomNames] = useState<Record<string, string>>({});
+
+    // Rename Modal State
     const [renameModalVisible, setRenameModalVisible] = useState(false);
     const [renameTarget, setRenameTarget] = useState<{ entityId: string; currentName: string } | null>(null);
     const [renameInput, setRenameInput] = useState('');
 
-    const VISIBLE_AUTOMATIONS_KEY = '@smarthome_visible_automations';
-    const CUSTOM_NAMES_KEY = '@smarthome_automation_names';
-
     useEffect(() => {
-        if (visible) {
-            loadVisibleAutomations();
-            loadCustomNames();
+        if (visible && householdId) {
+            loadSettings();
             setSearchQuery('');
         }
-    }, [visible]);
+    }, [visible, householdId]);
 
-    const loadVisibleAutomations = async () => {
+    const loadSettings = async () => {
+        if (!householdId) return;
+        setLoading(true);
         try {
-            const stored = await AsyncStorage.getItem(VISIBLE_AUTOMATIONS_KEY);
-            if (stored) {
-                setVisibleAutomations(JSON.parse(stored));
-            }
+            const { data, error } = await supabase
+                .from('automations_settings')
+                .select('entity_id, custom_name, is_visible')
+                .eq('household_id', householdId);
+
+            if (error) throw error;
+
+            const visibleList: string[] = [];
+            const namesMap: Record<string, string> = {};
+
+            data?.forEach(setting => {
+                if (setting.is_visible) {
+                    visibleList.push(setting.entity_id);
+                }
+                if (setting.custom_name) {
+                    namesMap[setting.entity_id] = setting.custom_name;
+                }
+            });
+
+            setVisibleAutomations(visibleList);
+            setCustomNames(namesMap);
         } catch (e) {
-            console.warn('Failed to load visible automations', e);
+            console.warn('Failed to load automation settings', e);
         } finally {
             setLoading(false);
         }
     };
 
-    const loadCustomNames = async () => {
+    const upsertSetting = async (entityId: string, updates: { is_visible?: boolean; custom_name?: string | null }) => {
+        if (!householdId) return;
         try {
-            const stored = await AsyncStorage.getItem(CUSTOM_NAMES_KEY);
-            if (stored) {
-                setCustomNames(JSON.parse(stored));
+            // Optimistic update
+            if (updates.is_visible !== undefined) {
+                if (updates.is_visible) {
+                    setVisibleAutomations(prev => [...prev, entityId]);
+                } else {
+                    setVisibleAutomations(prev => prev.filter(id => id !== entityId));
+                }
             }
+            if (updates.custom_name !== undefined) {
+                setCustomNames(prev => {
+                    const next = { ...prev };
+                    if (updates.custom_name) {
+                        next[entityId] = updates.custom_name;
+                    } else {
+                        delete next[entityId];
+                    }
+                    return next;
+                });
+            }
+
+            // DB Update
+            // We need to first check if a row exists to preserve other fields, or use upsert with all fields
+            // Since we don't have the full state of the row easily, upserting with current known state is safest.
+            // But 'upsert' needs the primary key or unique constraint. We have unique(household_id, entity_id).
+
+            // Construct the payload. We need to send BOTH is_visible and custom_name to avoid overwriting with null/default if we used a simple insert.
+            // However, Supabase upsert merges if we don't specify all columns? No, it replaces unless we use ignoreDuplicates (which we don't want).
+            // Actually, we can retrieve the current state from our local state variables? 
+            // Better: use a smart upsert that sends both current values.
+
+            const currentVisible = updates.is_visible !== undefined
+                ? updates.is_visible
+                : visibleAutomations.includes(entityId);
+
+            const currentName = updates.custom_name !== undefined
+                ? updates.custom_name
+                : (customNames[entityId] || null);
+
+            const { error } = await supabase
+                .from('automations_settings')
+                .upsert({
+                    household_id: householdId,
+                    entity_id: entityId,
+                    is_visible: currentVisible,
+                    custom_name: currentName,
+                    updated_at: new Date().toISOString()
+                }, { onConflict: 'household_id, entity_id' });
+
+            if (error) throw error;
+
         } catch (e) {
-            console.warn('Failed to load custom names', e);
+            console.error('Failed to save automation setting', e);
+            Alert.alert('Fehler', 'Einstellung konnte nicht gespeichert werden.');
+            // Revert optimistic update? (Simplified: we skip complex revert logic for now)
         }
-    };
-
-    const saveCustomNames = async (names: Record<string, string>) => {
-        setCustomNames(names);
-        await AsyncStorage.setItem(CUSTOM_NAMES_KEY, JSON.stringify(names));
-    };
-
-    const saveVisibleAutomations = async (newVisible: string[]) => {
-        setVisibleAutomations(newVisible);
-        await AsyncStorage.setItem(VISIBLE_AUTOMATIONS_KEY, JSON.stringify(newVisible));
     };
 
     const toggleVisibility = (entityId: string) => {
-        if (visibleAutomations.includes(entityId)) {
-            saveVisibleAutomations(visibleAutomations.filter(id => id !== entityId));
-        } else {
-            saveVisibleAutomations([...visibleAutomations, entityId]);
-        }
+        const isCurrentlyVisible = visibleAutomations.includes(entityId);
+        upsertSetting(entityId, { is_visible: !isCurrentlyVisible });
     };
 
     const toggleAutomationState = (entityId: string, currentState: string) => {
@@ -94,23 +150,17 @@ export function AutomationsModal({ visible, onClose }: AutomationsModalProps) {
     const handleRenameSave = () => {
         if (!renameTarget) return;
         const trimmed = renameInput.trim();
-        if (trimmed.length === 0) {
-            // Remove custom name (reset to HA default)
-            const updated = { ...customNames };
-            delete updated[renameTarget.entityId];
-            saveCustomNames(updated);
-        } else {
-            saveCustomNames({ ...customNames, [renameTarget.entityId]: trimmed });
-        }
+        const newName = trimmed.length > 0 ? trimmed : null; // null to reset
+
+        upsertSetting(renameTarget.entityId, { custom_name: newName });
+
         setRenameModalVisible(false);
         setRenameTarget(null);
     };
 
     const handleRenameReset = () => {
         if (!renameTarget) return;
-        const updated = { ...customNames };
-        delete updated[renameTarget.entityId];
-        saveCustomNames(updated);
+        upsertSetting(renameTarget.entityId, { custom_name: null });
         setRenameModalVisible(false);
         setRenameTarget(null);
     };
@@ -257,7 +307,7 @@ export function AutomationsModal({ visible, onClose }: AutomationsModalProps) {
                     <View style={{ backgroundColor: colors.card, borderRadius: 16, padding: 24, width: 320, gap: 16 }}>
                         <Text style={{ color: colors.text, fontSize: 18, fontWeight: 'bold' }}>Name ändern</Text>
                         <Text style={{ color: colors.subtext, fontSize: 13 }}>
-                            Gib einen eigenen Namen für diese Automation ein. Leer lassen für den Standardnamen.
+                            Gib einen eigenen Namen für diese Automation ein. Leer lassen für den Standardnamen. (Gilt für alle Benutzer)
                         </Text>
                         <TextInput
                             style={{
