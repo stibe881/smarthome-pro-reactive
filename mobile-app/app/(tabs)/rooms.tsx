@@ -724,7 +724,7 @@ const CameraTile = memo(({ camera, width, api }: any) => {
 
 const HelperTile = memo(({ entity, api, width, theme }: any) => {
     const { colors } = useTheme();
-    const activeColor = theme ? theme.accentColor : '#8B5CF6';
+    const activeColor = theme ? theme.accentColor : colors.accent;
     const isInputSelect = entity.entity_id.startsWith('input_select.');
     const state = entity.state;
 

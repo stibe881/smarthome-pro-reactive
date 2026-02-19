@@ -1,18 +1,20 @@
 import React from 'react';
-import { View, Text, StyleSheet, Pressable, Image, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Image, ScrollView, Alert, Modal, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useKidsMode } from '../contexts/KidsContext';
-import { useTheme } from '../contexts/ThemeContext';
+import { useKidsMode, KIDS_GENDER_THEMES } from '../contexts/KidsContext';
 import { X, Lightbulb, Music, Thermometer, Moon, Sun, Star } from 'lucide-react-native';
 
 import { useHomeAssistant } from '../contexts/HomeAssistantContext';
 
 export const KidsDashboard: React.FC = () => {
-    const { colors } = useTheme();
     const { setKidsModeActive, config, addScore } = useKidsMode();
     const { entities, toggleLight, callService } = useHomeAssistant();
     const [isCleaning, setIsCleaning] = React.useState(false);
     const [toast, setToast] = React.useState<{ visible: boolean; title: string; message: string; type?: 'info' | 'success' | 'magic' } | null>(null);
+    // Cross-platform PIN prompt state
+    const [pinPromptVisible, setPinPromptVisible] = React.useState(false);
+    const [pinPromptMode, setPinPromptMode] = React.useState<'exit' | 'cleanup'>('exit');
+    const [pinInput, setPinInput] = React.useState('');
 
     const showToast = (title: string, message: string, type: 'info' | 'success' | 'magic' = 'info') => {
         setToast({ visible: true, title, message, type });
@@ -22,55 +24,60 @@ export const KidsDashboard: React.FC = () => {
     // Get active room config
     const roomConfig = config.rooms?.find(r => r.id === config.activeRoomId);
 
+    // Gender-specific colors (theme-independent)
+    const kidsColors = KIDS_GENDER_THEMES[roomConfig?.gender || 'neutral'];
+
     const handleCleanupStart = async () => {
         if (!isCleaning) {
             setIsCleaning(true);
         } else {
             // Require Parental PIN to finish
-            Alert.prompt(
-                "Aufräumen beenden",
-                "Bitte gib den Eltern-PIN ein:",
+            setPinInput('');
+            setPinPromptMode('cleanup');
+            setPinPromptVisible(true);
+        }
+    };
+
+    const handlePinSubmit = () => {
+        if (pinInput !== config.parentalPin) {
+            Alert.alert("Falscher PIN", pinPromptMode === 'cleanup' ? "Hol dir deine Eltern zur Hilfe!" : undefined);
+            setPinInput('');
+            return;
+        }
+
+        setPinPromptVisible(false);
+        setPinInput('');
+
+        if (pinPromptMode === 'exit') {
+            setKidsModeActive(false);
+        } else if (pinPromptMode === 'cleanup') {
+            // Show options for parents
+            Alert.alert(
+                "Eltern-Kontrolle",
+                "Wie möchtest du das Aufräumen bewerten?",
                 [
-                    { text: "Abbrechen", style: "cancel" },
                     {
-                        text: "Bestätigen",
-                        onPress: (input?: string) => {
-                            if (input === config.parentalPin) {
-                                // Show options for parents
-                                Alert.alert(
-                                    "Eltern-Kontrolle",
-                                    "Wie möchtest du das Aufräumen bewerten?",
-                                    [
-                                        {
-                                            text: "Abbrechen (Nichts tun)",
-                                            style: "cancel"
-                                        },
-                                        {
-                                            text: "Abzug (-5 Sterne)",
-                                            style: "destructive",
-                                            onPress: () => {
-                                                setIsCleaning(false);
-                                                addScore(-5);
-                                                Alert.alert("Schade", "Versuch es beim nächsten Mal besser!");
-                                            }
-                                        },
-                                        {
-                                            text: "Bestätigen (+10 Sterne)",
-                                            onPress: () => {
-                                                setIsCleaning(false);
-                                                addScore(10);
-                                                Alert.alert("Super gemacht!", "Du hast 10 Sterne verdient! 🌟");
-                                            }
-                                        }
-                                    ]
-                                );
-                            } else {
-                                Alert.alert("Falscher PIN", "Hol dir deine Eltern zur Hilfe!");
-                            }
+                        text: "Abbrechen (Nichts tun)",
+                        style: "cancel"
+                    },
+                    {
+                        text: "Abzug (-5 Sterne)",
+                        style: "destructive",
+                        onPress: () => {
+                            setIsCleaning(false);
+                            addScore(-5);
+                            Alert.alert("Schade", "Versuch es beim nächsten Mal besser!");
+                        }
+                    },
+                    {
+                        text: "Bestätigen (+10 Sterne)",
+                        onPress: () => {
+                            setIsCleaning(false);
+                            addScore(10);
+                            Alert.alert("Super gemacht!", "Du hast 10 Sterne verdient! 🌟");
                         }
                     }
-                ],
-                "secure-text"
+                ]
             );
         }
     };
@@ -81,24 +88,9 @@ export const KidsDashboard: React.FC = () => {
     const isLightOn = lightEntity?.state === 'on';
 
     const handleExit = () => {
-        Alert.prompt(
-            "Kindermodus beenden",
-            "Bitte gib den PIN ein:",
-            [
-                { text: "Abbrechen", style: "cancel" },
-                {
-                    text: "Bestätigen",
-                    onPress: (input?: string) => {
-                        if (input === config.parentalPin) {
-                            setKidsModeActive(false);
-                        } else {
-                            Alert.alert("Falscher PIN");
-                        }
-                    }
-                }
-            ],
-            "secure-text"
-        );
+        setPinInput('');
+        setPinPromptMode('exit');
+        setPinPromptVisible(true);
     };
 
     const handleScenePress = async (sceneName: string, icon: string, color?: string) => {
@@ -144,7 +136,7 @@ export const KidsDashboard: React.FC = () => {
     };
 
     return (
-        <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+        <SafeAreaView style={[styles.container, { backgroundColor: kidsColors.background }]}>
             {roomConfig.backgroundUri && (
                 <View style={StyleSheet.absoluteFill}>
                     <Image source={{ uri: roomConfig.backgroundUri }} style={styles.backgroundImage} />
@@ -282,6 +274,43 @@ export const KidsDashboard: React.FC = () => {
                     </Pressable>
                 </View>
             )}
+
+            {/* Cross-platform PIN Prompt Modal */}
+            <Modal visible={pinPromptVisible} transparent animationType="fade">
+                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>
+                    <View style={{ backgroundColor: kidsColors.card, borderRadius: 16, padding: 24, width: 300, gap: 16 }}>
+                        <Text style={{ color: kidsColors.text, fontSize: 18, fontWeight: 'bold' }}>
+                            {pinPromptMode === 'exit' ? 'Kindermodus beenden' : 'Aufräumen beenden'}
+                        </Text>
+                        <Text style={{ color: kidsColors.subtext, fontSize: 14 }}>Bitte gib den Eltern-PIN ein:</Text>
+                        <TextInput
+                            style={{ backgroundColor: kidsColors.background, color: kidsColors.text, borderRadius: 8, padding: 12, fontSize: 18, textAlign: 'center', borderWidth: 1, borderColor: kidsColors.border }}
+                            value={pinInput}
+                            onChangeText={setPinInput}
+                            keyboardType="number-pad"
+                            secureTextEntry
+                            maxLength={4}
+                            autoFocus
+                            placeholder="****"
+                            placeholderTextColor={kidsColors.subtext}
+                        />
+                        <View style={{ flexDirection: 'row', gap: 12 }}>
+                            <Pressable
+                                onPress={() => { setPinPromptVisible(false); setPinInput(''); }}
+                                style={{ flex: 1, padding: 12, borderRadius: 8, backgroundColor: kidsColors.background, alignItems: 'center' }}
+                            >
+                                <Text style={{ color: kidsColors.subtext, fontWeight: '600' }}>Abbrechen</Text>
+                            </Pressable>
+                            <Pressable
+                                onPress={handlePinSubmit}
+                                style={{ flex: 1, padding: 12, borderRadius: 8, backgroundColor: kidsColors.accent, alignItems: 'center' }}
+                            >
+                                <Text style={{ color: '#fff', fontWeight: '600' }}>Bestätigen</Text>
+                            </Pressable>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </SafeAreaView>
     );
 };

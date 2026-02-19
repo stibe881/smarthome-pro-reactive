@@ -7,17 +7,17 @@ import { useHomeAssistant } from '../../contexts/HomeAssistantContext';
 import { useTheme, THEMES, ThemeType, AutoThemeConfig, THEME_DISPLAY_NAMES, DARK_THEMES, LIGHT_THEMES } from '../../contexts/ThemeContext';
 import { Wifi, WifiOff, Save, LogOut, User, Server, Key, CheckCircle, XCircle, Shield, Bell, Palette, ChevronRight, LucideIcon, X, ScanFace, MapPin, Smartphone, Search, Calendar, Trash2, Users, Eye, EyeOff, Sun, Moon, Store } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
-import { DashboardConfigModal } from '../../components/DashboardConfigModal';
 import { FamilyManagement } from '../../components/FamilyManagement';
 import { ConnectionWizard } from '../../components/ConnectionWizard';
 import { AutomationsModal } from '../../components/AutomationsModal';
 import { ShoppingLocationsModal } from '../../components/ShoppingLocationsModal';
 import { NotificationTypesManager } from '../../components/NotificationTypesManager';
 import { Activity, ShieldCheck, Zap, Blinds, AlertTriangle, Baby, Plus, Settings as SettingsIcon } from 'lucide-react-native';
-import { useKidsMode } from '../../contexts/KidsContext';
+import { useKidsMode, KIDS_GENDER_THEMES, KidsGender } from '../../contexts/KidsContext';
 import { supabase } from '../../lib/supabase';
 
 // Icon mapping for dynamic notification types
@@ -196,26 +196,26 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
 
     return (
         <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-            <View style={styles.modalContainer}>
-                <View style={styles.modalHeader}>
-                    <Text style={styles.modalTitle}>Benachrichtigungen</Text>
-                    <Pressable onPress={onClose} style={styles.closeButton}>
-                        <X size={24} color="#94A3B8" />
+            <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+                <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+                    <Text style={[styles.modalTitle, { color: colors.text }]}>Benachrichtigungen</Text>
+                    <Pressable onPress={onClose} style={[styles.closeButton, { backgroundColor: colors.border }]}>
+                        <X size={24} color={colors.subtext} />
                     </Pressable>
                 </View>
 
                 <ScrollView style={[styles.modalContent, { backgroundColor: colors.background }]}>
 
-                    <View style={styles.settingGroup}>
+                    <View style={[styles.settingGroup, { backgroundColor: colors.card, borderColor: colors.border }]}>
                         <View style={styles.settingRow}>
                             <View style={{ flex: 1 }}>
-                                <Text style={styles.settingLabel}>Alle Benachrichtigungen</Text>
-                                <Text style={styles.settingDescription}>Globaler Schalter für deinen Account</Text>
+                                <Text style={[styles.settingLabel, { color: colors.text }]}>Alle Benachrichtigungen</Text>
+                                <Text style={[styles.settingDescription, { color: colors.subtext }]}>Globaler Schalter für deinen Account</Text>
                             </View>
                             <Switch
                                 value={notificationSettings.enabled}
                                 onValueChange={toggleEnabled}
-                                trackColor={{ false: '#334155', true: '#3B82F6' }}
+                                trackColor={{ false: colors.border, true: colors.accent }}
                                 thumbColor={'#fff'}
                             />
                         </View>
@@ -225,8 +225,8 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
                         <>
                             {/* ===== DYNAMISCHE PUSH-KATEGORIEN AUS DB ===== */}
                             {dynamicTypes.length > 0 && (
-                                <View style={styles.settingGroup}>
-                                    <Text style={styles.groupTitle}>PUSH-BENACHRICHTIGUNGEN</Text>
+                                <View style={[styles.settingGroup, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                                    <Text style={[styles.groupTitle, { color: colors.subtext }]}>PUSH-BENACHRICHTIGUNGEN</Text>
                                     {dynamicTypes.map((dtype, index) => {
                                         const IconComp = DYNAMIC_ICON_MAP[dtype.icon] || Bell;
                                         const isEnabled = userPrefs[dtype.id] ?? true;
@@ -235,22 +235,22 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
                                                 key={dtype.id}
                                                 style={[
                                                     styles.settingRow,
-                                                    index > 0 && { borderTopWidth: 1, borderTopColor: '#1E293B' }
+                                                    index > 0 && { borderTopWidth: 1, borderTopColor: colors.border }
                                                 ]}
                                             >
                                                 <View style={[styles.iconBadge, { backgroundColor: dtype.color + '25' }]}>
                                                     <IconComp size={20} color={dtype.color} />
                                                 </View>
                                                 <View style={{ flex: 1, marginLeft: 12 }}>
-                                                    <Text style={styles.settingLabel}>{dtype.name}</Text>
+                                                    <Text style={[styles.settingLabel, { color: colors.text }]}>{dtype.name}</Text>
                                                     {dtype.description && (
-                                                        <Text style={styles.settingDescription}>{dtype.description}</Text>
+                                                        <Text style={[styles.settingDescription, { color: colors.subtext }]}>{dtype.description}</Text>
                                                     )}
                                                 </View>
                                                 <Switch
                                                     value={isEnabled}
                                                     onValueChange={() => toggleDynamicPref(dtype.id)}
-                                                    trackColor={{ false: '#334155', true: '#3B82F6' }}
+                                                    trackColor={{ false: colors.border, true: colors.accent }}
                                                     thumbColor={'#fff'}
                                                 />
                                             </View>
@@ -265,24 +265,24 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
                         </>
                     )}
 
-                    <View style={styles.settingGroup}>
-                        <Text style={styles.groupTitle}>DIAGNOSE</Text>
+                    <View style={[styles.settingGroup, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                        <Text style={[styles.groupTitle, { color: colors.subtext }]}>DIAGNOSE</Text>
                         <View style={{ marginBottom: 16 }}>
-                            <Text style={styles.settingLabel}>Push Token (Tippen zum Kopieren)</Text>
+                            <Text style={[styles.settingLabel, { color: colors.text }]}>Push Token (Tippen zum Kopieren)</Text>
                             <Pressable onPress={async () => {
                                 if (token) {
                                     await Clipboard.setStringAsync(token);
                                     Alert.alert("Kopiert", "Token in Zwischenablage kopiert!");
                                 }
                             }}>
-                                <Text style={[styles.settingDescription, { fontSize: 11, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', color: '#3B82F6' }]} numberOfLines={2}>
+                                <Text style={[styles.settingDescription, { fontSize: 11, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', color: colors.accent }]} numberOfLines={2}>
                                     {token || "Wird geladen..."}
                                 </Text>
                             </Pressable>
                         </View>
 
                         <Pressable
-                            style={[styles.saveButton, { backgroundColor: '#334155' }]}
+                            style={[styles.saveButton, { backgroundColor: colors.border }]}
                             onPress={testPush}
                             disabled={isTesting}
                         >
@@ -293,8 +293,8 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
 
                     {/* Admin: Benachrichtigungen verwalten */}
                     {userRole === 'admin' && (
-                        <View style={styles.settingGroup}>
-                            <Text style={styles.groupTitle}>ADMIN</Text>
+                        <View style={[styles.settingGroup, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                            <Text style={[styles.groupTitle, { color: colors.subtext }]}>ADMIN</Text>
                             <Pressable
                                 onPress={() => setShowManager(true)}
                                 style={[styles.saveButton, { backgroundColor: colors.accent }]}
@@ -305,8 +305,8 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
                         </View>
                     )}
 
-                    <View style={styles.infoBox}>
-                        <Text style={styles.infoText}>
+                    <View style={[styles.infoBox, { backgroundColor: colors.accent + '15' }]}>
+                        <Text style={[styles.infoText, { color: colors.accent }]}>
                             Hinweis: Deine Einstellungen gelten für deinen Account
                             und werden auf allen Geräten synchronisiert.
                         </Text>
@@ -443,32 +443,56 @@ const RoomConfigScreen = ({ room, onBack, updateRoom, deleteRoom, resetScore, en
 
     return (
         <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onBack}>
-            <View style={styles.modalContainer}>
-                <View style={styles.modalHeader}>
-                    <Pressable onPress={onBack} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                        <ChevronRight size={24} color={colors.accent} style={{ transform: [{ rotate: '180deg' }] }} />
-                        <Text style={[styles.modalTitle, { color: colors.text }]}>{room.name}</Text>
-                    </Pressable>
-                    <Pressable onPress={handleDelete} style={{ padding: 8 }}>
-                        <Trash2 size={20} color={colors.error} />
+            <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+                <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+                    <Text style={[styles.modalTitle, { color: colors.text }]}>{room.name}</Text>
+                    <Pressable onPress={onBack} style={{ padding: 8, backgroundColor: colors.border, borderRadius: 20 }}>
+                        <X size={20} color={colors.subtext} />
                     </Pressable>
                 </View>
 
                 <ScrollView style={[styles.modalContent, { backgroundColor: colors.background }]}>
-                    <View style={styles.settingGroup}>
-                        <Text style={styles.groupTitle}>INFO</Text>
+                    <View style={[styles.settingGroup, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                        <Text style={[styles.groupTitle, { color: colors.subtext }]}>INFO</Text>
                         <View style={styles.inputGroup}>
-                            <Text style={styles.inputLabel}>Name</Text>
+                            <Text style={[styles.inputLabel, { color: colors.subtext }]}>Name</Text>
                             <TextInput
-                                style={[styles.input, { backgroundColor: colors.card, color: colors.text }]}
+                                style={[styles.input, { backgroundColor: colors.background, color: colors.text, borderWidth: 1, borderColor: colors.border }]}
                                 value={room.name}
                                 onChangeText={(val) => updateRoom(room.id, { name: val })}
                             />
                         </View>
                         <View style={styles.inputGroup}>
-                            <Text style={styles.inputLabel}>Hintergrund URL</Text>
+                            <Text style={[styles.inputLabel, { color: colors.subtext }]}>Design</Text>
+                            <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
+                                {(['girl', 'boy', 'neutral'] as KidsGender[]).map((g) => {
+                                    const theme = KIDS_GENDER_THEMES[g];
+                                    const isSelected = (room.gender || 'neutral') === g;
+                                    return (
+                                        <Pressable
+                                            key={g}
+                                            onPress={() => updateRoom(room.id, { gender: g })}
+                                            style={{
+                                                flex: 1,
+                                                paddingVertical: 10,
+                                                borderRadius: 10,
+                                                alignItems: 'center',
+                                                backgroundColor: isSelected ? theme.primary + '30' : colors.background,
+                                                borderWidth: 2,
+                                                borderColor: isSelected ? theme.primary : colors.border,
+                                            }}
+                                        >
+                                            <Text style={{ fontSize: 22, marginBottom: 2 }}>{theme.emoji}</Text>
+                                            <Text style={{ color: isSelected ? theme.primary : colors.subtext, fontSize: 11, fontWeight: '600' }}>{theme.label}</Text>
+                                        </Pressable>
+                                    );
+                                })}
+                            </View>
+                        </View>
+                        <View style={styles.inputGroup}>
+                            <Text style={[styles.inputLabel, { color: colors.subtext }]}>Hintergrund URL</Text>
                             <TextInput
-                                style={[styles.input, { backgroundColor: colors.card, color: colors.text }]}
+                                style={[styles.input, { backgroundColor: colors.background, color: colors.text, borderWidth: 1, borderColor: colors.border }]}
                                 value={room.backgroundUri}
                                 onChangeText={(val) => updateRoom(room.id, { backgroundUri: val })}
                                 placeholder="https://..."
@@ -477,8 +501,8 @@ const RoomConfigScreen = ({ room, onBack, updateRoom, deleteRoom, resetScore, en
                         </View>
                     </View>
 
-                    <View style={styles.settingGroup}>
-                        <Text style={styles.groupTitle}>GERÄTE-ZUWEISUNG</Text>
+                    <View style={[styles.settingGroup, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                        <Text style={[styles.groupTitle, { color: colors.subtext }]}>GERÄTE-ZUWEISUNG</Text>
                         <EntitySelector
                             label="Licht"
                             value={room.lightEntity || ''}
@@ -502,21 +526,21 @@ const RoomConfigScreen = ({ room, onBack, updateRoom, deleteRoom, resetScore, en
                         />
                     </View>
 
-                    <View style={styles.settingGroup}>
-                        <Text style={styles.groupTitle}>BESCHRÄNKUNGEN</Text>
+                    <View style={[styles.settingGroup, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                        <Text style={[styles.groupTitle, { color: colors.subtext }]}>BESCHRÄNKUNGEN</Text>
                         <View style={styles.settingRow}>
                             <View>
-                                <Text style={styles.settingLabel}>Max. Lautstärke ({(room.volumeLimit * 100).toFixed(0)}%)</Text>
+                                <Text style={[styles.settingLabel, { color: colors.text }]}>Max. Lautstärke ({(room.volumeLimit * 100).toFixed(0)}%)</Text>
                             </View>
                         </View>
                     </View>
 
-                    <View style={styles.settingGroup}>
-                        <Text style={styles.groupTitle}>BELOHNUNGSSYSTEM</Text>
+                    <View style={[styles.settingGroup, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                        <Text style={[styles.groupTitle, { color: colors.subtext }]}>BELOHNUNGSSYSTEM</Text>
                         <View style={styles.settingRow}>
                             <View>
-                                <Text style={styles.settingLabel}>Aktuelle Sterne</Text>
-                                <Text style={styles.settingDescription}>{room.score || 0} Sterne gesammelt</Text>
+                                <Text style={[styles.settingLabel, { color: colors.text }]}>Aktuelle Sterne</Text>
+                                <Text style={[styles.settingDescription, { color: colors.subtext }]}>⭐ {room.score || 0} Sterne gesammelt</Text>
                             </View>
                             <Pressable
                                 onPress={handleResetScore}
@@ -526,6 +550,28 @@ const RoomConfigScreen = ({ room, onBack, updateRoom, deleteRoom, resetScore, en
                             </Pressable>
                         </View>
                     </View>
+
+                    {/* Delete Room Button */}
+                    <Pressable
+                        onPress={handleDelete}
+                        style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 8,
+                            padding: 16,
+                            marginHorizontal: 16,
+                            marginTop: 8,
+                            marginBottom: 40,
+                            borderRadius: 12,
+                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                            borderWidth: 1,
+                            borderColor: 'rgba(239, 68, 68, 0.3)',
+                        }}
+                    >
+                        <Trash2 size={18} color="#EF4444" />
+                        <Text style={{ color: '#EF4444', fontWeight: '600', fontSize: 16 }}>Zimmer löschen</Text>
+                    </Pressable>
                 </ScrollView>
             </View>
         </Modal>
@@ -551,41 +597,81 @@ const SettingsSection = ({ title, children, colors }: SettingsSectionProps) => (
 
 const KidsSettingsModal = ({ visible, onClose }: { visible: boolean; onClose: () => void }) => {
     const { colors } = useTheme();
-    const { config, updateConfig, isKidsModeActive, setKidsModeActive, addRoom, updateRoom, deleteRoom, resetScore } = useKidsMode();
+    const router = useRouter();
+    const { config, updateConfig, isKidsModeActive, setKidsModeActive, addRoom, updateRoom, deleteRoom, resetScore, selectRoom } = useKidsMode();
     const { entities } = useHomeAssistant();
     const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
+    // Custom prompts (cross-platform replacement for Alert.prompt)
+    const [showPinPrompt, setShowPinPrompt] = useState(false);
+    const [pinInput, setPinInput] = useState('');
+    const [showAddRoomPrompt, setShowAddRoomPrompt] = useState(false);
+    const [newRoomName, setNewRoomName] = useState('');
+    const [newRoomGender, setNewRoomGender] = useState<KidsGender>('neutral');
+    const [showRoomSelection, setShowRoomSelection] = useState(false);
 
     const toggleKidsMode = () => {
         if (!isKidsModeActive) {
-            setKidsModeActive(true);
-            onClose();
+            // Check: no rooms configured?
+            if (config.rooms.length === 0) {
+                Alert.alert(
+                    "Kein Kinderzimmer",
+                    "Bitte konfiguriere zuerst ein Kinderzimmer, bevor du den Kindermodus aktivierst."
+                );
+                return;
+            }
+            // If only 1 room, activate directly with that room
+            if (config.rooms.length === 1) {
+                activateWithRoom(config.rooms[0].id);
+            } else {
+                // Show room selection
+                setShowRoomSelection(true);
+            }
         } else {
-            Alert.prompt(
-                "Kindermodus beenden",
-                "Bitte gib den PIN ein:",
-                [
-                    { text: "Abbrechen", style: "cancel" },
-                    {
-                        text: "Bestätigen",
-                        onPress: (input?: string) => {
-                            if (input === config.parentalPin) {
-                                setKidsModeActive(false);
-                            } else {
-                                Alert.alert("Falscher PIN");
-                            }
-                        }
-                    }
-                ],
-                "secure-text"
+            // Deactivate: ask for PIN
+            setPinInput('');
+            setShowPinPrompt(true);
+        }
+    };
+
+    const activateWithRoom = async (roomId: string) => {
+        await selectRoom(roomId);
+        await setKidsModeActive(true);
+        setShowRoomSelection(false);
+        onClose();
+        // Navigate to Home tab so the kid sees the dashboard immediately
+        router.replace('/(tabs)');
+        const room = config.rooms.find(r => r.id === roomId);
+        setTimeout(() => {
+            Alert.alert(
+                "Kindermodus aktiv 🧒",
+                `Das Zimmer "${room?.name || 'Kinderzimmer'}" ist jetzt aktiv.\n\nSo beendest du den Kindermodus:\n• Dashboard: ✕ oben rechts lange drücken\n• Oder: Einstellungen → Kindermodus → PIN eingeben`
             );
+        }, 300);
+    };
+
+    const handlePinSubmit = () => {
+        if (pinInput === config.parentalPin) {
+            setKidsModeActive(false);
+            setShowPinPrompt(false);
+            setPinInput('');
+        } else {
+            Alert.alert("Falscher PIN");
+            setPinInput('');
         }
     };
 
     const handleAddRoom = () => {
-        Alert.prompt("Neues Zimmer", "Name des Zimmers:", [
-            { text: "Abbrechen", style: "cancel" },
-            { text: "Hinzufügen", onPress: (name: string | undefined) => name && addRoom(name) }
-        ]);
+        setNewRoomName('');
+        setNewRoomGender('neutral');
+        setShowAddRoomPrompt(true);
+    };
+
+    const handleAddRoomSubmit = () => {
+        if (newRoomName.trim()) {
+            addRoom(newRoomName.trim(), newRoomGender);
+            setShowAddRoomPrompt(false);
+            setNewRoomName('');
+        }
     };
 
     const editingRoom = config.rooms.find(r => r.id === editingRoomId);
@@ -593,10 +679,10 @@ const KidsSettingsModal = ({ visible, onClose }: { visible: boolean; onClose: ()
     return (
         <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
             <View style={styles.modalContainer}>
-                <View style={styles.modalHeader}>
-                    <Text style={styles.modalTitle}>Kindermodus</Text>
-                    <Pressable onPress={onClose} style={styles.closeButton}>
-                        <X size={24} color="#94A3B8" />
+                <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+                    <Text style={[styles.modalTitle, { color: colors.text }]}>Kindermodus</Text>
+                    <Pressable onPress={onClose} style={[styles.closeButton, { backgroundColor: colors.card }]}>
+                        <X size={24} color={colors.subtext} />
                     </Pressable>
                 </View>
 
@@ -604,14 +690,19 @@ const KidsSettingsModal = ({ visible, onClose }: { visible: boolean; onClose: ()
                     <SettingsSection title="STATUS" colors={colors}>
                         <View style={styles.settingRow}>
                             <View style={{ flex: 1 }}>
-                                <Text style={styles.settingLabel}>Aktivieren</Text>
-                                <Text style={styles.settingDescription}>Sperrt die App für Kinder</Text>
+                                <Text style={[styles.settingLabel, { color: colors.text }]}>Aktivieren</Text>
+                                <Text style={[styles.settingDescription, { color: colors.subtext }]}>
+                                    {config.rooms.length === 0
+                                        ? 'Erst ein Zimmer konfigurieren'
+                                        : 'Sperrt die App für Kinder'}
+                                </Text>
                             </View>
                             <Switch
                                 value={isKidsModeActive}
                                 onValueChange={toggleKidsMode}
-                                trackColor={{ false: '#334155', true: '#10B981' }}
+                                trackColor={{ false: colors.border, true: colors.accent }}
                                 thumbColor={'#fff'}
+                                disabled={config.rooms.length === 0 && !isKidsModeActive}
                             />
                         </View>
                     </SettingsSection>
@@ -658,7 +749,7 @@ const KidsSettingsModal = ({ visible, onClose }: { visible: boolean; onClose: ()
                                 borderTopColor: colors.border + '50'
                             }}
                         >
-                            <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.05)', justifyContent: 'center', alignItems: 'center' }}>
+                            <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.accent + '10', justifyContent: 'center', alignItems: 'center' }}>
                                 <Plus size={20} color={colors.accent} />
                             </View>
                             <Text style={{ color: colors.accent, fontSize: 16, fontWeight: '600' }}>Zimmer hinzufügen</Text>
@@ -667,9 +758,9 @@ const KidsSettingsModal = ({ visible, onClose }: { visible: boolean; onClose: ()
 
                     <SettingsSection title="ELTERN-EINSTELLUNGEN" colors={colors}>
                         <View style={styles.inputGroup}>
-                            <Text style={styles.inputLabel}>Parental PIN</Text>
+                            <Text style={[styles.inputLabel, { color: colors.subtext }]}>Parental PIN</Text>
                             <TextInput
-                                style={[styles.input, { backgroundColor: colors.card, color: colors.text }]}
+                                style={[styles.input, { backgroundColor: colors.card, color: colors.text, borderColor: colors.border }]}
                                 value={config.parentalPin}
                                 onChangeText={(val) => updateConfig({ parentalPin: val })}
                                 keyboardType="number-pad"
@@ -694,6 +785,133 @@ const KidsSettingsModal = ({ visible, onClose }: { visible: boolean; onClose: ()
                     colors={colors}
                 />
             )}
+
+            {/* PIN Prompt Modal (cross-platform) */}
+            <Modal visible={showPinPrompt} transparent animationType="fade">
+                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>
+                    <View style={{ backgroundColor: colors.card, borderRadius: 16, padding: 24, width: 300, gap: 16 }}>
+                        <Text style={{ color: colors.text, fontSize: 18, fontWeight: 'bold' }}>Kindermodus beenden</Text>
+                        <Text style={{ color: colors.subtext, fontSize: 14 }}>Bitte gib den PIN ein:</Text>
+                        <TextInput
+                            style={{ backgroundColor: colors.background, color: colors.text, borderRadius: 8, padding: 12, fontSize: 18, textAlign: 'center', borderWidth: 1, borderColor: colors.border }}
+                            value={pinInput}
+                            onChangeText={setPinInput}
+                            keyboardType="number-pad"
+                            secureTextEntry
+                            maxLength={4}
+                            autoFocus
+                            placeholder="****"
+                            placeholderTextColor={colors.subtext}
+                        />
+                        <View style={{ flexDirection: 'row', gap: 12 }}>
+                            <Pressable
+                                onPress={() => { setShowPinPrompt(false); setPinInput(''); }}
+                                style={{ flex: 1, padding: 12, borderRadius: 8, backgroundColor: colors.background, alignItems: 'center' }}
+                            >
+                                <Text style={{ color: colors.subtext, fontWeight: '600' }}>Abbrechen</Text>
+                            </Pressable>
+                            <Pressable
+                                onPress={handlePinSubmit}
+                                style={{ flex: 1, padding: 12, borderRadius: 8, backgroundColor: colors.accent, alignItems: 'center' }}
+                            >
+                                <Text style={{ color: '#fff', fontWeight: '600' }}>Bestätigen</Text>
+                            </Pressable>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Add Room Prompt Modal (cross-platform) */}
+            <Modal visible={showAddRoomPrompt} transparent animationType="fade">
+                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>
+                    <View style={{ backgroundColor: colors.card, borderRadius: 16, padding: 24, width: 320, gap: 16 }}>
+                        <Text style={{ color: colors.text, fontSize: 18, fontWeight: 'bold' }}>Neues Zimmer</Text>
+                        <Text style={{ color: colors.subtext, fontSize: 14 }}>Name des Zimmers:</Text>
+                        <TextInput
+                            style={{ backgroundColor: colors.background, color: colors.text, borderRadius: 8, padding: 12, fontSize: 16, borderWidth: 1, borderColor: colors.border }}
+                            value={newRoomName}
+                            onChangeText={setNewRoomName}
+                            autoFocus
+                            placeholder="z.B. Kinderzimmer Mia"
+                            placeholderTextColor={colors.subtext}
+                        />
+                        <Text style={{ color: colors.subtext, fontSize: 14 }}>Design:</Text>
+                        <View style={{ flexDirection: 'row', gap: 10 }}>
+                            {(['girl', 'boy', 'neutral'] as KidsGender[]).map((g) => {
+                                const theme = KIDS_GENDER_THEMES[g];
+                                const isSelected = newRoomGender === g;
+                                return (
+                                    <Pressable
+                                        key={g}
+                                        onPress={() => setNewRoomGender(g)}
+                                        style={{
+                                            flex: 1,
+                                            paddingVertical: 12,
+                                            borderRadius: 10,
+                                            alignItems: 'center',
+                                            backgroundColor: isSelected ? theme.primary + '30' : colors.background,
+                                            borderWidth: 2,
+                                            borderColor: isSelected ? theme.primary : colors.border,
+                                        }}
+                                    >
+                                        <Text style={{ fontSize: 24, marginBottom: 4 }}>{theme.emoji}</Text>
+                                        <Text style={{ color: isSelected ? theme.primary : colors.subtext, fontSize: 12, fontWeight: '600' }}>{theme.label}</Text>
+                                    </Pressable>
+                                );
+                            })}
+                        </View>
+                        <View style={{ flexDirection: 'row', gap: 12 }}>
+                            <Pressable
+                                onPress={() => setShowAddRoomPrompt(false)}
+                                style={{ flex: 1, padding: 12, borderRadius: 8, backgroundColor: colors.background, alignItems: 'center' }}
+                            >
+                                <Text style={{ color: colors.subtext, fontWeight: '600' }}>Abbrechen</Text>
+                            </Pressable>
+                            <Pressable
+                                onPress={handleAddRoomSubmit}
+                                style={{ flex: 1, padding: 12, borderRadius: 8, backgroundColor: colors.accent, alignItems: 'center' }}
+                            >
+                                <Text style={{ color: '#fff', fontWeight: '600' }}>Hinzufügen</Text>
+                            </Pressable>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Room Selection Modal */}
+            <Modal visible={showRoomSelection} transparent animationType="fade">
+                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>
+                    <View style={{ backgroundColor: colors.card, borderRadius: 16, padding: 24, width: 320, gap: 16 }}>
+                        <Text style={{ color: colors.text, fontSize: 18, fontWeight: 'bold' }}>Zimmer auswählen</Text>
+                        <Text style={{ color: colors.subtext, fontSize: 14 }}>Welches Kinderzimmer möchtest du aktivieren?</Text>
+                        {config.rooms.map(room => (
+                            <Pressable
+                                key={room.id}
+                                onPress={() => activateWithRoom(room.id)}
+                                style={({ pressed }) => ({
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    gap: 12,
+                                    padding: 14,
+                                    borderRadius: 10,
+                                    backgroundColor: pressed ? colors.accent + '20' : colors.background,
+                                    borderWidth: 1,
+                                    borderColor: colors.border,
+                                })}
+                            >
+                                <Baby size={22} color={colors.accent} />
+                                <Text style={{ color: colors.text, fontSize: 16, fontWeight: '600' }}>{room.name}</Text>
+                            </Pressable>
+                        ))}
+                        <Pressable
+                            onPress={() => setShowRoomSelection(false)}
+                            style={{ padding: 12, borderRadius: 8, backgroundColor: colors.background, alignItems: 'center' }}
+                        >
+                            <Text style={{ color: colors.subtext, fontWeight: '600' }}>Abbrechen</Text>
+                        </Pressable>
+                    </View>
+                </View>
+            </Modal>
         </Modal>
     );
 };
@@ -832,7 +1050,6 @@ export default function Settings() {
     const [isSaving, setIsSaving] = useState(false);
     const [testResult, setTestResult] = useState<'success' | 'error' | null>(null);
     const [notificationModalVisible, setNotificationModalVisible] = useState(false);
-    const [configModalVisible, setConfigModalVisible] = useState(false); // Restored
     const [automationsModalVisible, setAutomationsModalVisible] = useState(false);
 
     // ... existing ...
@@ -843,6 +1060,7 @@ export default function Settings() {
     const [kidsModalVisible, setKidsModalVisible] = useState(false);
     const [showWizard, setShowWizard] = useState(false);
     const [shoppingLocationsVisible, setShoppingLocationsVisible] = useState(false);
+    const [isDesignExpanded, setIsDesignExpanded] = useState(false);
 
     // Effect to update status bar style based on theme
     useEffect(() => {
@@ -1072,105 +1290,117 @@ export default function Settings() {
 
                         {/* THEME SELECTION */}
                         <View style={styles.section}>
-                            <Text style={[styles.sectionTitle, { color: colors.subtext }]}>DESIGN</Text>
-                            <Text style={{ color: colors.subtext, fontSize: 12, fontWeight: '600', marginBottom: 8, letterSpacing: 0.5 }}>DARK THEMES</Text>
-                            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -4, paddingHorizontal: 4, paddingBottom: 8 }}>
-                                {DARK_THEMES.map((t) => (
-                                    <ThemeCard key={t} itemTheme={t} />
-                                ))}
-                            </ScrollView>
-                            <Text style={{ color: colors.subtext, fontSize: 12, fontWeight: '600', marginBottom: 8, marginTop: 8, letterSpacing: 0.5 }}>LIGHT THEMES</Text>
-                            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -4, paddingHorizontal: 4, paddingBottom: 8 }}>
-                                {LIGHT_THEMES.map((t) => (
-                                    <ThemeCard key={t} itemTheme={t} />
-                                ))}
-                            </ScrollView>
-
-                            {/* Auto Theme Toggle */}
-                            <View style={{
-                                flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-                                backgroundColor: colors.card, borderRadius: 16, padding: 16, marginTop: 16,
-                                borderWidth: 1, borderColor: colors.border,
-                            }}>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
-                                    <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: autoTheme.enabled ? '#F59E0B' : 'rgba(255,255,255,0.05)', alignItems: 'center', justifyContent: 'center' }}>
-                                        {autoTheme.enabled ? <Sun size={20} color="#FFF" /> : <Moon size={20} color={colors.subtext} />}
-                                    </View>
-                                    <View style={{ flex: 1 }}>
-                                        <Text style={{ color: colors.text, fontSize: 15, fontWeight: '600' }}>Automatischer Wechsel</Text>
-                                        <Text style={{ color: colors.subtext, fontSize: 12, marginTop: 2 }}>Theme nach Sonnenauf-/untergang</Text>
-                                    </View>
-                                </View>
-                                <Switch
-                                    value={autoTheme.enabled}
-                                    onValueChange={(val) => setAutoTheme({ ...autoTheme, enabled: val })}
-                                    trackColor={{ false: '#334155', true: '#F59E0B' }}
-                                    thumbColor="#FFF"
+                            <Pressable
+                                onPress={() => setIsDesignExpanded(!isDesignExpanded)}
+                                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 4 }}
+                            >
+                                <Text style={[styles.sectionTitle, { color: colors.subtext, marginBottom: 0 }]}>DESIGN</Text>
+                                <ChevronRight
+                                    size={18}
+                                    color={colors.subtext}
+                                    style={{ transform: [{ rotate: isDesignExpanded ? '90deg' : '0deg' }] }}
                                 />
-                            </View>
+                            </Pressable>
+                            {isDesignExpanded && (<>
+                                <Text style={{ color: colors.subtext, fontSize: 12, fontWeight: '600', marginBottom: 8, letterSpacing: 0.5 }}>DARK THEMES</Text>
+                                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -4, paddingHorizontal: 4, paddingBottom: 8 }}>
+                                    {DARK_THEMES.map((t) => (
+                                        <ThemeCard key={t} itemTheme={t} />
+                                    ))}
+                                </ScrollView>
+                                <Text style={{ color: colors.subtext, fontSize: 12, fontWeight: '600', marginBottom: 8, marginTop: 8, letterSpacing: 0.5 }}>LIGHT THEMES</Text>
+                                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -4, paddingHorizontal: 4, paddingBottom: 8 }}>
+                                    {LIGHT_THEMES.map((t) => (
+                                        <ThemeCard key={t} itemTheme={t} />
+                                    ))}
+                                </ScrollView>
 
-                            {/* Day/Night Theme Pickers */}
-                            {autoTheme.enabled && (
-                                <View style={{ marginTop: 12, gap: 12 }}>
-                                    {/* Day Theme */}
-                                    <View>
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                                            <Sun size={14} color="#F59E0B" />
-                                            <Text style={{ color: colors.subtext, fontSize: 13, fontWeight: '600' }}>Tagsüber (nach Sonnenaufgang)</Text>
+                                {/* Auto Theme Toggle */}
+                                <View style={{
+                                    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                                    backgroundColor: colors.card, borderRadius: 16, padding: 16, marginTop: 16,
+                                    borderWidth: 1, borderColor: colors.border,
+                                }}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
+                                        <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: autoTheme.enabled ? '#F59E0B' : 'rgba(255,255,255,0.05)', alignItems: 'center', justifyContent: 'center' }}>
+                                            {autoTheme.enabled ? <Sun size={20} color="#FFF" /> : <Moon size={20} color={colors.subtext} />}
                                         </View>
-                                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -4, paddingHorizontal: 4 }}>
-                                            {([...DARK_THEMES, ...LIGHT_THEMES]).map((t) => {
-                                                const isActive = autoTheme.dayTheme === t;
-                                                const tc = THEMES[t];
-                                                return (
-                                                    <Pressable key={t} onPress={() => setAutoTheme({ ...autoTheme, dayTheme: t })} style={{
-                                                        marginRight: 8, width: 72, height: 100, borderRadius: 12,
-                                                        backgroundColor: tc.card, borderWidth: isActive ? 2 : 1,
-                                                        borderColor: isActive ? '#F59E0B' : tc.border, overflow: 'hidden',
-                                                    }}>
-                                                        <View style={{ flex: 1, backgroundColor: tc.background, alignItems: 'center', justifyContent: 'center' }}>
-                                                            <View style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: tc.accent }} />
-                                                        </View>
-                                                        <View style={{ padding: 6, backgroundColor: tc.card }}>
-                                                            <Text style={{ color: tc.text, fontSize: 9, fontWeight: '600', textAlign: 'center' }}>{THEME_DISPLAY_NAMES[t]}</Text>
-                                                        </View>
-                                                        {isActive && <View style={{ position: 'absolute', top: 4, right: 4, backgroundColor: '#F59E0B', borderRadius: 8, padding: 1 }}><CheckCircle size={10} color="#FFF" /></View>}
-                                                    </Pressable>
-                                                );
-                                            })}
-                                        </ScrollView>
-                                    </View>
-
-                                    {/* Night Theme */}
-                                    <View>
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                                            <Moon size={14} color="#818CF8" />
-                                            <Text style={{ color: colors.subtext, fontSize: 13, fontWeight: '600' }}>Nachts (nach Sonnenuntergang)</Text>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={{ color: colors.text, fontSize: 15, fontWeight: '600' }}>Automatischer Wechsel</Text>
+                                            <Text style={{ color: colors.subtext, fontSize: 12, marginTop: 2 }}>Theme nach Sonnenauf-/untergang</Text>
                                         </View>
-                                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -4, paddingHorizontal: 4 }}>
-                                            {([...DARK_THEMES, ...LIGHT_THEMES]).map((t) => {
-                                                const isActive = autoTheme.nightTheme === t;
-                                                const tc = THEMES[t];
-                                                return (
-                                                    <Pressable key={t} onPress={() => setAutoTheme({ ...autoTheme, nightTheme: t })} style={{
-                                                        marginRight: 8, width: 72, height: 100, borderRadius: 12,
-                                                        backgroundColor: tc.card, borderWidth: isActive ? 2 : 1,
-                                                        borderColor: isActive ? '#818CF8' : tc.border, overflow: 'hidden',
-                                                    }}>
-                                                        <View style={{ flex: 1, backgroundColor: tc.background, alignItems: 'center', justifyContent: 'center' }}>
-                                                            <View style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: tc.accent }} />
-                                                        </View>
-                                                        <View style={{ padding: 6, backgroundColor: tc.card }}>
-                                                            <Text style={{ color: tc.text, fontSize: 9, fontWeight: '600', textAlign: 'center' }}>{THEME_DISPLAY_NAMES[t]}</Text>
-                                                        </View>
-                                                        {isActive && <View style={{ position: 'absolute', top: 4, right: 4, backgroundColor: '#818CF8', borderRadius: 8, padding: 1 }}><CheckCircle size={10} color="#FFF" /></View>}
-                                                    </Pressable>
-                                                );
-                                            })}
-                                        </ScrollView>
                                     </View>
+                                    <Switch
+                                        value={autoTheme.enabled}
+                                        onValueChange={(val) => setAutoTheme({ ...autoTheme, enabled: val })}
+                                        trackColor={{ false: colors.border, true: '#F59E0B' }}
+                                        thumbColor="#FFF"
+                                    />
                                 </View>
-                            )}
+
+                                {/* Day/Night Theme Pickers */}
+                                {autoTheme.enabled && (
+                                    <View style={{ marginTop: 12, gap: 12 }}>
+                                        {/* Day Theme */}
+                                        <View>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                                                <Sun size={14} color="#F59E0B" />
+                                                <Text style={{ color: colors.subtext, fontSize: 13, fontWeight: '600' }}>Tagsüber (nach Sonnenaufgang)</Text>
+                                            </View>
+                                            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -4, paddingHorizontal: 4 }}>
+                                                {([...DARK_THEMES, ...LIGHT_THEMES]).map((t) => {
+                                                    const isActive = autoTheme.dayTheme === t;
+                                                    const tc = THEMES[t];
+                                                    return (
+                                                        <Pressable key={t} onPress={() => setAutoTheme({ ...autoTheme, dayTheme: t })} style={{
+                                                            marginRight: 8, width: 72, height: 100, borderRadius: 12,
+                                                            backgroundColor: tc.card, borderWidth: isActive ? 2 : 1,
+                                                            borderColor: isActive ? '#F59E0B' : tc.border, overflow: 'hidden',
+                                                        }}>
+                                                            <View style={{ flex: 1, backgroundColor: tc.background, alignItems: 'center', justifyContent: 'center' }}>
+                                                                <View style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: tc.accent }} />
+                                                            </View>
+                                                            <View style={{ padding: 6, backgroundColor: tc.card }}>
+                                                                <Text style={{ color: tc.text, fontSize: 9, fontWeight: '600', textAlign: 'center' }}>{THEME_DISPLAY_NAMES[t]}</Text>
+                                                            </View>
+                                                            {isActive && <View style={{ position: 'absolute', top: 4, right: 4, backgroundColor: '#F59E0B', borderRadius: 8, padding: 1 }}><CheckCircle size={10} color="#FFF" /></View>}
+                                                        </Pressable>
+                                                    );
+                                                })}
+                                            </ScrollView>
+                                        </View>
+
+                                        {/* Night Theme */}
+                                        <View>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                                                <Moon size={14} color="#818CF8" />
+                                                <Text style={{ color: colors.subtext, fontSize: 13, fontWeight: '600' }}>Nachts (nach Sonnenuntergang)</Text>
+                                            </View>
+                                            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -4, paddingHorizontal: 4 }}>
+                                                {([...DARK_THEMES, ...LIGHT_THEMES]).map((t) => {
+                                                    const isActive = autoTheme.nightTheme === t;
+                                                    const tc = THEMES[t];
+                                                    return (
+                                                        <Pressable key={t} onPress={() => setAutoTheme({ ...autoTheme, nightTheme: t })} style={{
+                                                            marginRight: 8, width: 72, height: 100, borderRadius: 12,
+                                                            backgroundColor: tc.card, borderWidth: isActive ? 2 : 1,
+                                                            borderColor: isActive ? '#818CF8' : tc.border, overflow: 'hidden',
+                                                        }}>
+                                                            <View style={{ flex: 1, backgroundColor: tc.background, alignItems: 'center', justifyContent: 'center' }}>
+                                                                <View style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: tc.accent }} />
+                                                            </View>
+                                                            <View style={{ padding: 6, backgroundColor: tc.card }}>
+                                                                <Text style={{ color: tc.text, fontSize: 9, fontWeight: '600', textAlign: 'center' }}>{THEME_DISPLAY_NAMES[t]}</Text>
+                                                            </View>
+                                                            {isActive && <View style={{ position: 'absolute', top: 4, right: 4, backgroundColor: '#818CF8', borderRadius: 8, padding: 1 }}><CheckCircle size={10} color="#FFF" /></View>}
+                                                        </Pressable>
+                                                    );
+                                                })}
+                                            </ScrollView>
+                                        </View>
+                                    </View>
+                                )}
+                            </>)}
                         </View>
 
                         <SettingsSection title="Kindermodus" colors={colors}>
@@ -1186,14 +1416,6 @@ export default function Settings() {
 
                         {/* App Settings */}
                         <SettingsSection title="App" colors={colors}>
-                            <SettingsRow
-                                icon={<Palette size={20} color={colors.accent} />}
-                                iconColor={colors.accent}
-                                label="Dashboard anpassen"
-                                showChevron
-                                onPress={() => setConfigModalVisible(true)}
-                                colors={colors}
-                            />
                             <SettingsRow
                                 icon={<Zap size={20} color={colors.accent} />}
                                 iconColor={colors.accent}
@@ -1421,10 +1643,6 @@ export default function Settings() {
                 <NotificationSettingsModal
                     visible={notificationModalVisible}
                     onClose={() => setNotificationModalVisible(false)}
-                />
-                <DashboardConfigModal
-                    visible={configModalVisible}
-                    onClose={() => setConfigModalVisible(false)}
                 />
                 <ChangePasswordModal
                     visible={changePasswordModalVisible}

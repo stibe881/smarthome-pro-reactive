@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import React, { useMemo, useState, useCallback, memo, useEffect } from 'react';
-import { View, Text, ScrollView, Pressable, useWindowDimensions, Modal, StyleSheet, Image, ActivityIndicator, Alert, Animated } from 'react-native';
+import { View, Text, ScrollView, Pressable, useWindowDimensions, Modal, StyleSheet, Image, ActivityIndicator, Alert, Animated, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -13,7 +13,7 @@ import { WHITELISTED_PLAYERS } from '../../config/mediaPlayers';
 import { filterSecurityEntities } from '../../utils/securityHelpers';
 import CamerasModal from '../../components/CamerasModal';
 import { ConnectionWizard } from '../../components/ConnectionWizard';
-import { useKidsMode } from '../../contexts/KidsContext';
+import { useKidsMode, KIDS_GENDER_THEMES } from '../../contexts/KidsContext';
 import { KidsDashboard } from '../../components/KidsDashboard';
 // LinearGradient removed to fix compatibility issue
 
@@ -509,7 +509,16 @@ export default function Dashboard() {
 
     // Modal states
     const [activeModal, setActiveModal] = useState<'lights' | 'covers' | 'robi' | 'security' | 'cameras' | null>(null);
+    const [exitPinVisible, setExitPinVisible] = useState(false);
+    const [exitPinInput, setExitPinInput] = useState('');
     const [selectedCover, setSelectedCover] = useState<EntityState | null>(null);
+
+    // Safety: auto-deactivate kids mode if no rooms configured
+    useEffect(() => {
+        if (isKidsModeActive && config.rooms.length === 0) {
+            setKidsModeActive(false);
+        }
+    }, [isKidsModeActive, config.rooms.length]);
 
     // Filter entities
     const lights = useMemo(() => {
@@ -900,61 +909,121 @@ export default function Dashboard() {
         );
     }
 
+
     if (isKidsModeActive) {
+        if (config.rooms.length === 0) {
+            return null; // useEffect will deactivate
+        }
+
+        // Auto-select if only 1 room
+        if (!config.activeRoomId && config.rooms.length === 1) {
+            selectRoom(config.rooms[0].id);
+        }
+
         if (!config.activeRoomId) {
             return (
-                <SafeAreaView style={[styles.container, { backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' }]}>
+                <SafeAreaView style={[styles.container, { backgroundColor: '#1a1a2e', justifyContent: 'center', alignItems: 'center' }]}>
                     <Pressable
                         onLongPress={() => {
-                            Alert.prompt(
-                                "Kindermodus beenden",
-                                "Bitte gib den PIN ein:",
-                                [
-                                    { text: "Abbrechen", style: "cancel" },
-                                    {
-                                        text: "Bestätigen",
-                                        onPress: (input?: string) => {
-                                            if (input === config.parentalPin) {
-                                                setKidsModeActive(false);
-                                            } else {
-                                                Alert.alert("Falscher PIN");
-                                            }
-                                        }
-                                    }
-                                ],
-                                "secure-text"
-                            );
+                            setExitPinVisible(true);
+                            setExitPinInput('');
                         }}
                         style={{ position: 'absolute', top: 60, right: 30, padding: 20 }}
                     >
-                        <X size={24} color="rgba(255,255,255,0.2)" />
+                        <X size={24} color="rgba(255,255,255,0.15)" />
                     </Pressable>
 
-                    <Text style={{ color: '#fff', fontSize: 32, fontWeight: 'bold', marginBottom: 40 }}>Wer bist du?</Text>
+                    <Text style={{ fontSize: 48, marginBottom: 8 }}>👋</Text>
+                    <Text style={{ color: '#fff', fontSize: 34, fontWeight: '900', marginBottom: 8, textAlign: 'center' }}>Hallo!</Text>
+                    <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 18, marginBottom: 40, textAlign: 'center' }}>Wer bist du?</Text>
 
-                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 20, padding: 20 }}>
-                        {config.rooms.map(room => (
-                            <Pressable
-                                key={room.id}
-                                onPress={() => selectRoom(room.id)}
-                                style={{
-                                    width: 140,
-                                    height: 180,
-                                    backgroundColor: colors.card,
-                                    borderRadius: 30,
-                                    justifyContent: 'center',
-                                    alignItems: 'center',
-                                    borderWidth: 2,
-                                    borderColor: colors.border
-                                }}
-                            >
-                                <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: colors.accent + '20', justifyContent: 'center', alignItems: 'center', marginBottom: 15 }}>
-                                    <Baby size={40} color={colors.accent} />
-                                </View>
-                                <Text style={{ color: colors.text, fontSize: 18, fontWeight: 'bold' }}>{room.name}</Text>
-                            </Pressable>
-                        ))}
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 20, paddingHorizontal: 20 }}>
+                        {config.rooms.map((room) => {
+                            const genderTheme = KIDS_GENDER_THEMES[room.gender || 'neutral'];
+                            const roomColor = genderTheme.primary;
+                            const roomEmoji = genderTheme.emoji;
+                            return (
+                                <Pressable
+                                    key={room.id}
+                                    onPress={() => selectRoom(room.id)}
+                                    style={({ pressed }) => ({
+                                        width: 150,
+                                        height: 190,
+                                        borderRadius: 32,
+                                        justifyContent: 'center',
+                                        alignItems: 'center',
+                                        backgroundColor: roomColor + '15',
+                                        borderWidth: 3,
+                                        borderColor: roomColor + '60',
+                                        transform: [{ scale: pressed ? 0.95 : 1 }],
+                                    })}
+                                >
+                                    <View style={{
+                                        width: 80, height: 80, borderRadius: 40,
+                                        backgroundColor: roomColor + '25',
+                                        justifyContent: 'center', alignItems: 'center', marginBottom: 16,
+                                        borderWidth: 2, borderColor: roomColor + '40',
+                                    }}>
+                                        <Text style={{ fontSize: 40 }}>{roomEmoji}</Text>
+                                    </View>
+                                    <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold', textAlign: 'center' }} numberOfLines={1}>
+                                        {room.name}
+                                    </Text>
+                                    <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, marginTop: 4 }}>
+                                        ⭐ {room.score || 0} Sterne
+                                    </Text>
+                                </Pressable>
+                            );
+                        })}
                     </View>
+
+                    {/* Exit hint for parents */}
+                    <Text style={{ color: 'rgba(255,255,255,0.2)', fontSize: 11, position: 'absolute', bottom: 30, textAlign: 'center' }}>
+                        Eltern: ✕ oben rechts lange drücken zum Beenden
+                    </Text>
+
+                    {/* Cross-platform PIN modal for exit */}
+                    <Modal visible={exitPinVisible} transparent animationType="fade">
+                        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>
+                            <View style={{ backgroundColor: colors.card, borderRadius: 16, padding: 24, width: 300, gap: 16 }}>
+                                <Text style={{ color: colors.text, fontSize: 18, fontWeight: 'bold' }}>Kindermodus beenden</Text>
+                                <Text style={{ color: colors.subtext, fontSize: 14 }}>Bitte gib den PIN ein:</Text>
+                                <TextInput
+                                    style={{ backgroundColor: colors.background, color: colors.text, borderRadius: 8, padding: 12, fontSize: 18, textAlign: 'center', borderWidth: 1, borderColor: colors.border }}
+                                    value={exitPinInput}
+                                    onChangeText={setExitPinInput}
+                                    keyboardType="number-pad"
+                                    secureTextEntry
+                                    maxLength={4}
+                                    autoFocus
+                                    placeholder="****"
+                                    placeholderTextColor={colors.subtext}
+                                />
+                                <View style={{ flexDirection: 'row', gap: 12 }}>
+                                    <Pressable
+                                        onPress={() => setExitPinVisible(false)}
+                                        style={{ flex: 1, padding: 12, borderRadius: 8, backgroundColor: colors.background, alignItems: 'center' }}
+                                    >
+                                        <Text style={{ color: colors.subtext, fontWeight: '600' }}>Abbrechen</Text>
+                                    </Pressable>
+                                    <Pressable
+                                        onPress={() => {
+                                            if (exitPinInput === config.parentalPin) {
+                                                setKidsModeActive(false);
+                                                setExitPinVisible(false);
+                                            } else {
+                                                Alert.alert("Falscher PIN");
+                                                setExitPinInput('');
+                                            }
+                                        }}
+                                        style={{ flex: 1, padding: 12, borderRadius: 8, backgroundColor: colors.accent, alignItems: 'center' }}
+                                    >
+                                        <Text style={{ color: '#fff', fontWeight: '600' }}>Bestätigen</Text>
+                                    </Pressable>
+                                </View>
+                            </View>
+                        </View>
+                    </Modal>
                 </SafeAreaView>
             );
         }
@@ -1186,14 +1255,14 @@ export default function Dashboard() {
                                                 justifyContent: 'center',
                                                 marginBottom: 0
                                             },
-                                            isOn && { backgroundColor: colors.warning + '26', borderColor: colors.warning + '80' }
+                                            isOn && { backgroundColor: colors.accent + '26', borderColor: colors.accent + '80' }
                                         ]}
                                     >
                                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                                             <View style={[
                                                 styles.tileIcon,
                                                 { width: 32, height: 32, backgroundColor: colors.background },
-                                                isOn && { backgroundColor: colors.warning }
+                                                isOn && { backgroundColor: colors.accent }
                                             ]}>
                                                 <Lightbulb size={18} color={isOn ? "#FFF" : colors.subtext} />
                                             </View>
@@ -1232,11 +1301,11 @@ export default function Dashboard() {
                     <View style={styles.heroGrid}>
                         <HeroStatCard
                             icon={Lightbulb}
-                            iconColor={colors.warning}
+                            iconColor={colors.accent}
                             value={lightsOn}
                             total={lights.length}
                             label="Lichter aktiv"
-                            gradient={[colors.warning, '#D97706']}
+                            gradient={[colors.accent, colors.accent + 'CC']}
                             isActive={lightsOn > 0}
                             cardWidth={cardWidth}
                             onPress={openLightsModal}
@@ -1248,7 +1317,7 @@ export default function Dashboard() {
                             value={coversOpen}
                             total={covers.filter(c => c.attributes.friendly_name !== 'Alle Storen').length}
                             label="Rollläden offen"
-                            gradient={[colors.accent, '#1D4ED8']}
+                            gradient={[colors.accent, colors.accent + 'CC']}
                             isActive={coversOpen > 0}
                             cardWidth={cardWidth}
                             onPress={openCoversModal}
@@ -1259,12 +1328,12 @@ export default function Dashboard() {
                             onLongPress={handleAllVacuumsHome}
                             style={[styles.heroCard, { width: cardWidth, backgroundColor: colors.card }]} // Override Logic
                         >
-                            <View style={[styles.heroCardGradient, { backgroundColor: activeVacuums > 0 ? colors.success : colors.card }]}>
+                            <View style={[styles.heroCardGradient, { backgroundColor: activeVacuums > 0 ? colors.accent : colors.card }]}>
                                 <View style={[styles.decorativeCircle, { backgroundColor: activeVacuums > 0 ? 'rgba(255,255,255,0.1)' : colors.border + '30' }]} />
 
                                 <View style={styles.heroCardHeader}>
                                     <View style={[styles.iconBubble, { backgroundColor: activeVacuums > 0 ? 'rgba(255,255,255,0.2)' : colors.background }]}>
-                                        <Bot size={22} color={activeVacuums > 0 ? '#fff' : colors.success} />
+                                        <Bot size={22} color={activeVacuums > 0 ? '#fff' : colors.accent} />
                                     </View>
                                     <ChevronRight size={16} color={activeVacuums > 0 ? "rgba(255,255,255,0.3)" : colors.subtext} />
                                 </View>
@@ -1291,18 +1360,18 @@ export default function Dashboard() {
                                 <View style={styles.progressContainer}>
                                     <View style={[styles.progressBar, {
                                         width: '100%',
-                                        backgroundColor: robi?.state === 'cleaning' ? colors.success : (activeVacuums > 0 ? 'rgba(255,255,255,0.4)' : colors.border)
+                                        backgroundColor: robi?.state === 'cleaning' ? colors.accent : (activeVacuums > 0 ? 'rgba(255,255,255,0.4)' : colors.border)
                                     }]} />
                                 </View>
                             </View>
                         </Pressable>
                         <HeroStatCard
                             icon={Tv}
-                            iconColor="#A78BFA"
+                            iconColor={colors.accent}
                             value={playingMedia}
                             total={mediaPlayers.length}
                             label="Wiedergabe"
-                            gradient={['#8B5CF6', '#6D28D9']}
+                            gradient={[colors.accent, colors.accent + 'CC']}
                             isActive={playingMedia > 0}
                             cardWidth={cardWidth}
                             onPress={() => router.push('/media')}
@@ -1325,7 +1394,7 @@ export default function Dashboard() {
                             value={camerasCount}
                             total={camerasCount}
                             label="Kameras"
-                            gradient={[colors.accent, '#1D4ED8']}
+                            gradient={[colors.accent, colors.accent + 'CC']}
                             isActive={camerasCount > 0}
                             cardWidth={cardWidth}
                             onPress={openCamerasModal}
@@ -1342,7 +1411,7 @@ export default function Dashboard() {
             <Modal visible={activeModal === 'lights'} animationType="slide" transparent>
                 <View style={styles.modalOverlay}>
                     <View style={[styles.modalContent, { backgroundColor: colors.background }]}>
-                        <View style={[styles.modalHeader, { backgroundColor: colors.warning }]}>
+                        <View style={[styles.modalHeader, { backgroundColor: colors.accent }]}>
                             <Text style={styles.modalTitle}>Lichter ({lightsOn} an)</Text>
                             <Pressable onPress={closeModal} style={styles.closeBtn}><X size={24} color="#fff" /></Pressable>
                         </View>
@@ -1355,7 +1424,7 @@ export default function Dashboard() {
                                             subtext={l.state === 'on' ? 'An' : 'Aus'}
                                             icon={Lightbulb}
                                             iconColor={colors.subtext}
-                                            activeColor={colors.warning}
+                                            activeColor={colors.accent}
                                             isActive={l.state === 'on'}
                                             onPress={() => toggleLight(l.entity_id)}
                                         />

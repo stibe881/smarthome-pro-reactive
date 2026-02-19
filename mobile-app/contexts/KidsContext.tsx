@@ -1,9 +1,54 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-interface KidsRoom {
+export type KidsGender = 'boy' | 'girl' | 'neutral';
+
+export const KIDS_GENDER_THEMES = {
+    boy: {
+        primary: '#4FC3F7',
+        secondary: '#0288D1',
+        background: '#0D1B2A',
+        card: '#1B2838',
+        accent: '#4FC3F7',
+        text: '#FFFFFF',
+        subtext: 'rgba(255,255,255,0.6)',
+        border: 'rgba(79,195,247,0.2)',
+        gradient: ['#0D1B2A', '#1A237E'] as [string, string],
+        emoji: '🚀',
+        label: 'Junge',
+    },
+    girl: {
+        primary: '#F48FB1',
+        secondary: '#E91E63',
+        background: '#1A0A14',
+        card: '#2A1520',
+        accent: '#F48FB1',
+        text: '#FFFFFF',
+        subtext: 'rgba(255,255,255,0.6)',
+        border: 'rgba(244,143,177,0.2)',
+        gradient: ['#1A0A14', '#4A148C'] as [string, string],
+        emoji: '🦄',
+        label: 'Mädchen',
+    },
+    neutral: {
+        primary: '#AED581',
+        secondary: '#689F38',
+        background: '#0A1A0D',
+        card: '#152A18',
+        accent: '#AED581',
+        text: '#FFFFFF',
+        subtext: 'rgba(255,255,255,0.6)',
+        border: 'rgba(174,213,129,0.2)',
+        gradient: ['#0A1A0D', '#1B5E20'] as [string, string],
+        emoji: '🌈',
+        label: 'Neutral',
+    },
+};
+
+export interface KidsRoom {
     id: string;
     name: string;
+    gender: KidsGender;
     lightEntity?: string;
     mediaEntity?: string;
     climateEntity?: string;
@@ -28,7 +73,7 @@ interface KidsContextType {
     config: KidsConfig;
     updateConfig: (newConfig: Partial<KidsConfig>) => Promise<void>;
     updateRoom: (roomId: string, updates: Partial<KidsRoom>) => Promise<void>;
-    addRoom: (name: string) => Promise<void>;
+    addRoom: (name: string, gender?: KidsGender) => Promise<void>;
     deleteRoom: (roomId: string) => Promise<void>;
     selectRoom: (roomId: string) => Promise<void>;
     addScore: (points: number) => Promise<void>;
@@ -70,6 +115,7 @@ export const KidsProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     const migratedRoom: KidsRoom = {
                         id: 'default',
                         name: 'Kinderzimmer',
+                        gender: 'neutral',
                         lightEntity: parsedConfig.lightEntity,
                         mediaEntity: parsedConfig.mediaEntity,
                         climateEntity: parsedConfig.climateEntity,
@@ -90,7 +136,8 @@ export const KidsProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 else if (parsedConfig.rooms) {
                     parsedConfig.rooms = parsedConfig.rooms.map((r: any) => ({
                         ...r,
-                        score: r.score ?? 0
+                        score: r.score ?? 0,
+                        gender: r.gender ?? 'neutral',
                     }));
                 }
                 setConfig(parsedConfig);
@@ -126,10 +173,11 @@ export const KidsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         await AsyncStorage.setItem(KIDS_CONFIG_KEY, JSON.stringify(updated));
     };
 
-    const addRoom = async (name: string) => {
+    const addRoom = async (name: string, gender: KidsGender = 'neutral') => {
         const newRoom: KidsRoom = {
             id: Date.now().toString(),
             name,
+            gender,
             volumeLimit: 0.4,
             tempRange: [19, 22],
             score: 0

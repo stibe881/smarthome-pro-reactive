@@ -2,7 +2,7 @@
   "expo": {
     "name": "HomePilot Pro",
     "slug": "mobile-app",
-    "version": "1.3.7",
+    "version": "1.4.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -15,7 +15,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.stibe88.mobileapp",
-      "buildNumber": "70",
+      "buildNumber": "71",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSFaceIDUsageDescription": "Wir nutzen Face ID für den schnellen Login.",

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, Modal, StyleSheet, Pressable, ScrollView, ActivityIndicator, TextInput } from 'react-native';
 import { X, Check, ShoppingCart, Plus, Trash2 } from 'lucide-react-native';
 import { useHomeAssistant } from '../contexts/HomeAssistantContext';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface ShoppingListModalProps {
     visible: boolean;
@@ -10,6 +11,7 @@ interface ShoppingListModalProps {
 
 export default function ShoppingListModal({ visible, onClose }: ShoppingListModalProps) {
     const { fetchTodoItems, updateTodoItem, addTodoItem } = useHomeAssistant();
+    const { colors } = useTheme();
     const [items, setItems] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     const [newItemText, setNewItemText] = useState('');
@@ -51,9 +53,6 @@ export default function ShoppingListModal({ visible, onClose }: ShoppingListModa
 
         // API Call
         await updateTodoItem(ENTITY_ID, item.summary, newStatus);
-
-        // Refresh to ensure sync
-        // setTimeout(loadItems, 500); 
     };
 
     const handleAddItem = async () => {
@@ -75,62 +74,62 @@ export default function ShoppingListModal({ visible, onClose }: ShoppingListModa
     return (
         <Modal visible={visible} animationType="slide" transparent>
             <View style={styles.overlay}>
-                <View style={styles.content}>
-                    <View style={styles.header}>
+                <View style={[styles.content, { backgroundColor: colors.card }]}>
+                    <View style={[styles.header, { borderBottomColor: colors.border }]}>
                         <View style={styles.titleRow}>
-                            <ShoppingCart size={24} color="#10B981" />
-                            <Text style={styles.title}>Einkaufsliste</Text>
+                            <ShoppingCart size={24} color={colors.accent} />
+                            <Text style={[styles.title, { color: colors.text }]}>Einkaufsliste</Text>
                         </View>
-                        <Pressable onPress={onClose} style={styles.closeBtn}>
-                            <X size={24} color="#fff" />
+                        <Pressable onPress={onClose} style={[styles.closeBtn, { backgroundColor: colors.border }]}>
+                            <X size={24} color={colors.subtext} />
                         </Pressable>
                     </View>
 
-                    <View style={styles.inputRow}>
+                    <View style={[styles.inputRow, { borderBottomColor: colors.border }]}>
                         <TextInput
-                            style={styles.input}
+                            style={[styles.input, { backgroundColor: colors.background, color: colors.text }]}
                             placeholder="Neuer Artikel..."
-                            placeholderTextColor="#64748B"
+                            placeholderTextColor={colors.subtext}
                             value={newItemText}
                             onChangeText={setNewItemText}
                             onSubmitEditing={handleAddItem}
                         />
-                        <Pressable onPress={handleAddItem} style={styles.addBtn}>
+                        <Pressable onPress={handleAddItem} style={[styles.addBtn, { backgroundColor: colors.accent }]}>
                             <Plus size={24} color="#fff" />
                         </Pressable>
                     </View>
 
                     {loading && items.length === 0 ? (
                         <View style={styles.center}>
-                            <ActivityIndicator size="large" color="#10B981" />
+                            <ActivityIndicator size="large" color={colors.accent} />
                         </View>
                     ) : (
                         <ScrollView style={styles.body} contentContainerStyle={styles.scrollContent}>
                             {activeItems.length === 0 && completedItems.length === 0 && (
                                 <View style={styles.empty}>
-                                    <Text style={styles.emptyText}>Liste ist leer</Text>
+                                    <Text style={[styles.emptyText, { color: colors.subtext }]}>Liste ist leer</Text>
                                 </View>
                             )}
 
                             {activeItems.map((item, idx) => (
-                                <Pressable key={idx + item.summary} style={styles.itemRow} onPress={() => handleToggleItem(item)}>
-                                    <View style={styles.checkbox}>
+                                <Pressable key={idx + item.summary} style={[styles.itemRow, { borderBottomColor: colors.border + '30' }]} onPress={() => handleToggleItem(item)}>
+                                    <View style={[styles.checkbox, { borderColor: colors.subtext }]}>
                                         {/* Empty Circle */}
                                     </View>
-                                    <Text style={styles.itemText}>{item.summary}</Text>
+                                    <Text style={[styles.itemText, { color: colors.text }]}>{item.summary}</Text>
                                 </Pressable>
                             ))}
 
                             {completedItems.length > 0 && (
                                 <>
-                                    <View style={styles.divider} />
-                                    <Text style={styles.sectionTitle}>Erledigt</Text>
+                                    <View style={[styles.divider, { backgroundColor: colors.border }]} />
+                                    <Text style={[styles.sectionTitle, { color: colors.subtext }]}>Erledigt</Text>
                                     {completedItems.map((item, idx) => (
-                                        <Pressable key={idx + item.summary} style={styles.itemRow} onPress={() => handleToggleItem(item)}>
-                                            <View style={[styles.checkbox, styles.checkboxChecked]}>
-                                                <Check size={14} color="#0F172A" />
+                                        <Pressable key={idx + item.summary} style={[styles.itemRow, { borderBottomColor: colors.border + '30' }]} onPress={() => handleToggleItem(item)}>
+                                            <View style={[styles.checkbox, styles.checkboxChecked, { backgroundColor: colors.accent, borderColor: colors.accent }]}>
+                                                <Check size={14} color="#fff" />
                                             </View>
-                                            <Text style={[styles.itemText, styles.itemTextDone]}>{item.summary}</Text>
+                                            <Text style={[styles.itemText, styles.itemTextDone, { color: colors.subtext }]}>{item.summary}</Text>
                                         </Pressable>
                                     ))}
                                 </>
@@ -145,29 +144,29 @@ export default function ShoppingListModal({ visible, onClose }: ShoppingListModa
 
 const styles = StyleSheet.create({
     overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: 16 },
-    content: { backgroundColor: '#1E293B', borderRadius: 24, maxHeight: '80%', width: '100%', display: 'flex', flexDirection: 'column' },
-    header: { padding: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: '#334155' },
+    content: { borderRadius: 24, maxHeight: '80%', width: '100%', display: 'flex', flexDirection: 'column' },
+    header: { padding: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1 },
     titleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-    title: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
-    closeBtn: { padding: 4, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 20 },
+    title: { fontSize: 20, fontWeight: 'bold' },
+    closeBtn: { padding: 4, borderRadius: 20 },
 
-    inputRow: { flexDirection: 'row', padding: 16, gap: 10, borderBottomWidth: 1, borderBottomColor: '#334155' },
-    input: { flex: 1, backgroundColor: '#334155', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, color: '#fff', fontSize: 16 },
-    addBtn: { backgroundColor: '#10B981', borderRadius: 12, width: 48, alignItems: 'center', justifyContent: 'center' },
+    inputRow: { flexDirection: 'row', padding: 16, gap: 10, borderBottomWidth: 1 },
+    input: { flex: 1, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, fontSize: 16 },
+    addBtn: { borderRadius: 12, width: 48, alignItems: 'center', justifyContent: 'center' },
 
     body: { width: '100%', minHeight: 100 },
     scrollContent: { padding: 16 },
     center: { flex: 1, padding: 40, alignItems: 'center' },
 
-    itemRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' },
-    checkbox: { width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: '#94A3B8', alignItems: 'center', justifyContent: 'center' },
-    checkboxChecked: { backgroundColor: '#94A3B8', borderColor: '#94A3B8' },
-    itemText: { color: '#fff', fontSize: 16, flex: 1 },
-    itemTextDone: { color: '#64748B', textDecorationLine: 'line-through' },
+    itemRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderBottomWidth: 1 },
+    checkbox: { width: 24, height: 24, borderRadius: 6, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+    checkboxChecked: {},
+    itemText: { fontSize: 16, flex: 1 },
+    itemTextDone: { textDecorationLine: 'line-through' },
 
-    divider: { height: 1, backgroundColor: '#334155', marginVertical: 16 },
-    sectionTitle: { color: '#64748B', fontSize: 14, fontWeight: 'bold', marginBottom: 8, textTransform: 'uppercase' },
+    divider: { height: 1, marginVertical: 16 },
+    sectionTitle: { fontSize: 14, fontWeight: 'bold', marginBottom: 8, textTransform: 'uppercase' },
 
     empty: { padding: 40, alignItems: 'center' },
-    emptyText: { color: '#64748B' }
+    emptyText: {}
 });

@@ -40,17 +40,17 @@ export const LIGHT_THEMES: ThemeType[] = ['minimal', 'cozy', 'fresh', 'elegant']
 export const THEMES: Record<ThemeType, ThemeColors> = {
     // --- DARK THEMES ---
     nature: {
-        background: '#1B3D2F',
-        card: '#2A5740',
-        text: '#F0F7F0',
-        subtext: '#A8D5A2',
-        accent: '#5DBB63',
-        border: '#3A6B4A',
+        background: '#1A2B26',
+        card: '#243832',
+        text: '#E8F0ED',
+        subtext: '#6C9786',
+        accent: '#6C9786',
+        border: '#2E4A40',
         success: '#7BC67E',
-        error: '#F87171',
-        warning: '#FBBF24',
-        tint: '#7BC67E',
-        tabBar: '#1B3D2F',
+        error: '#E87461',
+        warning: '#D4A745',
+        tint: '#6C9786',
+        tabBar: '#1A2B26',
         backgroundImage: require('../assets/themes/nature.png'),
     },
     vulkan: {
