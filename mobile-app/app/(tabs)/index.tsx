@@ -498,20 +498,9 @@ export default function Dashboard() {
 
     const [showWizard, setShowWizard] = useState(false);
 
-    // Show wizard if no HA URL is set after initialization
-    useEffect(() => {
-        if (isHAInitialized) {
-            // Only show wizard if we have NO URL and are NOT connected
-            if (!haBaseUrl && !isConnected && !isConnecting) {
-                // Double check if we really have no credentials in context (sometimes async state lag)
-                // For now, trust haBaseUrl being null means no config.
-                setShowWizard(true);
-            } else if (haBaseUrl || isConnected) {
-                // Auto-hide if we were auto-opened but now connected
-                setShowWizard(false);
-            }
-        }
-    }, [haBaseUrl, isConnecting, isConnected, isHAInitialized]);
+    // Wizard is only shown manually from Settings, not auto-opened here
+    // (auto-open caused race condition in production builds where haBaseUrl
+    // was briefly null during AsyncStorage load, blocking the entire UI)
 
     // Start Shopping Geofencing on Mount
     useEffect(() => {
