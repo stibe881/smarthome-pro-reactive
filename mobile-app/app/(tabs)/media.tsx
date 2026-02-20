@@ -956,6 +956,7 @@ const HeroPlayer = ({ player, massPlayer, imageUrl, massImageUrl, onSelect, onSp
     const effectiveImageUrl = massImageUrl || imageUrl;
     const lastKnownImage = useRef<string | undefined>(effectiveImageUrl);
     const [displayImage, setDisplayImage] = useState<string | undefined>(effectiveImageUrl);
+    const hasEverLoadedCover = useRef(!!effectiveImageUrl);
 
     // When a new image URL arrives and successfully loads, swap the display
     const handleNewImageLoaded = useCallback(() => {
@@ -963,6 +964,7 @@ const HeroPlayer = ({ player, massPlayer, imageUrl, massImageUrl, onSelect, onSp
         if (url) {
             setDisplayImage(url);
             lastKnownImage.current = url;
+            hasEverLoadedCover.current = true;
         }
     }, [imageUrl, massImageUrl]);
 
@@ -977,6 +979,8 @@ const HeroPlayer = ({ player, massPlayer, imageUrl, massImageUrl, onSelect, onSp
     // The stable display image: prefer current display, fall back to last known
     const stableImage = displayImage || lastKnownImage.current;
     const preloadUrl = (massImageUrl || imageUrl);
+    // Once a cover has ever loaded, never show the music note placeholder again
+    const showFallbackIcon = !hasEverLoadedCover.current && !stableImage;
 
     // Optimistic state for shuffle/repeat (immediate visual feedback)
     const [optShuffle, setOptShuffle] = useState(player?.attributes?.shuffle || false);
@@ -1038,15 +1042,15 @@ const HeroPlayer = ({ player, massPlayer, imageUrl, massImageUrl, onSelect, onSp
 
     return (
         <View style={[styles.heroContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            {/* Background Layer 1: stable loaded image (blurred) */}
-            {stableImage && !isOff && (
+            {/* Background Layer: blurred cover (always show if available) */}
+            {stableImage && (
                 <Image source={{ uri: stableImage }} style={styles.heroBackground} blurRadius={40} />
             )}
             {/* Hidden preload: new image loads invisibly, then swaps */}
-            {preloadUrl && !isOff && preloadUrl !== displayImage && (
+            {preloadUrl && preloadUrl !== displayImage && (
                 <Image source={{ uri: preloadUrl }} style={[styles.heroBackground, { opacity: 0 }]} blurRadius={40} onLoad={handleNewImageLoaded} />
             )}
-            {(!stableImage || isOff) && (
+            {!stableImage && (
                 <LinearGradient colors={[colors.card, colors.background]} style={styles.heroBackground} />
             )}
             <View style={styles.heroOverlay} />
@@ -1073,18 +1077,19 @@ const HeroPlayer = ({ player, massPlayer, imageUrl, massImageUrl, onSelect, onSp
                     <Text style={{ color: '#E2E8F0', fontSize: 13, fontWeight: '600' }}>{getPlayerName(player.entity_id)}</Text>
                 </Pressable>
 
-                {/* Artwork: stable base + invisible preload */}
+                {/* Artwork: always show last known cover, preload new ones */}
                 <View style={styles.heroArtworkContainer}>
-                    {stableImage && !isOff && (
+                    {stableImage ? (
                         <Image source={{ uri: stableImage }} style={styles.heroArtwork} />
-                    )}
-                    {preloadUrl && !isOff && preloadUrl !== displayImage ? (
+                    ) : null}
+                    {preloadUrl && preloadUrl !== displayImage ? (
                         <Image source={{ uri: preloadUrl }} style={[styles.heroArtwork, { position: 'absolute', opacity: 0 }]} onLoad={handleNewImageLoaded} />
-                    ) : (!stableImage || isOff) ? (
+                    ) : null}
+                    {showFallbackIcon && (
                         <View style={[styles.heroArtwork, { backgroundColor: '#334155', justifyContent: 'center', alignItems: 'center' }]}>
                             <Music size={64} color="#64748B" />
                         </View>
-                    ) : null}
+                    )}
                 </View>
 
                 {/* Metadata */}
