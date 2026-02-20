@@ -1237,7 +1237,7 @@ const styles = StyleSheet.create({
     sectionTitle: { fontSize: 18, fontWeight: '600', color: '#94A3B8', marginBottom: 12, marginTop: 12 },
 
     // Hero
-    heroContainer: { width: '100%', height: 470, borderRadius: 32, overflow: 'hidden', backgroundColor: '#1E293B', borderWidth: 1, borderColor: '#334155' },
+    heroContainer: { width: '100%', height: 540, borderRadius: 32, overflow: 'hidden', backgroundColor: '#1E293B', borderWidth: 1, borderColor: '#334155' },
     heroBackground: { ...StyleSheet.absoluteFillObject },
     heroOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
     heroContent: { flex: 1, padding: 24, alignItems: 'center', justifyContent: 'space-between' },
