@@ -498,6 +498,25 @@ export default function Dashboard() {
 
     const [showWizard, setShowWizard] = useState(false);
 
+    // Configurable Entity IDs (from Settings)
+    const [cfgWeatherMain, setCfgWeatherMain] = useState('weather.zell_lu');
+    const [cfgWeatherForecast, setCfgWeatherForecast] = useState('weather.familie_gross');
+    const [cfgWeatherAlarm, setCfgWeatherAlarm] = useState('weather.meteo');
+    const [cfgShoppingList, setCfgShoppingList] = useState('todo.google_keep_einkaufsliste');
+
+    useEffect(() => {
+        (async () => {
+            const main = await AsyncStorage.getItem('@weather_main_entity');
+            const forecast = await AsyncStorage.getItem('@weather_forecast_entity');
+            const alarm = await AsyncStorage.getItem('@weather_alarm_entity');
+            const shopping = await AsyncStorage.getItem('@shopping_list_entity');
+            if (main) setCfgWeatherMain(main);
+            if (forecast) setCfgWeatherForecast(forecast);
+            if (alarm) setCfgWeatherAlarm(alarm);
+            if (shopping) setCfgShoppingList(shopping);
+        })();
+    }, []);
+
     // Wizard is only shown manually from Settings, not auto-opened here
     // (auto-open caused race condition in production builds where haBaseUrl
     // was briefly null during AsyncStorage load, blocking the entire UI)
@@ -611,7 +630,7 @@ export default function Dashboard() {
     const climate = useMemo(() => entities.filter(e => e.entity_id.startsWith('climate.')), [entities]);
     // securityEntities is now defined later using the helper
     const calendars = useMemo(() => entities.filter(e => e.entity_id.startsWith('calendar.')).filter(c => c.state === 'on' || c.attributes.message), [entities]);
-    const shoppingList = useMemo(() => entities.find(e => e.entity_id === 'todo.google_keep_einkaufsliste'), [entities]);
+    const shoppingList = useMemo(() => entities.find(e => e.entity_id === cfgShoppingList), [entities, cfgShoppingList]);
 
     // --- Specific Appliance Logic ---
 
@@ -754,12 +773,12 @@ export default function Dashboard() {
     }, [alarmEntity]);
 
     const weatherStationTemp = useMemo(() => entities.find(e => e.entity_id === 'sensor.wetterstation_actual_temperature'), [entities]);
-    const weatherZell = useMemo(() => entities.find(e => e.entity_id === 'weather.zell_lu' || e.attributes.friendly_name?.toLowerCase().includes('zell')), [entities]);
+    const weatherZell = useMemo(() => entities.find(e => e.entity_id === cfgWeatherMain), [entities, cfgWeatherMain]);
     const meteoAlarm = useMemo(() => entities.find(e => e.entity_id === 'binary_sensor.meteoalarm' || e.entity_id.includes('meteoalarm')), [entities]);
 
-    // Use weather.familie_gross for forecast data (user requested)
-    const weatherFamilieGross = useMemo(() => entities.find(e => e.entity_id === 'weather.familie_gross'), [entities]);
-    const weatherMeteo = useMemo(() => entities.find(e => e.entity_id === 'weather.meteo'), [entities]);
+    // Use configurable entities for forecast and meteo
+    const weatherFamilieGross = useMemo(() => entities.find(e => e.entity_id === cfgWeatherForecast), [entities, cfgWeatherForecast]);
+    const weatherMeteo = useMemo(() => entities.find(e => e.entity_id === cfgWeatherAlarm), [entities, cfgWeatherAlarm]);
 
     // Composite Weather Entity: Use Zell for current state, Familie Gross for Forecast
     const weatherComposite = useMemo(() => {

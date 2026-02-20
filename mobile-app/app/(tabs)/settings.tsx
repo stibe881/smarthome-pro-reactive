@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { useHomeAssistant } from '../../contexts/HomeAssistantContext';
 import { useTheme, THEMES, ThemeType, AutoThemeConfig, THEME_DISPLAY_NAMES, DARK_THEMES, LIGHT_THEMES } from '../../contexts/ThemeContext';
-import { Wifi, WifiOff, Save, LogOut, User, Server, Key, CheckCircle, XCircle, Shield, Bell, Palette, ChevronRight, LucideIcon, X, ScanFace, MapPin, Smartphone, Search, Calendar, Trash2, Users, Eye, EyeOff, Sun, Moon, Store, Camera, RotateCw } from 'lucide-react-native';
+import { Wifi, WifiOff, Save, LogOut, User, Server, Key, CheckCircle, XCircle, Shield, Bell, Palette, ChevronRight, LucideIcon, X, ScanFace, MapPin, Smartphone, Search, Calendar, Trash2, Users, Eye, EyeOff, Sun, Moon, Store, Camera, RotateCw, Cloud, CloudRain, ShoppingCart } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -1063,6 +1063,75 @@ export default function Settings() {
     const [widgetSettingsVisible, setWidgetSettingsVisible] = useState(false);
     const [isDesignExpanded, setIsDesignExpanded] = useState(false);
 
+    // Entity Configuration Settings
+    const [weatherMainEntity, setWeatherMainEntity] = useState('weather.zell_lu');
+    const [weatherForecastEntity, setWeatherForecastEntity] = useState('weather.familie_gross');
+    const [weatherAlarmEntity, setWeatherAlarmEntity] = useState('weather.meteo');
+    const [shoppingListEntity, setShoppingListEntity] = useState('todo.google_keep_einkaufsliste');
+    const [entityPickerVisible, setEntityPickerVisible] = useState(false);
+    const [entityPickerTarget, setEntityPickerTarget] = useState<'main' | 'forecast' | 'alarm' | 'shopping'>('main');
+    const [entityPickerSearch, setEntityPickerSearch] = useState('');
+
+    // Load entity settings
+    useEffect(() => {
+        (async () => {
+            const main = await AsyncStorage.getItem('@weather_main_entity');
+            const forecast = await AsyncStorage.getItem('@weather_forecast_entity');
+            const alarm = await AsyncStorage.getItem('@weather_alarm_entity');
+            const shopping = await AsyncStorage.getItem('@shopping_list_entity');
+            if (main) setWeatherMainEntity(main);
+            if (forecast) setWeatherForecastEntity(forecast);
+            if (alarm) setWeatherAlarmEntity(alarm);
+            if (shopping) setShoppingListEntity(shopping);
+        })();
+    }, []);
+
+    const saveEntityConfig = async (target: 'main' | 'forecast' | 'alarm' | 'shopping', entityId: string) => {
+        const mapping = {
+            main: { setter: setWeatherMainEntity, key: '@weather_main_entity' },
+            forecast: { setter: setWeatherForecastEntity, key: '@weather_forecast_entity' },
+            alarm: { setter: setWeatherAlarmEntity, key: '@weather_alarm_entity' },
+            shopping: { setter: setShoppingListEntity, key: '@shopping_list_entity' },
+        };
+        mapping[target].setter(entityId);
+        await AsyncStorage.setItem(mapping[target].key, entityId);
+        setEntityPickerVisible(false);
+    };
+
+    const openEntityPicker = (target: 'main' | 'forecast' | 'alarm' | 'shopping') => {
+        setEntityPickerTarget(target);
+        setEntityPickerSearch('');
+        setEntityPickerVisible(true);
+    };
+
+    const entityPickerTitle = {
+        main: 'Wetter (Aktuell)',
+        forecast: 'Wetter (Vorhersage)',
+        alarm: 'MeteoAlarm',
+        shopping: 'Einkaufsliste',
+    };
+
+    const filteredPickerEntities = useMemo(() => {
+        let filtered = entities;
+        if (entityPickerTarget === 'shopping') {
+            filtered = entities.filter(e => e.entity_id.startsWith('todo.') || e.entity_id.startsWith('sensor.'));
+        } else {
+            filtered = entities.filter(e =>
+                e.entity_id.startsWith('weather.') ||
+                (e.entity_id.startsWith('sensor.') && e.attributes.device_class === 'temperature') ||
+                e.entity_id.includes('meteo') ||
+                e.entity_id.startsWith('binary_sensor.')
+            );
+        }
+        if (entityPickerSearch) {
+            filtered = filtered.filter(e =>
+                e.entity_id.toLowerCase().includes(entityPickerSearch.toLowerCase()) ||
+                (e.attributes.friendly_name || '').toLowerCase().includes(entityPickerSearch.toLowerCase())
+            );
+        }
+        return filtered;
+    }, [entities, entityPickerSearch, entityPickerTarget]);
+
     const pickImage = async () => {
         try {
             const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -1460,6 +1529,49 @@ export default function Settings() {
                             )}
                         </SettingsSection>
 
+                        {/* Entity Configuration - Admin Only */}
+                        {userRole === 'admin' && (
+                            <SettingsSection title="Entitäten (Admin)" colors={colors}>
+                                <SettingsRow
+                                    icon={<Sun size={20} color="#F59E0B" />}
+                                    iconColor="#F59E0B"
+                                    label="Wetter (Aktuell)"
+                                    value={weatherMainEntity}
+                                    showChevron
+                                    onPress={() => openEntityPicker('main')}
+                                    colors={colors}
+                                />
+                                <SettingsRow
+                                    icon={<CloudRain size={20} color="#3B82F6" />}
+                                    iconColor="#3B82F6"
+                                    label="Wetter (Vorhersage)"
+                                    value={weatherForecastEntity}
+                                    showChevron
+                                    onPress={() => openEntityPicker('forecast')}
+                                    colors={colors}
+                                />
+                                <SettingsRow
+                                    icon={<Cloud size={20} color="#EF4444" />}
+                                    iconColor="#EF4444"
+                                    label="MeteoAlarm"
+                                    value={weatherAlarmEntity}
+                                    showChevron
+                                    onPress={() => openEntityPicker('alarm')}
+                                    colors={colors}
+                                />
+                                <SettingsRow
+                                    icon={<ShoppingCart size={20} color="#10B981" />}
+                                    iconColor="#10B981"
+                                    label="Einkaufsliste"
+                                    value={shoppingListEntity}
+                                    showChevron
+                                    onPress={() => openEntityPicker('shopping')}
+                                    isLast
+                                    colors={colors}
+                                />
+                            </SettingsSection>
+                        )}
+
                         {/* Family Management - Inline under APP, admin only */}
                         {userRole === 'admin' && isFamilyExpanded && (
                             <View style={[styles.section, { marginTop: -8 }]}>
@@ -1684,6 +1796,66 @@ export default function Settings() {
                     visible={shoppingLocationsVisible}
                     onClose={() => setShoppingLocationsVisible(false)}
                 />
+                {/* Entity Picker Modal */}
+                <Modal visible={entityPickerVisible} transparent animationType="slide">
+                    <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+                        <View style={{ backgroundColor: colors.card, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '70%', paddingBottom: 40 }}>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+                                <Text style={{ color: colors.text, fontSize: 18, fontWeight: 'bold' }}>
+                                    {entityPickerTitle[entityPickerTarget]}
+                                </Text>
+                                <Pressable onPress={() => setEntityPickerVisible(false)} style={{ padding: 4 }}>
+                                    <X size={24} color={colors.subtext} />
+                                </Pressable>
+                            </View>
+                            <View style={{ padding: 12 }}>
+                                <TextInput
+                                    style={{ backgroundColor: colors.background, color: colors.text, borderRadius: 10, padding: 12, borderWidth: 1, borderColor: colors.border, fontSize: 15 }}
+                                    placeholder="Entität suchen..."
+                                    placeholderTextColor={colors.subtext}
+                                    value={entityPickerSearch}
+                                    onChangeText={setEntityPickerSearch}
+                                    autoCapitalize="none"
+                                />
+                            </View>
+                            <ScrollView style={{ paddingHorizontal: 12 }}>
+                                {filteredPickerEntities.map(entity => {
+                                    const currentValue = entityPickerTarget === 'shopping'
+                                        ? shoppingListEntity
+                                        : entityPickerTarget === 'main' ? weatherMainEntity
+                                            : entityPickerTarget === 'forecast' ? weatherForecastEntity
+                                                : weatherAlarmEntity;
+                                    const isSelected = entity.entity_id === currentValue;
+                                    return (
+                                        <Pressable
+                                            key={entity.entity_id}
+                                            onPress={() => saveEntityConfig(entityPickerTarget, entity.entity_id)}
+                                            style={({ pressed }) => ({
+                                                flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                                                padding: 14, borderRadius: 10, marginBottom: 4,
+                                                backgroundColor: isSelected ? colors.accent + '20' : pressed ? colors.background : 'transparent',
+                                                borderWidth: isSelected ? 1 : 0, borderColor: colors.accent,
+                                            })}
+                                        >
+                                            <View style={{ flex: 1 }}>
+                                                <Text style={{ color: colors.text, fontSize: 15, fontWeight: isSelected ? '700' : '500' }} numberOfLines={1}>
+                                                    {entity.attributes.friendly_name || entity.entity_id}
+                                                </Text>
+                                                <Text style={{ color: colors.subtext, fontSize: 12, marginTop: 2 }} numberOfLines={1}>
+                                                    {entity.entity_id}
+                                                </Text>
+                                            </View>
+                                            {isSelected && <CheckCircle size={20} color={colors.accent} />}
+                                        </Pressable>
+                                    );
+                                })}
+                                {filteredPickerEntities.length === 0 && (
+                                    <Text style={{ color: colors.subtext, textAlign: 'center', padding: 20 }}>Keine Entitäten gefunden</Text>
+                                )}
+                            </ScrollView>
+                        </View>
+                    </View>
+                </Modal>
             </SafeAreaView>
         </View>
     );
