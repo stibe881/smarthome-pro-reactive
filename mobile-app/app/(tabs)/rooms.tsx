@@ -2511,11 +2511,13 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         flexWrap: 'wrap',
         gap: 12,
+        alignItems: 'stretch',
     },
     tile: {
         minHeight: 110,
     },
     tileContent: {
+        flex: 1,
         backgroundColor: 'transparent',
         borderRadius: 20,
         padding: 16,
