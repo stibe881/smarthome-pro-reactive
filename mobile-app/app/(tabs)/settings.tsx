@@ -1655,7 +1655,7 @@ export default function Settings() {
 
                         {/* Version Info */}
                         <Text style={[styles.versionText, { color: colors.subtext }]}>
-                            HomePilot Pro v1.3.7 • Theme: {theme}
+                            HomePilot Pro v1.4.0 • Theme: {theme}
                         </Text>
                     </ScrollView>
                 </KeyboardAvoidingView>
