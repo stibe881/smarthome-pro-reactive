@@ -104,7 +104,7 @@ Deno.serve(async (req) => {
       // User already exists - reuse their ID and update password
       userId = existingUser.id
       console.log('User already exists, reusing:', userId)
-      await adminClient.auth.admin.updateUser(userId, {
+      await adminClient.auth.admin.updateUserById(userId, {
         password: initialPassword,
         email_confirm: true,
         ban_duration: 'none',

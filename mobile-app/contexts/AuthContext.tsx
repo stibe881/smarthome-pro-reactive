@@ -6,28 +6,31 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert, Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
+import * as FileSystem from 'expo-file-system';
 
 interface AuthContextType {
     user: User | null;
     session: Session | null;
     isLoading: boolean;
+    avatarUrl: string | null;
+    updateProfilePicture: (uri: string) => Promise<void>;
     userRole: 'admin' | 'user' | null;
-    mustChangePassword: boolean;
-    needsSetup: boolean;
     isBiometricsSupported: boolean;
     isBiometricsEnabled: boolean;
     toggleBiometrics: () => Promise<void>;
     authenticateWithBiometrics: () => Promise<boolean>;
     biometricLogin: () => Promise<boolean>;
-    login: (email: string, password: string) => Promise<void>;
-    register: (email: string, password: string) => Promise<void>;
+    login: (e: string, p: string) => Promise<void>;
+    register: (e: string, p: string) => Promise<void>;
     logout: () => Promise<void>;
     deleteAccount: (deleteHousehold?: boolean) => Promise<void>;
     changePassword: (newPassword: string) => Promise<void>;
-    resetMemberPassword: (memberId: string, newPassword: string) => Promise<void>;
-    removeMember: (memberId: string) => Promise<void>;
-    toggleMemberAccess: (memberId: string, active: boolean) => Promise<void>;
+    resetMemberPassword: (id: string, pass: string) => Promise<void>;
+    removeMember: (id: string) => Promise<void>;
+    toggleMemberAccess: (id: string, active: boolean) => Promise<void>;
+    mustChangePassword: boolean;
     clearMustChangePassword: () => void;
+    needsSetup: boolean;
     completeSetup: () => void;
     requestPasswordReset: (email: string) => Promise<void>;
 }
@@ -51,6 +54,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const [session, setSession] = useState<Session | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [userRole, setUserRole] = useState<'admin' | 'user' | null>(null);
+    const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
     const [mustChangePassword, setMustChangePassword] = useState(false);
     const [needsSetup, setNeedsSetup] = useState(false);
     const [isBiometricsSupported, setIsBiometricsSupported] = useState(false);
@@ -169,6 +173,71 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setUserRole((data?.role as 'admin' | 'user') || 'user');
     };
 
+    const loadAvatar = async (userId: string) => {
+        try {
+            const { data, error } = await supabase
+                .from('family_members')
+                .select('avatar_url')
+                .eq('user_id', userId)
+                .single();
+
+            if (data?.avatar_url) {
+                // Get public URL
+                const { data: publicData } = supabase.storage
+                    .from('avatars')
+                    .getPublicUrl(data.avatar_url);
+
+                setAvatarUrl(publicData.publicUrl);
+            } else {
+                setAvatarUrl(null);
+            }
+        } catch (e) {
+            console.warn('Error loading avatar:', e);
+            setAvatarUrl(null);
+        }
+    };
+
+    const updateProfilePicture = async (uri: string) => {
+        if (!user) return;
+
+        try {
+            // 1. Read file using new expo-file-system File API
+            const file = new FileSystem.File(uri);
+            const arrayBuffer = await file.arrayBuffer();
+
+            const fileExt = uri.split('.').pop()?.toLowerCase() || 'jpeg';
+            const fileName = `${user.id}-${Date.now()}.${fileExt}`;
+            const contentType = fileExt === 'png' ? 'image/png' : 'image/jpeg';
+
+            const { error: uploadError } = await supabase.storage
+                .from('avatars')
+                .upload(fileName, arrayBuffer, {
+                    contentType,
+                    upsert: true
+                });
+
+            if (uploadError) throw uploadError;
+
+            // 2. Update DB
+            const { error: dbError } = await supabase
+                .from('family_members')
+                .update({ avatar_url: fileName })
+                .eq('user_id', user.id);
+
+            if (dbError) throw dbError;
+
+            // 3. Update State
+            const { data: publicData } = supabase.storage
+                .from('avatars')
+                .getPublicUrl(fileName);
+            setAvatarUrl(publicData.publicUrl);
+
+        } catch (e) {
+            console.error('Error updating profile picture:', e);
+            throw e;
+        }
+    };
+
 
     // Push Notification Token Registration
     const registerForPushNotificationsAsync = async () => {
@@ -258,6 +327,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             setUser(session?.user ?? null);
             if (session?.user) {
                 fetchUserRole(session.user.id);
+                loadAvatar(session.user.id);
                 // Save push token on startup if logged in
                 savePushTokenToSupabase(session.user.id);
             }
@@ -272,6 +342,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             setUser(session?.user ?? null);
             if (session?.user) {
                 fetchUserRole(session.user.id);
+                loadAvatar(session.user.id);
                 // Check if password change is required
                 const needsPasswordChange = session.user.user_metadata?.must_change_password === true;
                 setMustChangePassword(needsPasswordChange);
@@ -280,6 +351,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 savePushTokenToSupabase(session.user.id);
             } else {
                 setUserRole(null);
+                setAvatarUrl(null);
                 setMustChangePassword(false);
             }
         });
@@ -444,6 +516,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             session,
             isLoading,
             userRole,
+            avatarUrl,
+            updateProfilePicture,
             isBiometricsSupported,
             isBiometricsEnabled,
             toggleBiometrics,

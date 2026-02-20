@@ -19,8 +19,8 @@ export interface ThemeColors {
 }
 
 export type ThemeType =
-    | 'nature' | 'vulkan' | 'ocean'
-    | 'minimal' | 'cozy' | 'fresh' | 'elegant';
+    | 'nature' | 'vulkan' | 'ocean' | 'rose'
+    | 'minimal' | 'cozy' | 'fresh' | 'elegant' | 'blossom';
 
 // Theme display names for UI
 export const THEME_DISPLAY_NAMES: Record<ThemeType, string> = {
@@ -31,11 +31,13 @@ export const THEME_DISPLAY_NAMES: Record<ThemeType, string> = {
     cozy: 'Cozy',
     fresh: 'Fresh',
     elegant: 'Elegant',
+    rose: 'Rose (Dark)',
+    blossom: 'Blossom (Light)',
 };
 
 // Theme categories
-export const DARK_THEMES: ThemeType[] = ['nature', 'vulkan', 'ocean'];
-export const LIGHT_THEMES: ThemeType[] = ['minimal', 'cozy', 'fresh', 'elegant'];
+export const DARK_THEMES: ThemeType[] = ['nature', 'vulkan', 'ocean', 'rose'];
+export const LIGHT_THEMES: ThemeType[] = ['minimal', 'cozy', 'fresh', 'elegant', 'blossom'];
 
 export const THEMES: Record<ThemeType, ThemeColors> = {
     // --- DARK THEMES ---
@@ -137,6 +139,34 @@ export const THEMES: Record<ThemeType, ThemeColors> = {
         tint: '#D97706',
         tabBar: '#FAFAF9',
         backgroundImage: require('../assets/themes/light_elegant.png'),
+    },
+    rose: {
+        background: '#2a0a10', // Dark Wine
+        card: '#3d0f1b',       // Deep Rose
+        text: '#fce7f3',       // Light Pink
+        subtext: '#db2777',    // Pink 600
+        accent: '#ec4899',     // Pink 500
+        border: '#831843',     // Pink 900
+        success: '#f472b6',
+        error: '#ef4444',
+        warning: '#f59e0b',
+        tint: '#ec4899',
+        tabBar: '#2a0a10',
+        backgroundImage: require('../assets/themes/luxury.png'), // Reuse luxury for now or null
+    },
+    blossom: {
+        background: '#fff1f2', // Rose 50
+        card: '#ffffff',
+        text: '#881337',       // Rose 900
+        subtext: '#9f1239',    // Rose 800
+        accent: '#be185d',     // Rose 700
+        border: '#fda4af',     // Rose 300
+        success: '#10b981',
+        error: '#ef4444',
+        warning: '#f59e0b',
+        tint: '#be185d',
+        tabBar: '#fff1f2',
+        backgroundImage: require('../assets/themes/light_elegant.png'), // Reuse elegant for now
     },
 };
 

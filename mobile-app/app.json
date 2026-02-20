@@ -15,7 +15,13 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.stibe88.mobileapp",
-      "buildNumber": "72",
+      "appleTeamId": "QF59FHQ44R",
+      "buildNumber": "75",
+      "entitlements": {
+        "com.apple.security.application-groups": [
+          "group.com.stibe88.mobileapp"
+        ]
+      },
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSFaceIDUsageDescription": "Wir nutzen Face ID für den schnellen Login.",
@@ -56,7 +62,8 @@
       ],
       "expo-router",
       "expo-web-browser",
-      "expo-secure-store"
+      "expo-secure-store",
+      "@bacons/apple-targets"
     ],
     "extra": {
       "router": {},

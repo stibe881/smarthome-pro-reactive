@@ -67,7 +67,7 @@ const findNearbyShop = async (lat: number, lng: number): Promise<string | null> 
     const shops = await getShopList();
     for (const shop of shops) {
         const distance = haversineDistance(lat, lng, shop.lat, shop.lng);
-        if (distance <= 100) { // 100 meters radius
+        if (distance <= 60) { // 60 meters radius
             console.log(`🛒 Near ${shop.name} (${Math.round(distance)}m)`);
             return shop.name;
         }

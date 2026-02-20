@@ -1,22 +1,24 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import * as Clipboard from 'expo-clipboard';
-import { View, Text, TextInput, Pressable, Alert, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform, useWindowDimensions, StyleSheet, Switch, Linking, Modal, Image } from 'react-native';
+import { View, Text, TextInput, Pressable, Alert, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform, useWindowDimensions, StyleSheet, Switch, Linking, Modal, Image, ActionSheetIOS } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { useHomeAssistant } from '../../contexts/HomeAssistantContext';
 import { useTheme, THEMES, ThemeType, AutoThemeConfig, THEME_DISPLAY_NAMES, DARK_THEMES, LIGHT_THEMES } from '../../contexts/ThemeContext';
-import { Wifi, WifiOff, Save, LogOut, User, Server, Key, CheckCircle, XCircle, Shield, Bell, Palette, ChevronRight, LucideIcon, X, ScanFace, MapPin, Smartphone, Search, Calendar, Trash2, Users, Eye, EyeOff, Sun, Moon, Store } from 'lucide-react-native';
+import { Wifi, WifiOff, Save, LogOut, User, Server, Key, CheckCircle, XCircle, Shield, Bell, Palette, ChevronRight, LucideIcon, X, ScanFace, MapPin, Smartphone, Search, Calendar, Trash2, Users, Eye, EyeOff, Sun, Moon, Store, Camera, RotateCw } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
+import * as ImagePicker from 'expo-image-picker';
 import { FamilyManagement } from '../../components/FamilyManagement';
 import { ConnectionWizard } from '../../components/ConnectionWizard';
 import { AutomationsModal } from '../../components/AutomationsModal';
 import { ShoppingLocationsModal } from '../../components/ShoppingLocationsModal';
 import { NotificationTypesManager } from '../../components/NotificationTypesManager';
-import { Activity, ShieldCheck, Zap, Blinds, AlertTriangle, Baby, Plus, Settings as SettingsIcon } from 'lucide-react-native';
+import { WidgetSettings } from '../../components/WidgetSettings';
+import { Activity, ShieldCheck, Zap, Blinds, AlertTriangle, Baby, Plus, Settings as SettingsIcon, LayoutGrid } from 'lucide-react-native';
 import { useKidsMode, KIDS_GENDER_THEMES, KidsGender } from '../../contexts/KidsContext';
 import { supabase } from '../../lib/supabase';
 
@@ -1028,7 +1030,7 @@ export default function Settings() {
     const { width } = useWindowDimensions();
     const isTablet = width >= 768;
 
-    const { logout, user, userRole, isBiometricsSupported, isBiometricsEnabled, toggleBiometrics, deleteAccount } = useAuth();
+    const { logout, user, userRole, isBiometricsSupported, isBiometricsEnabled, toggleBiometrics, deleteAccount, avatarUrl, updateProfilePicture } = useAuth();
     const {
         isConnected,
         haBaseUrl,
@@ -1048,151 +1050,86 @@ export default function Settings() {
     const [haUrl, setHaUrl] = useState('');
     const [haToken, setHaToken] = useState('');
     const [isSaving, setIsSaving] = useState(false);
+    const [isUploading, setIsUploading] = useState(false);
     const [testResult, setTestResult] = useState<'success' | 'error' | null>(null);
     const [notificationModalVisible, setNotificationModalVisible] = useState(false);
     const [automationsModalVisible, setAutomationsModalVisible] = useState(false);
-
-    // ... existing ...
-
     const [changePasswordModalVisible, setChangePasswordModalVisible] = useState(false);
     const [isHAExpanded, setIsHAExpanded] = useState(false);
     const [isFamilyExpanded, setIsFamilyExpanded] = useState(false);
     const [kidsModalVisible, setKidsModalVisible] = useState(false);
     const [showWizard, setShowWizard] = useState(false);
     const [shoppingLocationsVisible, setShoppingLocationsVisible] = useState(false);
+    const [widgetSettingsVisible, setWidgetSettingsVisible] = useState(false);
     const [isDesignExpanded, setIsDesignExpanded] = useState(false);
 
-    // Effect to update status bar style based on theme
-    useEffect(() => {
-        // This side effect is handled in ThemeProvider, but we can double check logic here if needed.
-    }, [theme]);
-
-    // Load saved credentials on mount
-    useEffect(() => {
-        (async () => {
-            const creds = await getCredentials();
-            if (creds) {
-                setHaUrl(creds.url);
-                setHaToken(creds.token);
-            }
-        })();
-    }, []);
-
-    const handleSaveAndConnect = async () => {
-        if (!haUrl.trim() || !haToken.trim()) {
-            Alert.alert('Fehler', 'Bitte URL und Token eingeben');
-            return;
-        }
-
-        setIsSaving(true);
-        setTestResult(null);
-
+    const pickImage = async () => {
         try {
-            await saveCredentials(haUrl.trim(), haToken.trim());
-            const success = await connect();
-            setTestResult(success ? 'success' : 'error');
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert('Berechtigung', 'Wir benötigen Zugriff auf deine Fotos, um das Profilbild zu ändern.');
+                return;
+            }
 
-            if (success) {
-                Alert.alert('Erfolg', 'Verbindung zu Home Assistant hergestellt!');
-                setIsHAExpanded(false); // Auto-collapse on success
-            } else {
-                Alert.alert('Fehler', 'Verbindung fehlgeschlagen. Überprüfe URL und Token.');
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.5,
+            });
+
+            if (!result.canceled) {
+                setIsUploading(true);
+                try {
+                    await updateProfilePicture(result.assets[0].uri);
+                    Alert.alert('Erfolg', 'Profilbild wurde aktualisiert!');
+                } catch (e: any) {
+                    Alert.alert('Fehler', 'Upload fehlgeschlagen: ' + e.message);
+                } finally {
+                    setIsUploading(false);
+                }
             }
         } catch (e) {
-            setTestResult('error');
-            Alert.alert('Fehler', 'Verbindung konnte nicht hergestellt werden.');
-        } finally {
-            setIsSaving(false);
+            console.error('Picker Error:', e);
+            setIsUploading(false);
         }
     };
 
-    const handleDeleteAccount = () => {
-        if (userRole === 'admin') {
-            Alert.alert(
-                'Konto löschen',
-                'Du bist Administrator. Möchtest du nur dein Konto oder den gesamten Haushalt (inkl. aller Mitglieder) löschen?',
-                [
-                    { text: 'Abbrechen', style: 'cancel' },
-                    {
-                        text: 'Nur Konto',
-                        style: 'destructive',
-                        onPress: async () => {
-                            try {
-                                await deleteAccount(false);
-                            } catch (e: any) {
-                                Alert.alert('Fehler', e.message);
-                            }
-                        }
-                    },
-                    {
-                        text: 'Konto & Haushalt',
-                        style: 'destructive',
-                        onPress: async () => {
-                            Alert.alert(
-                                'Endgültige Bestätigung',
-                                'Bist du sicher? Der gesamte Haushalt und alle Mitglieder werden unwiderruflich gelöscht.',
-                                [
-                                    { text: 'Abbrechen', style: 'cancel' },
-                                    {
-                                        text: 'ALLES LÖSCHEN',
-                                        style: 'destructive',
-                                        onPress: async () => {
-                                            try {
-                                                await deleteAccount(true);
-                                            } catch (e: any) {
-                                                Alert.alert('Fehler', e.message);
-                                            }
-                                        }
-                                    }
-                                ]
-                            );
-                        }
-                    }
-                ]
-            );
-        } else {
-            Alert.alert(
-                'Konto unwiderruflich löschen',
-                'Bist du sicher? Alle deine Daten und Einstellungen werden permanent gelöscht. Dies kann nicht rückgängig gemacht werden.',
-                [
-                    { text: 'Abbrechen', style: 'cancel' },
-                    {
-                        text: 'LÖSCHEN',
-                        style: 'destructive',
-                        onPress: async () => {
-                            try {
-                                await deleteAccount(false);
-                            } catch (e: any) {
-                                Alert.alert('Fehler', 'Löschen fehlgeschlagen: ' + e.message);
-                            }
-                        }
-                    }
-                ]
-            );
-        }
-    };
 
-    const handleLogout = () => {
-        Alert.alert(
-            'Abmelden',
-            'Möchtest du dich wirklich abmelden?',
-            [
-                { text: 'Abbrechen', style: 'cancel' },
-                {
-                    text: 'Abmelden',
-                    style: 'destructive',
-                    onPress: () => {
-                        disconnect();
-                        logout();
-                    }
-                }
-            ]
-        );
-    };
+
+    // --- Components ---
+    const SettingsSection = ({ title, children, colors }: any) => (
+        <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.subtext }]}>{title}</Text>
+            <View style={[styles.sectionContent, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                {children}
+            </View>
+        </View>
+    );
+
+    const SettingsRow = ({ icon, label, value, onPress, showChevron, isLast, iconColor, colors }: any) => (
+        <Pressable
+            onPress={onPress}
+            style={({ pressed }) => [
+                styles.row,
+                !isLast && styles.rowBorder,
+                { backgroundColor: pressed ? colors.background : 'transparent' }
+            ]}
+        >
+            <View style={[styles.iconContainer, { backgroundColor: iconColor + '20' }]}>
+                {icon}
+            </View>
+            <View style={styles.rowContent}>
+                <Text style={[styles.rowLabel, { color: colors.text }]}>{label}</Text>
+                {value && <Text style={[styles.rowValue, { color: colors.subtext }]}>{value}</Text>}
+            </View>
+            {showChevron && <ChevronRight size={20} color={colors.subtext} />}
+        </Pressable>
+    );
 
     const ThemeCard = ({ itemTheme }: { itemTheme: ThemeType }) => {
         const isActive = theme === itemTheme;
-        const themeConfig = THEMES[itemTheme];
+        const itemColors = THEMES[itemTheme];
 
         return (
             <Pressable
@@ -1202,47 +1139,96 @@ export default function Settings() {
                     width: 100,
                     height: 140,
                     borderRadius: 16,
-                    backgroundColor: themeConfig.card,
+                    backgroundColor: itemColors.card,
                     borderWidth: isActive ? 2 : 1,
-                    borderColor: isActive ? colors.accent : themeConfig.border,
+                    borderColor: isActive ? colors.accent : itemColors.border,
                     overflow: 'hidden',
-                    position: 'relative',
                     shadowColor: "#000",
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.2,
-                    shadowRadius: 4,
-                    elevation: 4,
+                    shadowOffset: { width: 0, height: 4 },
+                    shadowOpacity: 0.3,
+                    shadowRadius: 4.65,
+                    elevation: 8,
                 }}
             >
-                {/* Preview Header / Background */}
-                <View style={{ flex: 1, backgroundColor: themeConfig.background, alignItems: 'center', justifyContent: 'center' }}>
-                    {/* Mini UI Representation */}
-                    <View style={{ width: '80%', height: 8, borderRadius: 4, backgroundColor: themeConfig.card, marginBottom: 6 }} />
-                    <View style={{ flexDirection: 'row', gap: 4 }}>
-                        <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: themeConfig.accent }} />
-                        <View style={{ width: 40, height: 24, borderRadius: 6, backgroundColor: themeConfig.card }} />
-                    </View>
+                {/* Preview Header */}
+                <View style={{ height: 60, backgroundColor: itemColors.background, alignItems: 'center', justifyContent: 'center' }}>
+                    <View style={{ width: 40, height: 8, borderRadius: 4, backgroundColor: itemColors.card, marginBottom: 6 }} />
+                    <View style={{ width: 60, height: 8, borderRadius: 4, backgroundColor: itemColors.card, opacity: 0.5 }} />
                 </View>
 
-                {/* Label */}
-                <View style={{ padding: 10, backgroundColor: themeConfig.card, borderTopWidth: 1, borderTopColor: themeConfig.border }}>
-                    <Text style={{
-                        color: themeConfig.text,
-                        fontSize: 12,
-                        fontWeight: '600',
-                        textAlign: 'center',
-                        textTransform: 'capitalize'
-                    }}>
-                        {THEME_DISPLAY_NAMES[itemTheme]}
-                    </Text>
-                </View>
-
-                {isActive && (
-                    <View style={{ position: 'absolute', top: 6, right: 6, backgroundColor: colors.accent, borderRadius: 10, padding: 2 }}>
-                        <CheckCircle size={14} color="#fff" />
+                {/* Content */}
+                <View style={{ padding: 10, justifyContent: 'space-between', flex: 1 }}>
+                    <View>
+                        <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: itemColors.accent, marginBottom: 6 }} />
+                        <Text style={{ color: itemColors.text, fontSize: 13, fontWeight: '700' }}>{THEME_DISPLAY_NAMES[itemTheme]}</Text>
                     </View>
-                )}
+
+                    {isActive && (
+                        <View style={{ position: 'absolute', bottom: 8, right: 8, backgroundColor: colors.accent, borderRadius: 10, padding: 2 }}>
+                            <CheckCircle size={14} color="#FFF" />
+                        </View>
+                    )}
+                </View>
             </Pressable>
+        );
+    };
+
+    // --- Handlers ---
+    const handleSaveAndConnect = async () => {
+        setIsSaving(true);
+        try {
+            await connect(haUrl, haToken);
+            Alert.alert('Erfolg', 'Verbindung erfolgreich hergestellt!');
+            setIsHAExpanded(false);
+        } catch (e: any) {
+            Alert.alert('Fehler', 'Verbindung fehlgeschlagen: ' + e.message);
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleLogout = async () => {
+        Alert.alert(
+            'Abmelden',
+            'Möchtest du dich wirklich abmelden?',
+            [
+                { text: 'Abbrechen', style: 'cancel' },
+                {
+                    text: 'Abmelden',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            // First try to clear tokens or local state if needed
+                            await logout();
+                            // Router redirect handled by layout effect
+                        } catch (e) {
+                            console.error('Logout error', e);
+                            Alert.alert('Fehler', 'Abmelden fehlgeschlagen.');
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
+    const handleDeleteAccount = async () => {
+        Alert.alert(
+            'Konto löschen',
+            'Möchtest du dein Konto wirklich unwiderruflich löschen? Alle Daten werden entfernt.',
+            [
+                { text: 'Abbrechen', style: 'cancel' },
+                {
+                    text: 'Löschen',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            await deleteAccount(true); // true to delete household too if last admin
+                        } catch (e: any) {
+                            Alert.alert('Fehler', 'Löschen fehlgeschlagen: ' + e.message);
+                        }
+                    }
+                }
+            ]
         );
     };
 
@@ -1278,12 +1264,32 @@ export default function Settings() {
                         {/* User Profile Card */}
                         <View style={[styles.profileCard, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }]}>
                             <View style={[styles.profileContent, { padding: 20 }]}>
-                                <View style={[styles.avatar, { backgroundColor: colors.background }]}>
-                                    <User size={32} color={colors.accent} />
-                                </View>
+                                <Pressable onPress={pickImage} style={[styles.avatar, { backgroundColor: colors.background, position: 'relative', overflow: 'hidden' }]}>
+                                    {isUploading ? (
+                                        <ActivityIndicator color={colors.accent} />
+                                    ) : avatarUrl ? (
+                                        <Image source={{ uri: avatarUrl }} style={{ width: '100%', height: '100%' }} />
+                                    ) : (
+                                        <User size={32} color={colors.accent} />
+                                    )}
+
+                                    <View style={{
+                                        position: 'absolute', bottom: 0, left: 0, right: 0, height: 20,
+                                        backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center'
+                                    }}>
+                                        <Camera size={10} color="#fff" />
+                                    </View>
+                                </Pressable>
                                 <View style={styles.profileInfo}>
                                     <Text style={[styles.profileLabel, { color: colors.subtext }]}>Angemeldet als</Text>
                                     <Text style={[styles.profileEmail, { color: colors.text }]}>{user?.email}</Text>
+                                    {/* <Pressable 
+                                        hitSlop={10} 
+                                        onPress={pickImage}
+                                        style={{ marginTop: 4, flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                                    >
+                                        <Text style={{ fontSize: 12, color: colors.accent, fontWeight: '600' }}>Bild ändern</Text>
+                                    </Pressable> */}
                                 </View>
                             </View>
                         </View>
@@ -1425,6 +1431,14 @@ export default function Settings() {
                                 colors={colors}
                             />
                             <SettingsRow
+                                icon={<LayoutGrid size={20} color={colors.accent} />}
+                                iconColor={colors.accent}
+                                label="Widgets (Homescreen)"
+                                showChevron
+                                onPress={() => setWidgetSettingsVisible(true)}
+                                colors={colors}
+                            />
+                            <SettingsRow
                                 icon={<Bell size={20} color={notificationSettings.enabled ? colors.accent : colors.subtext} />}
                                 iconColor={notificationSettings.enabled ? colors.accent : colors.subtext}
                                 label="Benachrichtigungen"
@@ -1458,6 +1472,11 @@ export default function Settings() {
                                 </View>
                             </View>
                         )}
+
+                        <WidgetSettings
+                            visible={widgetSettingsVisible}
+                            onClose={() => setWidgetSettingsVisible(false)}
+                        />
 
                         <SettingsSection title="Standort" colors={colors}>
                             <SettingsRow

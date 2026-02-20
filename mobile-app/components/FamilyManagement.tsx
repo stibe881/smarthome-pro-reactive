@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, Pressable, ActivityIndicator, TextInput, Modal, Alert, KeyboardAvoidingView, Platform, StyleSheet, Switch } from 'react-native';
+import { View, Text, ScrollView, Pressable, ActivityIndicator, TextInput, Modal, Alert, KeyboardAvoidingView, Platform, StyleSheet, Switch, Image } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { Users, UserPlus, Mail, Crown, X, Send, Lock, Eye, EyeOff, Trash2, Key, Shield, ShieldOff, MoreVertical } from 'lucide-react-native';
+import { Users, UserPlus, Mail, Crown, X, Send, Lock, Eye, EyeOff, Trash2, Key, Shield, ShieldOff, MoreVertical, Camera } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 
 interface FamilyMember {
     id: string;
@@ -12,6 +14,7 @@ interface FamilyMember {
     role: string;
     is_active: boolean;
     created_at: string;
+    avatar_url?: string;
 }
 
 interface Invitation {
@@ -41,6 +44,7 @@ export const FamilyManagement = ({ colors }: FamilyManagementProps) => {
     const [showAdminModal, setShowAdminModal] = useState(false);
     const [newMemberPassword, setNewMemberPassword] = useState('');
     const [isAdminActionLoading, setIsAdminActionLoading] = useState(false);
+    const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
 
     useEffect(() => {
         loadFamilyData();
@@ -199,6 +203,56 @@ export const FamilyManagement = ({ colors }: FamilyManagementProps) => {
         return palettes[index % palettes.length];
     };
 
+    const getAvatarPublicUrl = (avatarPath: string) => {
+        const { data } = supabase.storage.from('avatars').getPublicUrl(avatarPath);
+        return data.publicUrl;
+    };
+
+    const handleUploadMemberAvatar = async () => {
+        if (!selectedMember) return;
+        try {
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ['images'],
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.7,
+            });
+
+            if (result.canceled) return;
+            setIsUploadingAvatar(true);
+
+            const uri = result.assets[0].uri;
+            const file = new FileSystem.File(uri);
+            const arrayBuffer = await file.arrayBuffer();
+
+            const fileExt = uri.split('.').pop()?.toLowerCase() || 'jpeg';
+            const fileName = `${selectedMember.user_id}-${Date.now()}.${fileExt}`;
+            const contentType = fileExt === 'png' ? 'image/png' : 'image/jpeg';
+
+            const { error: uploadError } = await supabase.storage
+                .from('avatars')
+                .upload(fileName, arrayBuffer, { contentType, upsert: true });
+
+            if (uploadError) throw uploadError;
+
+            const { error: dbError } = await supabase
+                .from('family_members')
+                .update({ avatar_url: fileName })
+                .eq('user_id', selectedMember.user_id);
+
+            if (dbError) throw dbError;
+
+            Alert.alert('Erfolg', 'Profilbild aktualisiert.');
+            setSelectedMember({ ...selectedMember, avatar_url: fileName });
+            loadFamilyData();
+        } catch (e: any) {
+            console.error('Avatar upload error:', e);
+            Alert.alert('Fehler', e.message || 'Upload fehlgeschlagen.');
+        } finally {
+            setIsUploadingAvatar(false);
+        }
+    };
+
     if (isLoading) return <ActivityIndicator size="small" color={colors.accent} style={{ padding: 20 }} />;
 
     return (
@@ -225,9 +279,13 @@ export const FamilyManagement = ({ colors }: FamilyManagementProps) => {
                             }
                         }}
                     >
-                        <LinearGradient colors={getAvatarColor(index) as any} style={styles.avatar}>
-                            <Text style={styles.avatarText}>{getInitials(member.email)}</Text>
-                        </LinearGradient>
+                        {member.avatar_url ? (
+                            <Image source={{ uri: getAvatarPublicUrl(member.avatar_url) }} style={styles.avatar} />
+                        ) : (
+                            <LinearGradient colors={getAvatarColor(index) as any} style={styles.avatar}>
+                                <Text style={styles.avatarText}>{getInitials(member.email)}</Text>
+                            </LinearGradient>
+                        )}
                         <View style={styles.memberInfo}>
                             <Text style={[styles.memberEmail, { color: colors.text }]} numberOfLines={1}>{member.email}</Text>
                             <View style={styles.roleRow}>
@@ -265,9 +323,18 @@ export const FamilyManagement = ({ colors }: FamilyManagementProps) => {
                     {selectedMember && (
                         <ScrollView style={{ padding: 16 }}>
                             <View style={styles.selectedHeader}>
-                                <LinearGradient colors={getAvatarColor(0) as any} style={[styles.avatar, { width: 64, height: 64, borderRadius: 32 }]}>
-                                    <Text style={[styles.avatarText, { fontSize: 24 }]}>{getInitials(selectedMember.email)}</Text>
-                                </LinearGradient>
+                                <Pressable onPress={handleUploadMemberAvatar} disabled={isUploadingAvatar}>
+                                    {selectedMember.avatar_url ? (
+                                        <Image source={{ uri: getAvatarPublicUrl(selectedMember.avatar_url) }} style={{ width: 64, height: 64, borderRadius: 32 }} />
+                                    ) : (
+                                        <LinearGradient colors={getAvatarColor(0) as any} style={[styles.avatar, { width: 64, height: 64, borderRadius: 32 }]}>
+                                            <Text style={[styles.avatarText, { fontSize: 24 }]}>{getInitials(selectedMember.email)}</Text>
+                                        </LinearGradient>
+                                    )}
+                                    <View style={{ position: 'absolute', bottom: -2, right: -2, backgroundColor: colors.accent, borderRadius: 12, padding: 4 }}>
+                                        {isUploadingAvatar ? <ActivityIndicator size="small" color="#fff" /> : <Camera size={14} color="#fff" />}
+                                    </View>
+                                </Pressable>
                                 <Text style={[styles.selectedEmail, { color: colors.text }]}>{selectedMember.email}</Text>
                                 <Text style={[styles.memberRole, { color: colors.subtext }]}>{selectedMember.role === 'admin' ? 'Administrator' : 'Familienmitglied'}</Text>
                             </View>
