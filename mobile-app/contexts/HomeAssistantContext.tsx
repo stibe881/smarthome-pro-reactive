@@ -3,7 +3,7 @@ import { Alert, AppState, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from './AuthContext';
 import { HomeAssistantService } from '../services/homeAssistant';
-import { processWidgetPendingActions } from '../lib/widget';
+import { processWidgetPendingActions, saveCredentialsToWidget } from '../lib/widget';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
@@ -1227,6 +1227,9 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
             // Cache credentials for Background Tasks (Geofencing)
             await AsyncStorage.setItem('@smarthome_ha_url', cleanUrl);
             await AsyncStorage.setItem('@smarthome_ha_token', creds.token);
+
+            // Share credentials with iOS Widget for direct HA API calls
+            saveCredentialsToWidget(cleanUrl, creds.token);
 
             const success = await serviceRef.current!.connect(cleanUrl, creds.token);
             setIsConnected(success);

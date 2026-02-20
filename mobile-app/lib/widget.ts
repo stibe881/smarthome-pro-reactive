@@ -52,6 +52,22 @@ export const saveCookieToWidget = async (data: WidgetData) => {
     }
 };
 
+/**
+ * Save Home Assistant credentials to App Group UserDefaults
+ * so the native iOS widget can make direct API calls.
+ */
+export const saveCredentialsToWidget = async (haUrl: string, haToken: string) => {
+    if (Platform.OS !== 'ios' || !userDefaults) return;
+
+    try {
+        await userDefaults.set('haUrl', haUrl);
+        await userDefaults.set('haToken', haToken);
+        console.log('[Widget] HA credentials saved to UserDefaults');
+    } catch (error) {
+        console.error('[Widget] Failed to save credentials:', error);
+    }
+};
+
 export const loadCookieFromWidget = async (): Promise<WidgetData | null> => {
     // Try UserDefaults first (native widget data)
     if (Platform.OS === 'ios' && userDefaults) {
