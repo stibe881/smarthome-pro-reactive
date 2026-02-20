@@ -255,9 +255,14 @@ export default function Media() {
     const handlePlayPause = (entityId: string, isPlaying: boolean) => {
         if (!isPlaying) {
             const player = entities.find(e => e.entity_id === entityId);
+            // Only open Spotify picker if player is truly empty (no media loaded)
+            // Cast devices go to 'idle' after pause — if media_title exists, just resume
             if (player && (player.state === 'idle' || player.state === 'off' || player.state === 'unavailable')) {
-                handleSpotify(entityId);
-                return;
+                const hasMedia = player.attributes?.media_title || player.attributes?.media_content_id;
+                if (!hasMedia) {
+                    handleSpotify(entityId);
+                    return;
+                }
             }
         }
         safelyCallService('media_player', isPlaying ? 'media_pause' : 'media_play', entityId);
