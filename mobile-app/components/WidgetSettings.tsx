@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Modal, Pressable, ScrollView, Switch, Alert, Platform, TextInput } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { X, Save, Plus, Trash2, Smartphone, Search, Edit2, ChevronRight, CheckCircle, Play, MoreHorizontal } from 'lucide-react-native';
+import { X, Save, Plus, Trash2, Smartphone, Search, Edit2, ChevronRight, CheckCircle, Play, MoreHorizontal, Lightbulb, Lock, Thermometer, Tv, Music, Camera, Fan, Blinds, Power, Zap, Home, Sun, Moon, Coffee, Film, Sunrise, DoorOpen, Shield, Bell, Wifi, Speaker, Cloud, Droplets, Wind, Eye, ToggleLeft } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useHomeAssistant } from '../contexts/HomeAssistantContext';
 import { saveCookieToWidget, loadCookieFromWidget, WidgetData } from '../lib/widget';
@@ -28,6 +28,38 @@ const COLORS = [
     '#8B5CF6', // Violet
     '#EC4899', // Pink
     '#64748B', // Slate
+];
+
+// SF Symbol icons for the iOS widget with matching Lucide icons for preview
+const SF_ICONS = [
+    { sf: 'lightbulb.fill', label: 'Licht', lucide: Lightbulb },
+    { sf: 'lock.fill', label: 'Schloss', lucide: Lock },
+    { sf: 'lock.open.fill', label: 'Offen', lucide: DoorOpen },
+    { sf: 'thermometer', label: 'Temperatur', lucide: Thermometer },
+    { sf: 'tv.fill', label: 'TV', lucide: Tv },
+    { sf: 'music.note', label: 'Musik', lucide: Music },
+    { sf: 'camera.fill', label: 'Kamera', lucide: Camera },
+    { sf: 'fan.fill', label: 'Ventilator', lucide: Fan },
+    { sf: 'blinds.vertical.closed', label: 'Rollläden', lucide: Blinds },
+    { sf: 'power', label: 'Strom', lucide: Power },
+    { sf: 'bolt.fill', label: 'Blitz', lucide: Zap },
+    { sf: 'house.fill', label: 'Haus', lucide: Home },
+    { sf: 'sun.max.fill', label: 'Sonne', lucide: Sun },
+    { sf: 'moon.fill', label: 'Mond', lucide: Moon },
+    { sf: 'cup.and.saucer.fill', label: 'Kaffee', lucide: Coffee },
+    { sf: 'film.fill', label: 'Film', lucide: Film },
+    { sf: 'sunrise.fill', label: 'Sonnenaufgang', lucide: Sunrise },
+    { sf: 'door.left.hand.closed', label: 'Tür', lucide: DoorOpen },
+    { sf: 'shield.fill', label: 'Sicherheit', lucide: Shield },
+    { sf: 'bell.fill', label: 'Glocke', lucide: Bell },
+    { sf: 'wifi', label: 'WLAN', lucide: Wifi },
+    { sf: 'speaker.wave.2.fill', label: 'Lautsprecher', lucide: Speaker },
+    { sf: 'cloud.fill', label: 'Wolke', lucide: Cloud },
+    { sf: 'drop.fill', label: 'Wasser', lucide: Droplets },
+    { sf: 'wind', label: 'Wind', lucide: Wind },
+    { sf: 'eye.fill', label: 'Auge', lucide: Eye },
+    { sf: 'switch.2', label: 'Schalter', lucide: ToggleLeft },
+    { sf: 'play.fill', label: 'Abspielen', lucide: Play },
 ];
 
 export function WidgetSettings({ visible, onClose }: WidgetSettingsProps) {
@@ -76,7 +108,7 @@ export function WidgetSettings({ visible, onClose }: WidgetSettingsProps) {
             label: '',
             value: '',
             id: '',
-            icon: 'circle',
+            icon: 'lightbulb.fill',
             actionType: 'toggle',
             iconColor: '#3B82F6',
             confirm: false
@@ -187,7 +219,11 @@ export function WidgetSettings({ visible, onClose }: WidgetSettingsProps) {
                                 style={[styles.itemRow, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }]}
                             >
                                 <View style={[styles.iconBadge, { backgroundColor: (item.iconColor || colors.accent) + '20' }]}>
-                                    <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: item.iconColor || colors.accent }} />
+                                    {(() => {
+                                        const matchedIcon = SF_ICONS.find(i => i.sf === item.icon);
+                                        const IconComponent = matchedIcon ? matchedIcon.lucide : Lightbulb;
+                                        return <IconComponent size={16} color={item.iconColor || colors.accent} />;
+                                    })()}
                                 </View>
                                 <View style={{ flex: 1 }}>
                                     <Text style={{ color: colors.text, fontWeight: '600' }}>{item.label}</Text>
@@ -246,6 +282,36 @@ export function WidgetSettings({ visible, onClose }: WidgetSettingsProps) {
                                 placeholder="Name eingeben"
                                 placeholderTextColor={colors.subtext}
                             />
+
+                            {/* Icon Picker */}
+                            <Text style={[styles.sectionLabel, { color: colors.subtext, marginTop: 24 }]}>ICON</Text>
+                            <View style={{ backgroundColor: colors.card, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: colors.border }}>
+                                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                                    {SF_ICONS.map(({ sf, label, lucide: LucideIcon }) => {
+                                        const isSelected = editItem.icon === sf;
+                                        return (
+                                            <Pressable
+                                                key={sf}
+                                                onPress={() => setEditItem(prev => ({ ...prev, icon: sf }))}
+                                                style={{
+                                                    width: 48, height: 48, borderRadius: 12,
+                                                    alignItems: 'center', justifyContent: 'center',
+                                                    backgroundColor: isSelected ? (editItem.iconColor || colors.accent) + '30' : colors.background,
+                                                    borderWidth: isSelected ? 2 : 0,
+                                                    borderColor: editItem.iconColor || colors.accent,
+                                                }}
+                                            >
+                                                <LucideIcon size={22} color={isSelected ? (editItem.iconColor || colors.accent) : colors.subtext} />
+                                            </Pressable>
+                                        );
+                                    })}
+                                </View>
+                                {editItem.icon && (
+                                    <Text style={{ color: colors.subtext, fontSize: 11, marginTop: 8, textAlign: 'center' }}>
+                                        {SF_ICONS.find(i => i.sf === editItem.icon)?.label || editItem.icon}
+                                    </Text>
+                                )}
+                            </View>
 
                             {/* Action */}
                             <Text style={[styles.sectionLabel, { color: colors.subtext, marginTop: 24 }]}>AKTION</Text>
