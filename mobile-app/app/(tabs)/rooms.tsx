@@ -260,6 +260,7 @@ const LightTile = memo(({ light, toggleLight, setBrightness, width, onLongPress,
     const activeColor = roomTheme ? roomTheme.accentColor : colors.accent;
     const colorModes = light.attributes.supported_color_modes || [];
     const supportsBrightness = colorModes.length > 0 && !(colorModes.length === 1 && colorModes[0] === 'onoff');
+    const supportsColor = colorModes.some((m: string) => ['hs', 'xy', 'rgb', 'rgbw', 'rgbww'].includes(m));
 
     return (
         <View style={[styles.tile, { width, backgroundColor: 'transparent', borderWidth: 0 }]}>
@@ -279,7 +280,7 @@ const LightTile = memo(({ light, toggleLight, setBrightness, width, onLongPress,
                     <View style={[styles.tileIcon, { backgroundColor: isOn ? activeColor : (roomTheme ? 'rgba(255,255,255,0.1)' : colors.background) }]}>
                         <Lightbulb size={24} color={isOn ? "#FFF" : colors.subtext} />
                     </View>
-                    {onLongPress && (
+                    {onLongPress && supportsColor && (
                         <Pressable
                             onPress={() => onLongPress(light)}
                             hitSlop={12}
