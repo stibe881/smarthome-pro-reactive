@@ -649,7 +649,16 @@ export default function Media() {
                     <View style={{ marginBottom: 32 }}>
                         <HeroPlayer
                             player={activePlayer}
+                            massPlayer={(() => {
+                                const massId = getMassPlayerId(activePlayer?.entity_id);
+                                return massId ? entities.find(e => e.entity_id === massId) : undefined;
+                            })()}
                             imageUrl={getEntityPictureUrl(activePlayer?.attributes.entity_picture)}
+                            massImageUrl={(() => {
+                                const massId = getMassPlayerId(activePlayer?.entity_id);
+                                const massEntity = massId ? entities.find(e => e.entity_id === massId) : undefined;
+                                return massEntity ? getEntityPictureUrl(massEntity.attributes?.entity_picture) : undefined;
+                            })()}
                             onSelect={() => setShowPlayerPicker(true)}
                             onSpotify={() => handleSpotify(activePlayer?.entity_id)}
                             onPlayPause={(playing) => handlePlayPause(activePlayer?.entity_id, playing)}
@@ -924,9 +933,11 @@ export default function Media() {
 
 // --- EXTRACTED COMPONENTS ---
 
-const HeroPlayer = ({ player, imageUrl, onSelect, onSpotify, onPlayPause, onNext, onPrev, onPower, onVolume, onShuffle, onRepeat, spotifyActive, getPlayerName }: {
+const HeroPlayer = ({ player, massPlayer, imageUrl, massImageUrl, onSelect, onSpotify, onPlayPause, onNext, onPrev, onPower, onVolume, onShuffle, onRepeat, spotifyActive, getPlayerName }: {
     player: any,
+    massPlayer?: any,
     imageUrl?: string,
+    massImageUrl?: string,
     onSelect: () => void,
     onSpotify: () => void,
     onPlayPause: (playing: boolean) => void,
@@ -941,27 +952,31 @@ const HeroPlayer = ({ player, imageUrl, onSelect, onSpotify, onPlayPause, onNext
 }) => {
     const { colors } = useTheme();
     // Track the last successfully loaded image to prevent flash during transitions
-    // NEVER reset to undefined — always keep the last known good image
-    const lastKnownImage = useRef<string | undefined>(imageUrl);
-    const [displayImage, setDisplayImage] = useState<string | undefined>(imageUrl);
+    // Use MASS image as primary source (more stable), falling back to player image
+    const effectiveImageUrl = massImageUrl || imageUrl;
+    const lastKnownImage = useRef<string | undefined>(effectiveImageUrl);
+    const [displayImage, setDisplayImage] = useState<string | undefined>(effectiveImageUrl);
 
     // When a new image URL arrives and successfully loads, swap the display
     const handleNewImageLoaded = useCallback(() => {
-        if (imageUrl) {
-            setDisplayImage(imageUrl);
-            lastKnownImage.current = imageUrl;
+        const url = massImageUrl || imageUrl;
+        if (url) {
+            setDisplayImage(url);
+            lastKnownImage.current = url;
         }
-    }, [imageUrl]);
+    }, [imageUrl, massImageUrl]);
 
     // If imageUrl goes to undefined (brief gap during track change), keep old image
     useEffect(() => {
-        if (!imageUrl) return; // never clear
-        if (imageUrl === displayImage) return; // already showing this
+        const url = massImageUrl || imageUrl;
+        if (!url) return; // never clear
+        if (url === displayImage) return; // already showing this
         // New URL arrived — will be preloaded via hidden Image component
-    }, [imageUrl]);
+    }, [imageUrl, massImageUrl]);
 
     // The stable display image: prefer current display, fall back to last known
     const stableImage = displayImage || lastKnownImage.current;
+    const preloadUrl = (massImageUrl || imageUrl);
 
     // Optimistic state for shuffle/repeat (immediate visual feedback)
     const [optShuffle, setOptShuffle] = useState(player?.attributes?.shuffle || false);
@@ -979,10 +994,11 @@ const HeroPlayer = ({ player, imageUrl, onSelect, onSpotify, onPlayPause, onNext
     const artist = player?.attributes?.media_artist || '';
     const volume = player?.attributes?.volume_level ?? 0.4;
 
-    // --- Progress Bar ---
-    const mediaDuration = player?.attributes?.media_duration || 0;
-    const mediaPosition = player?.attributes?.media_position || 0;
-    const positionUpdatedAt = player?.attributes?.media_position_updated_at;
+    // --- Progress Bar: Use MASS player attributes if available (Cast devices often lack these) ---
+    const attrs = massPlayer?.attributes || player?.attributes || {};
+    const mediaDuration = attrs.media_duration || 0;
+    const mediaPosition = attrs.media_position || 0;
+    const positionUpdatedAt = attrs.media_position_updated_at;
     const [currentPosition, setCurrentPosition] = useState(mediaPosition);
 
     useEffect(() => {
@@ -1027,8 +1043,8 @@ const HeroPlayer = ({ player, imageUrl, onSelect, onSpotify, onPlayPause, onNext
                 <Image source={{ uri: stableImage }} style={styles.heroBackground} blurRadius={40} />
             )}
             {/* Hidden preload: new image loads invisibly, then swaps */}
-            {imageUrl && !isOff && imageUrl !== displayImage && (
-                <Image source={{ uri: imageUrl }} style={[styles.heroBackground, { opacity: 0 }]} blurRadius={40} onLoad={handleNewImageLoaded} />
+            {preloadUrl && !isOff && preloadUrl !== displayImage && (
+                <Image source={{ uri: preloadUrl }} style={[styles.heroBackground, { opacity: 0 }]} blurRadius={40} onLoad={handleNewImageLoaded} />
             )}
             {(!stableImage || isOff) && (
                 <LinearGradient colors={[colors.card, colors.background]} style={styles.heroBackground} />
@@ -1062,8 +1078,8 @@ const HeroPlayer = ({ player, imageUrl, onSelect, onSpotify, onPlayPause, onNext
                     {stableImage && !isOff && (
                         <Image source={{ uri: stableImage }} style={styles.heroArtwork} />
                     )}
-                    {imageUrl && !isOff && imageUrl !== displayImage ? (
-                        <Image source={{ uri: imageUrl }} style={[styles.heroArtwork, { position: 'absolute', opacity: 0 }]} onLoad={handleNewImageLoaded} />
+                    {preloadUrl && !isOff && preloadUrl !== displayImage ? (
+                        <Image source={{ uri: preloadUrl }} style={[styles.heroArtwork, { position: 'absolute', opacity: 0 }]} onLoad={handleNewImageLoaded} />
                     ) : (!stableImage || isOff) ? (
                         <View style={[styles.heroArtwork, { backgroundColor: '#334155', justifyContent: 'center', alignItems: 'center' }]}>
                             <Music size={64} color="#64748B" />
