@@ -72,3 +72,62 @@ export const loadCookieFromWidget = async (): Promise<WidgetData | null> => {
         return null;
     }
 };
+
+/**
+ * Process pending widget actions from UserDefaults.
+ * The iOS widget writes actions via WidgetActionIntent to "widgetPendingActions".
+ * This function reads them, executes via callService, and clears the queue.
+ */
+export const processWidgetPendingActions = async (
+    callService: (domain: string, service: string, entityId: string, data?: any) => Promise<any>
+) => {
+    if (Platform.OS !== 'ios' || !userDefaults) return;
+
+    try {
+        const raw = await userDefaults.get('widgetPendingActions');
+        if (!raw) return;
+
+        let actions: string[] = [];
+        try {
+            actions = JSON.parse(raw);
+        } catch {
+            // If it's not valid JSON array, skip
+            return;
+        }
+
+        if (!Array.isArray(actions) || actions.length === 0) return;
+
+        console.log(`[Widget] Processing ${actions.length} pending action(s)...`);
+
+        for (const actionJson of actions) {
+            try {
+                const action = JSON.parse(actionJson);
+                const { entityId, actionType } = action;
+                
+                if (!entityId) continue;
+
+                console.log(`[Widget] Executing ${actionType} for ${entityId}`);
+
+                if (entityId.startsWith('script.')) {
+                    await callService('script', 'turn_on', entityId);
+                } else if (entityId.startsWith('scene.')) {
+                    await callService('scene', 'turn_on', entityId);
+                } else if (entityId.startsWith('input_button.')) {
+                    await callService('input_button', 'press', entityId);
+                } else {
+                    await callService('homeassistant', 'toggle', entityId);
+                }
+
+                console.log(`[Widget] ✅ Action completed for ${entityId}`);
+            } catch (error) {
+                console.error('[Widget] Failed to execute action:', error);
+            }
+        }
+
+        // Clear the queue after processing
+        await userDefaults.set('widgetPendingActions', JSON.stringify([]));
+        console.log('[Widget] Pending actions cleared.');
+    } catch (error) {
+        console.error('[Widget] Failed to process pending actions:', error);
+    }
+};

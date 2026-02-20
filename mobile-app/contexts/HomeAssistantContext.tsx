@@ -3,6 +3,7 @@ import { Alert, AppState, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from './AuthContext';
 import { HomeAssistantService } from '../services/homeAssistant';
+import { processWidgetPendingActions } from '../lib/widget';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
@@ -1289,6 +1290,13 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
                     console.log('🔌 Reconnecting to Home Assistant...');
                     setIsConnecting(true); // Prevent "Not Connected" flash
                     connect();
+                }
+                // Process any pending widget actions
+                if (serviceRef.current?.isConnected()) {
+                    const svc = serviceRef.current;
+                    processWidgetPendingActions((domain, service, entityId, data) => {
+                        return svc.callService(domain, service, entityId, data);
+                    });
                 }
             }
         });
