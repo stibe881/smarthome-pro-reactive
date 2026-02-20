@@ -258,6 +258,8 @@ const LightTile = memo(({ light, toggleLight, setBrightness, width, onLongPress,
     const isOn = light.state === 'on';
     const brightness = light.attributes.brightness || 0;
     const activeColor = roomTheme ? roomTheme.accentColor : colors.accent;
+    const colorModes = light.attributes.supported_color_modes || [];
+    const supportsBrightness = colorModes.length > 0 && !(colorModes.length === 1 && colorModes[0] === 'onoff');
 
     return (
         <View style={[styles.tile, { width, backgroundColor: 'transparent', borderWidth: 0 }]}>
@@ -296,12 +298,12 @@ const LightTile = memo(({ light, toggleLight, setBrightness, width, onLongPress,
                             {light.attributes.friendly_name}
                         </Text>
                         <Text style={[styles.tileState, { color: roomTheme ? 'rgba(255,255,255,0.6)' : colors.subtext }, isOn && styles.textActive, { marginTop: 2, fontSize: 11 }]}>
-                            {isOn ? `${Math.round(brightness / 255 * 100)}%` : 'Aus'}
+                            {isOn ? (supportsBrightness ? `${Math.round(brightness / 255 * 100)}%` : 'An') : 'Aus'}
                         </Text>
                     </View>
                 </Pressable>
 
-                {isOn && (
+                {isOn && supportsBrightness && (
                     <View style={{ marginTop: 8 }}>
                         <Slider
                             style={{ height: 36, width: '100%' }}
