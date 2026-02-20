@@ -40,6 +40,8 @@ export interface RoomOverride {
     groupLabels: Record<string, string>;
     /** Entity-ID -> display type override (e.g. 'light', 'switch', 'scene', 'cover', 'mediaPlayer') */
     entityDisplayTypes: Record<string, string>;
+    /** Per-group entity order: groupId -> ordered entity IDs */
+    entityOrder: Record<string, string[]>;
 }
 
 const EMPTY_OVERRIDE: RoomOverride = {
@@ -52,6 +54,7 @@ const EMPTY_OVERRIDE: RoomOverride = {
     customGroups: [],
     groupLabels: {},
     entityDisplayTypes: {},
+    entityOrder: {},
 };
 
 const DEFAULT_GROUP_LABELS: Record<EntityGroup, string> = {
@@ -312,6 +315,38 @@ export function applyRoomOverrides(room: any, override: RoomOverride, allEntitie
     // Pass entity display types
     result._entityDisplayTypes = o.entityDisplayTypes || {};
 
+    // Apply entity order within each group for display
+    const entityOrder = o.entityOrder || {};
+    for (const groupId of ALL_GROUPS) {
+        const order = entityOrder[groupId];
+        if (order && order.length > 0 && result[groupId]?.length > 1) {
+            result[groupId].sort((a: any, b: any) => {
+                const idxA = order.indexOf(a.entity_id);
+                const idxB = order.indexOf(b.entity_id);
+                if (idxA === -1 && idxB === -1) return 0;
+                if (idxA === -1) return 1;
+                if (idxB === -1) return -1;
+                return idxA - idxB;
+            });
+        }
+    }
+    // Also sort custom group entities
+    if (result._customGroups) {
+        for (const cg of result._customGroups) {
+            const order = entityOrder[cg.id];
+            if (order && order.length > 0 && cg.entities?.length > 1) {
+                cg.entities.sort((a: any, b: any) => {
+                    const idxA = order.indexOf(a.entity_id);
+                    const idxB = order.indexOf(b.entity_id);
+                    if (idxA === -1 && idxB === -1) return 0;
+                    if (idxA === -1) return 1;
+                    if (idxB === -1) return -1;
+                    return idxA - idxB;
+                });
+            }
+        }
+    }
+
     return result;
 }
 
@@ -442,8 +477,23 @@ export function RoomContentEditModal({ visible, onClose, room, colors, allEntiti
                 }
             }
         }
+        // Apply entity order within each group
+        for (const groupId of Object.keys(result)) {
+            const order = (override.entityOrder || {})[groupId];
+            if (order && order.length > 0 && result[groupId].length > 1) {
+                result[groupId].sort((a: any, b: any) => {
+                    const idxA = order.indexOf(a.entity_id);
+                    const idxB = order.indexOf(b.entity_id);
+                    // Entities not in order go to end, preserving original order
+                    if (idxA === -1 && idxB === -1) return 0;
+                    if (idxA === -1) return 1;
+                    if (idxB === -1) return -1;
+                    return idxA - idxB;
+                });
+            }
+        }
         return result;
-    }, [room, override.removedEntities, override.groupOverrides, override.extraEntities, override.customGroups, allEntities]);
+    }, [room, override.removedEntities, override.groupOverrides, override.extraEntities, override.customGroups, override.entityOrder, allEntities]);
 
     // All group IDs including custom ones
     const allGroupIds = useMemo(() => {
@@ -683,15 +733,59 @@ export function RoomContentEditModal({ visible, onClose, room, colors, allEntiti
         updateOverride({ groupOrder: current as EntityGroup[] });
     };
 
+    const handleMoveEntity = (entityId: string, groupId: string, direction: 'up' | 'down') => {
+        const entities = roomEntities[groupId] || [];
+        // Build current order array from entities
+        const currentOrder = (override.entityOrder || {})[groupId]
+            ? [...(override.entityOrder[groupId])]
+            : entities.map((e: any) => e.entity_id);
+
+        // Ensure all current entities are in the order
+        for (const e of entities) {
+            if (!currentOrder.includes(e.entity_id)) {
+                currentOrder.push(e.entity_id);
+            }
+        }
+
+        const idx = currentOrder.indexOf(entityId);
+        if (idx < 0) return;
+        const newIdx = direction === 'up' ? idx - 1 : idx + 1;
+        if (newIdx < 0 || newIdx >= currentOrder.length) return;
+        // Swap
+        [currentOrder[idx], currentOrder[newIdx]] = [currentOrder[newIdx], currentOrder[idx]];
+        updateOverride({
+            entityOrder: { ...override.entityOrder, [groupId]: currentOrder },
+        });
+    };
+
     if (!room || !loaded) return null;
 
     // Render an entity row
-    const renderEntityRow = (entity: any, groupId: string) => {
+    const renderEntityRow = (entity: any, groupId: string, entityIndex: number, totalEntities: number) => {
         const displayName = override.nameOverrides[entity.entity_id] || entity.attributes.friendly_name || entity.entity_id;
         const currentType = override.entityDisplayTypes?.[entity.entity_id] || 'auto';
         const typeLabel = DISPLAY_TYPE_OPTIONS.find(t => t.key === currentType)?.label || 'Auto';
+        const isFirstEntity = entityIndex === 0;
+        const isLastEntity = entityIndex === totalEntities - 1;
         return (
             <View key={entity.entity_id} style={[modalStyles.entityRow, { borderBottomColor: colors.border }]}>
+                {/* Up/Down sort buttons */}
+                <View style={{ justifyContent: 'center', marginRight: 8, gap: 2 }}>
+                    <Pressable
+                        onPress={() => handleMoveEntity(entity.entity_id, groupId, 'up')}
+                        style={[modalStyles.miniBtn, { backgroundColor: colors.background, opacity: isFirstEntity ? 0.3 : 1 }]}
+                        disabled={isFirstEntity}
+                    >
+                        <ArrowUp size={11} color={colors.subtext} />
+                    </Pressable>
+                    <Pressable
+                        onPress={() => handleMoveEntity(entity.entity_id, groupId, 'down')}
+                        style={[modalStyles.miniBtn, { backgroundColor: colors.background, opacity: isLastEntity ? 0.3 : 1 }]}
+                        disabled={isLastEntity}
+                    >
+                        <ArrowDown size={11} color={colors.subtext} />
+                    </Pressable>
+                </View>
                 <View style={{ flex: 1 }}>
                     <Text style={[modalStyles.entityName, { color: colors.text }]} numberOfLines={1}>
                         {displayName}
@@ -835,7 +929,7 @@ export function RoomContentEditModal({ visible, onClose, room, colors, allEntiti
                                                         Keine Entities in dieser Gruppe
                                                     </Text>
                                                 ) : (
-                                                    entities.map((entity: any) => renderEntityRow(entity, groupId))
+                                                    entities.map((entity: any, idx: number) => renderEntityRow(entity, groupId, idx, entities.length))
                                                 )}
                                             </View>
                                         )}

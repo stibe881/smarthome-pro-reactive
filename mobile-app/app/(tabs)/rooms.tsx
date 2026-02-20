@@ -260,12 +260,19 @@ const LightTile = memo(({ light, toggleLight, setBrightness, width, onLongPress,
     const activeColor = roomTheme ? roomTheme.accentColor : colors.accent;
 
     return (
-        <View style={[styles.tile, { width, backgroundColor: roomTheme ? 'rgba(255,255,255,0.1)' : colors.card, borderColor: roomTheme ? 'rgba(255,255,255,0.1)' : colors.border }]}>
-            <Pressable
-                onPress={() => toggleLight(light.entity_id)}
-                onLongPress={() => onLongPress && onLongPress(light)}
-                style={[styles.tileContent, isOn && { backgroundColor: activeColor + '20', borderColor: activeColor + '50' }]}
-            >
+        <View style={[styles.tile, { width, backgroundColor: 'transparent', borderWidth: 0 }]}>
+            <View style={[
+                styles.tileContent,
+                {
+                    backgroundColor: roomTheme ? 'rgba(255,255,255,0.1)' : colors.card,
+                    borderColor: roomTheme ? 'rgba(255,255,255,0.1)' : colors.border,
+                    borderWidth: 1,
+                },
+                isOn && {
+                    backgroundColor: activeColor + '20',
+                    borderColor: activeColor + '50',
+                }
+            ]}>
                 <View style={[styles.tileHeader]}>
                     <View style={[styles.tileIcon, { backgroundColor: isOn ? activeColor : (roomTheme ? 'rgba(255,255,255,0.1)' : colors.background) }]}>
                         <Lightbulb size={24} color={isOn ? "#FFF" : colors.subtext} />
@@ -280,30 +287,35 @@ const LightTile = memo(({ light, toggleLight, setBrightness, width, onLongPress,
                         </Pressable>
                     )}
                 </View>
-                <View style={{ marginTop: 8 }}>
-                    <Text numberOfLines={1} style={[styles.tileName, { color: roomTheme ? '#FFF' : colors.text }, isOn && styles.textActive]}>
-                        {light.attributes.friendly_name}
-                    </Text>
-                    <Text style={[styles.tileState, { color: roomTheme ? 'rgba(255,255,255,0.6)' : colors.subtext }, isOn && styles.textActive, { marginTop: 2, fontSize: 11 }]}>
-                        {isOn ? `${Math.round(brightness / 255 * 100)}%` : 'Aus'}
-                    </Text>
-                </View>
-            </Pressable>
+                <Pressable
+                    onPress={() => toggleLight(light.entity_id)}
+                    onLongPress={() => onLongPress && onLongPress(light)}
+                >
+                    <View style={{ marginTop: 8 }}>
+                        <Text numberOfLines={1} style={[styles.tileName, { color: roomTheme ? '#FFF' : colors.text, marginTop: 0 }, isOn && styles.textActive]}>
+                            {light.attributes.friendly_name}
+                        </Text>
+                        <Text style={[styles.tileState, { color: roomTheme ? 'rgba(255,255,255,0.6)' : colors.subtext }, isOn && styles.textActive, { marginTop: 2, fontSize: 11 }]}>
+                            {isOn ? `${Math.round(brightness / 255 * 100)}%` : 'Aus'}
+                        </Text>
+                    </View>
+                </Pressable>
 
-            {isOn && (
-                <View style={styles.tileSlider}>
-                    <Slider
-                        style={{ height: 40, width: '100%' }}
-                        value={brightness / 255}
-                        onSlidingComplete={(val) => setBrightness(light.entity_id, Math.round(val * 255))}
-                        minimumValue={0}
-                        maximumValue={1}
-                        minimumTrackTintColor={activeColor}
-                        maximumTrackTintColor="rgba(255,255,255,0.1)"
-                        thumbTintColor="#FFF"
-                    />
-                </View>
-            )}
+                {isOn && (
+                    <View style={{ marginTop: 8 }}>
+                        <Slider
+                            style={{ height: 36, width: '100%' }}
+                            value={brightness / 255}
+                            onSlidingComplete={(val) => setBrightness(light.entity_id, Math.round(val * 255))}
+                            minimumValue={0}
+                            maximumValue={1}
+                            minimumTrackTintColor={activeColor}
+                            maximumTrackTintColor="rgba(255,255,255,0.1)"
+                            thumbTintColor="#FFF"
+                        />
+                    </View>
+                )}
+            </View>
         </View>
     );
 });
@@ -1029,12 +1041,14 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, on
                                     <View key="scripts" style={styles.section}>
                                         <SectionHeader title={displayRoom._groupLabels?.scripts || "Szenen"} />
                                         <View style={styles.grid}>
-                                            {displayRoom.scripts?.map((s: any) => (
-                                                <SceneTile key={s.entity_id} scene={s} activateScene={(id: string) => api.callService('script', 'turn_on', id)} width={tileWidth} />
-                                            ))}
-                                            {displayRoom.scenes?.map((s: any) => (
-                                                <SceneTile key={s.entity_id} scene={s} activateScene={(id: string) => api.activateScene(id)} width={tileWidth} />
-                                            ))}
+                                            {displayRoom.scripts?.map((s: any) => {
+                                                const totalScenes = (displayRoom.scripts?.length || 0) + (displayRoom.scenes?.length || 0);
+                                                return <SceneTile key={s.entity_id} scene={s} activateScene={(id: string) => api.callService('script', 'turn_on', id)} width={totalScenes === 1 ? '100%' : tileWidth} />;
+                                            })}
+                                            {displayRoom.scenes?.map((s: any) => {
+                                                const totalScenes = (displayRoom.scripts?.length || 0) + (displayRoom.scenes?.length || 0);
+                                                return <SceneTile key={s.entity_id} scene={s} activateScene={(id: string) => api.activateScene(id)} width={totalScenes === 1 ? '100%' : tileWidth} />;
+                                            })}
                                         </View>
                                     </View>
                                 );
@@ -1061,7 +1075,7 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, on
                                         <SectionHeader title={displayRoom._groupLabels?.lights || "Beleuchtung"} />
                                         <View style={styles.grid}>
                                             {displayRoom.lights.map((l: any) => (
-                                                <LightTile key={l.entity_id} light={l} toggleLight={api.toggleLight} setBrightness={api.setLightBrightness} width={l.fullWidth ? '100%' : tileWidth} onLongPress={setSelectedLight} theme={theme} />
+                                                <LightTile key={l.entity_id} light={l} toggleLight={api.toggleLight} setBrightness={api.setLightBrightness} width={l.fullWidth || displayRoom.lights.length === 1 ? '100%' : tileWidth} onLongPress={setSelectedLight} theme={theme} />
                                             ))}
                                         </View>
                                     </View>
@@ -1089,7 +1103,7 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, on
                                         <SectionHeader title={displayRoom._groupLabels?.covers || "Rollläden"} />
                                         <View style={styles.grid}>
                                             {displayRoom.covers.map((c: any) => (
-                                                <CoverTile key={c.entity_id} cover={c} openCover={api.openCover} closeCover={api.closeCover} stopCover={api.stopCover} pressButton={api.pressButton} onPress={onSelectCover} width={tileWidth} theme={theme} />
+                                                <CoverTile key={c.entity_id} cover={c} openCover={api.openCover} closeCover={api.closeCover} stopCover={api.stopCover} pressButton={api.pressButton} onPress={onSelectCover} width={displayRoom.covers.length === 1 ? '100%' : tileWidth} theme={theme} />
                                             ))}
                                         </View>
                                     </View>
@@ -1132,8 +1146,9 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, on
                                         <View style={styles.grid}>
                                             {displayRoom.switches.map((sw: any) => {
                                                 const isOn = sw.state === 'on';
+                                                const swWidth = displayRoom.switches.length === 1 ? '100%' : tileWidth;
                                                 return (
-                                                    <View key={sw.entity_id} style={[styles.tile, { width: tileWidth, backgroundColor: colors.card, borderColor: colors.border }]}>
+                                                    <View key={sw.entity_id} style={[styles.tile, { width: swWidth, backgroundColor: colors.card, borderColor: colors.border }]}>
                                                         <Pressable
                                                             onPress={() => api.callService('switch', isOn ? 'turn_off' : 'turn_on', sw.entity_id)}
                                                             style={[styles.tileContent, isOn && { backgroundColor: colors.accent + '20' }]}
@@ -1162,6 +1177,8 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, on
                             const customGroup = displayRoom._customGroups?.find((cg: any) => cg.id === groupId);
                             if (customGroup && customGroup.entities?.length > 0) {
                                 const displayTypes = displayRoom._entityDisplayTypes || {};
+                                const cgCount = customGroup.entities.length;
+                                const cgWidth = cgCount === 1 ? '100%' : tileWidth;
                                 return (
                                     <View key={customGroup.id} style={styles.section}>
                                         <SectionHeader title={customGroup.label} />
@@ -1184,14 +1201,14 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, on
                                                 }
 
                                                 if (dtype === 'light') {
-                                                    return <LightTile key={eid} light={e} toggleLight={api.toggleLight} setBrightness={api.setLightBrightness} width={tileWidth} onLongPress={setSelectedLight} theme={theme} />;
+                                                    return <LightTile key={eid} light={e} toggleLight={api.toggleLight} setBrightness={api.setLightBrightness} width={cgWidth} onLongPress={setSelectedLight} theme={theme} />;
                                                 }
                                                 if (dtype === 'cover') {
-                                                    return <CoverTile key={eid} cover={e} openCover={api.openCover} closeCover={api.closeCover} stopCover={api.stopCover} pressButton={api.pressButton} onPress={onSelectCover} width={tileWidth} theme={theme} />;
+                                                    return <CoverTile key={eid} cover={e} openCover={api.openCover} closeCover={api.closeCover} stopCover={api.stopCover} pressButton={api.pressButton} onPress={onSelectCover} width={cgWidth} theme={theme} />;
                                                 }
                                                 if (dtype === 'scene') {
                                                     const isScript = eid.startsWith('script.');
-                                                    return <SceneTile key={eid} scene={e} activateScene={(id: string) => isScript ? api.callService('script', 'turn_on', id) : api.activateScene(id)} width={tileWidth} />;
+                                                    return <SceneTile key={eid} scene={e} activateScene={(id: string) => isScript ? api.callService('script', 'turn_on', id) : api.activateScene(id)} width={cgWidth} />;
                                                 }
                                                 if (dtype === 'mediaPlayer') {
                                                     return <MediaTile key={eid} player={e} api={api} width={isTablet ? tileWidth : '100%'} theme={theme} />;
@@ -1204,7 +1221,7 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, on
                                                     // Use the actual entity domain for service calls, not the display type
                                                     const domain = eid.split('.')[0];
                                                     return (
-                                                        <View key={eid} style={[styles.tile, { width: tileWidth, backgroundColor: colors.card, borderColor: colors.border }]}>
+                                                        <View key={eid} style={[styles.tile, { width: cgWidth, backgroundColor: colors.card, borderColor: colors.border }]}>
                                                             <Pressable
                                                                 onPress={() => api.callService(domain, isOn ? 'turn_off' : 'turn_on', eid)}
                                                                 style={[styles.tileContent, isOn && { backgroundColor: colors.accent + '20' }]}
@@ -1231,11 +1248,11 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, on
                                                     return <CameraTile key={eid} camera={e} width="100%" />;
                                                 }
                                                 if (dtype === 'helper') {
-                                                    return <HelperTile key={eid} entity={e} api={api} width={tileWidth} theme={theme} />;
+                                                    return <HelperTile key={eid} entity={e} api={api} width={cgWidth} theme={theme} />;
                                                 }
                                                 // Fallback: generic tile
                                                 return (
-                                                    <View key={eid} style={{ width: tileWidth, backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: 12, padding: 12 }}>
+                                                    <View key={eid} style={{ width: cgWidth, backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: 12, padding: 12 }}>
                                                         <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600' }} numberOfLines={1}>
                                                             {e.attributes?.friendly_name || eid}
                                                         </Text>
