@@ -1041,13 +1041,16 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, on
                                     <View key="scripts" style={styles.section}>
                                         <SectionHeader title={displayRoom._groupLabels?.scripts || "Szenen"} />
                                         <View style={styles.grid}>
-                                            {displayRoom.scripts?.map((s: any) => {
+                                            {displayRoom.scripts?.map((s: any, idx: number) => {
                                                 const totalScenes = (displayRoom.scripts?.length || 0) + (displayRoom.scenes?.length || 0);
-                                                return <SceneTile key={s.entity_id} scene={s} activateScene={(id: string) => api.callService('script', 'turn_on', id)} width={totalScenes === 1 ? '100%' : tileWidth} />;
+                                                const isLastAlone = idx === (displayRoom.scripts?.length || 0) - 1 && (displayRoom.scenes?.length || 0) === 0 && totalScenes % 2 === 1;
+                                                return <SceneTile key={s.entity_id} scene={s} activateScene={(id: string) => api.callService('script', 'turn_on', id)} width={isLastAlone ? '100%' : tileWidth} />;
                                             })}
-                                            {displayRoom.scenes?.map((s: any) => {
+                                            {displayRoom.scenes?.map((s: any, idx: number) => {
                                                 const totalScenes = (displayRoom.scripts?.length || 0) + (displayRoom.scenes?.length || 0);
-                                                return <SceneTile key={s.entity_id} scene={s} activateScene={(id: string) => api.activateScene(id)} width={totalScenes === 1 ? '100%' : tileWidth} />;
+                                                const globalIdx = (displayRoom.scripts?.length || 0) + idx;
+                                                const isLastAlone = globalIdx === totalScenes - 1 && totalScenes % 2 === 1;
+                                                return <SceneTile key={s.entity_id} scene={s} activateScene={(id: string) => api.activateScene(id)} width={isLastAlone ? '100%' : tileWidth} />;
                                             })}
                                         </View>
                                     </View>
@@ -1074,9 +1077,10 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, on
                                     <View key="lights" style={styles.section}>
                                         <SectionHeader title={displayRoom._groupLabels?.lights || "Beleuchtung"} />
                                         <View style={styles.grid}>
-                                            {displayRoom.lights.map((l: any) => (
-                                                <LightTile key={l.entity_id} light={l} toggleLight={api.toggleLight} setBrightness={api.setLightBrightness} width={l.fullWidth || displayRoom.lights.length === 1 ? '100%' : tileWidth} onLongPress={setSelectedLight} theme={theme} />
-                                            ))}
+                                            {displayRoom.lights.map((l: any, idx: number) => {
+                                                const isLastAlone = idx === displayRoom.lights.length - 1 && displayRoom.lights.length % 2 === 1;
+                                                return <LightTile key={l.entity_id} light={l} toggleLight={api.toggleLight} setBrightness={api.setLightBrightness} width={l.fullWidth || isLastAlone ? '100%' : tileWidth} onLongPress={setSelectedLight} theme={theme} />;
+                                            })}
                                         </View>
                                     </View>
                                 );
@@ -1102,9 +1106,10 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, on
                                     <View key="covers" style={styles.section}>
                                         <SectionHeader title={displayRoom._groupLabels?.covers || "Rollläden"} />
                                         <View style={styles.grid}>
-                                            {displayRoom.covers.map((c: any) => (
-                                                <CoverTile key={c.entity_id} cover={c} openCover={api.openCover} closeCover={api.closeCover} stopCover={api.stopCover} pressButton={api.pressButton} onPress={onSelectCover} width={displayRoom.covers.length === 1 ? '100%' : tileWidth} theme={theme} />
-                                            ))}
+                                            {displayRoom.covers.map((c: any, idx: number) => {
+                                                const isLastAlone = idx === displayRoom.covers.length - 1 && displayRoom.covers.length % 2 === 1;
+                                                return <CoverTile key={c.entity_id} cover={c} openCover={api.openCover} closeCover={api.closeCover} stopCover={api.stopCover} pressButton={api.pressButton} onPress={onSelectCover} width={isLastAlone ? '100%' : tileWidth} theme={theme} />;
+                                            })}
                                         </View>
                                     </View>
                                 );
@@ -1144,9 +1149,10 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, on
                                     <View key="switches" style={styles.section}>
                                         <SectionHeader title={displayRoom._groupLabels?.switches || "Schalter"} />
                                         <View style={styles.grid}>
-                                            {displayRoom.switches.map((sw: any) => {
+                                            {displayRoom.switches.map((sw: any, idx: number) => {
                                                 const isOn = sw.state === 'on';
-                                                const swWidth = displayRoom.switches.length === 1 ? '100%' : tileWidth;
+                                                const isLastAlone = idx === displayRoom.switches.length - 1 && displayRoom.switches.length % 2 === 1;
+                                                const swWidth = isLastAlone ? '100%' : tileWidth;
                                                 return (
                                                     <View key={sw.entity_id} style={[styles.tile, { width: swWidth, backgroundColor: colors.card, borderColor: colors.border }]}>
                                                         <Pressable
@@ -1178,12 +1184,13 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, on
                             if (customGroup && customGroup.entities?.length > 0) {
                                 const displayTypes = displayRoom._entityDisplayTypes || {};
                                 const cgCount = customGroup.entities.length;
-                                const cgWidth = cgCount === 1 ? '100%' : tileWidth;
                                 return (
                                     <View key={customGroup.id} style={styles.section}>
                                         <SectionHeader title={customGroup.label} />
                                         <View style={styles.grid}>
-                                            {customGroup.entities.map((e: any) => {
+                                            {customGroup.entities.map((e: any, idx: number) => {
+                                                const isLastAlone = idx === cgCount - 1 && cgCount % 2 === 1;
+                                                const cgWidth = isLastAlone ? '100%' : tileWidth;
                                                 const eid = e.entity_id;
                                                 // Use manual override first, then infer from entity_id
                                                 let dtype = displayTypes[eid] || '';
