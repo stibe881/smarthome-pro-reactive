@@ -942,25 +942,26 @@ const HeroPlayer = ({ player, imageUrl, onSelect, onSpotify, onPlayPause, onNext
     const { colors } = useTheme();
     // Track the last successfully loaded image to prevent flash during transitions
     // NEVER reset to undefined — always keep the last known good image
-    const [loadedImage, setLoadedImage] = useState<string | undefined>(imageUrl);
     const lastKnownImage = useRef<string | undefined>(imageUrl);
+    const [displayImage, setDisplayImage] = useState<string | undefined>(imageUrl);
 
-    // When a new image loads successfully, update loadedImage
-    const handleImageLoaded = useCallback((url: string) => {
-        setLoadedImage(url);
-        lastKnownImage.current = url;
-    }, []);
-
-    // Keep lastKnownImage updated when imageUrl changes to a valid value
-    useEffect(() => {
+    // When a new image URL arrives and successfully loads, swap the display
+    const handleNewImageLoaded = useCallback(() => {
         if (imageUrl) {
+            setDisplayImage(imageUrl);
             lastKnownImage.current = imageUrl;
         }
     }, [imageUrl]);
 
-    // The stable display image: prefer loadedImage, fall back to last known
-    // This prevents the music note from flashing during track transitions
-    const stableImage = loadedImage || lastKnownImage.current;
+    // If imageUrl goes to undefined (brief gap during track change), keep old image
+    useEffect(() => {
+        if (!imageUrl) return; // never clear
+        if (imageUrl === displayImage) return; // already showing this
+        // New URL arrived — will be preloaded via hidden Image component
+    }, [imageUrl]);
+
+    // The stable display image: prefer current display, fall back to last known
+    const stableImage = displayImage || lastKnownImage.current;
 
     // Optimistic state for shuffle/repeat (immediate visual feedback)
     const [optShuffle, setOptShuffle] = useState(player?.attributes?.shuffle || false);
@@ -977,6 +978,35 @@ const HeroPlayer = ({ player, imageUrl, onSelect, onSpotify, onPlayPause, onNext
     const mediaTitle = player?.attributes?.media_title || (isOff ? 'Aus' : 'Bereit');
     const artist = player?.attributes?.media_artist || '';
     const volume = player?.attributes?.volume_level ?? 0.4;
+
+    // --- Progress Bar ---
+    const mediaDuration = player?.attributes?.media_duration || 0;
+    const mediaPosition = player?.attributes?.media_position || 0;
+    const positionUpdatedAt = player?.attributes?.media_position_updated_at;
+    const [currentPosition, setCurrentPosition] = useState(mediaPosition);
+
+    useEffect(() => {
+        setCurrentPosition(mediaPosition);
+    }, [mediaPosition, positionUpdatedAt]);
+
+    useEffect(() => {
+        if (!isPlaying || !mediaDuration) return;
+        const interval = setInterval(() => {
+            setCurrentPosition((prev: number) => {
+                const next = prev + 1;
+                return next > mediaDuration ? mediaDuration : next;
+            });
+        }, 1000);
+        return () => clearInterval(interval);
+    }, [isPlaying, mediaDuration, positionUpdatedAt]);
+
+    const progress = mediaDuration > 0 ? Math.min(currentPosition / mediaDuration, 1) : 0;
+
+    const formatTime = (seconds: number) => {
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
+    };
 
     const handleShufflePress = () => {
         setOptShuffle(!optShuffle);
@@ -996,9 +1026,9 @@ const HeroPlayer = ({ player, imageUrl, onSelect, onSpotify, onPlayPause, onNext
             {stableImage && !isOff && (
                 <Image source={{ uri: stableImage }} style={styles.heroBackground} blurRadius={40} />
             )}
-            {/* Background Layer 2: preload new image (invisible until loaded) */}
-            {imageUrl && !isOff && imageUrl !== loadedImage && (
-                <Image source={{ uri: imageUrl }} style={[styles.heroBackground, { opacity: 0 }]} blurRadius={40} onLoad={() => handleImageLoaded(imageUrl)} />
+            {/* Hidden preload: new image loads invisibly, then swaps */}
+            {imageUrl && !isOff && imageUrl !== displayImage && (
+                <Image source={{ uri: imageUrl }} style={[styles.heroBackground, { opacity: 0 }]} blurRadius={40} onLoad={handleNewImageLoaded} />
             )}
             {(!stableImage || isOff) && (
                 <LinearGradient colors={[colors.card, colors.background]} style={styles.heroBackground} />
@@ -1032,8 +1062,8 @@ const HeroPlayer = ({ player, imageUrl, onSelect, onSpotify, onPlayPause, onNext
                     {stableImage && !isOff && (
                         <Image source={{ uri: stableImage }} style={styles.heroArtwork} />
                     )}
-                    {imageUrl && !isOff && imageUrl !== loadedImage ? (
-                        <Image source={{ uri: imageUrl }} style={[styles.heroArtwork, { position: 'absolute', opacity: 0 }]} onLoad={() => handleImageLoaded(imageUrl)} />
+                    {imageUrl && !isOff && imageUrl !== displayImage ? (
+                        <Image source={{ uri: imageUrl }} style={[styles.heroArtwork, { position: 'absolute', opacity: 0 }]} onLoad={handleNewImageLoaded} />
                     ) : (!stableImage || isOff) ? (
                         <View style={[styles.heroArtwork, { backgroundColor: '#334155', justifyContent: 'center', alignItems: 'center' }]}>
                             <Music size={64} color="#64748B" />
@@ -1046,6 +1076,19 @@ const HeroPlayer = ({ player, imageUrl, onSelect, onSpotify, onPlayPause, onNext
                     <Text style={styles.heroTitle} numberOfLines={1}>{mediaTitle}</Text>
                     <Text style={styles.heroArtist} numberOfLines={1}>{artist}</Text>
                 </View>
+
+                {/* Progress Bar */}
+                {mediaDuration > 0 && !isOff && (
+                    <View style={{ width: '100%', paddingHorizontal: 4, marginTop: 8 }}>
+                        <View style={{ height: 4, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 2, overflow: 'hidden' }}>
+                            <View style={{ height: '100%', width: `${progress * 100}%`, backgroundColor: '#FFF', borderRadius: 2 }} />
+                        </View>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
+                            <Text style={{ color: '#94A3B8', fontSize: 11 }}>{formatTime(currentPosition)}</Text>
+                            <Text style={{ color: '#94A3B8', fontSize: 11 }}>{formatTime(mediaDuration)}</Text>
+                        </View>
+                    </View>
+                )}
 
                 {/* Controls */}
                 <View style={styles.heroControls}>
