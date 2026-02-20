@@ -127,62 +127,65 @@ struct widgetEntryView : View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(entry.title)
-                    .font(.headline)
-                    .foregroundColor(.white)
-                Spacer()
-                Text(entry.subtitle)
-                    .font(.caption2)
-                    .foregroundColor(.gray)
-            }
-            .padding(.bottom, 4)
-
-            
-            if entry.items.isEmpty {
-                 Text("In der App konfigurieren")
+        if entry.items.isEmpty {
+            VStack {
+                Text("In der App konfigurieren")
                     .font(.caption)
                     .foregroundColor(.secondary)
-            } else {
-                ForEach(entry.items.prefix(4)) { item in
-                    Link(destination: getUrl(for: item)) {
-                        HStack {
-                            // Icon Container
-                            ZStack {
-                                Circle()
-                                    .fill(colorFromHex(item.iconColor).opacity(0.2))
-                                    .frame(width: 24, height: 24)
-                                
-                                if let iconName = item.icon {
-                                    // Fallback for SF Symbols names vs custom names
-                                    // For now relying on valid SF Symbol names passed from RN or safe default
-                                    Image(systemName: iconName) 
-                                        .font(.system(size: 12))
-                                        .foregroundColor(colorFromHex(item.iconColor))
+            }
+            .containerBackground(for: .widget) {
+                Color(UIColor(red: 0.1, green: 0.1, blue: 0.1, alpha: 1.0))
+            }
+        } else {
+            let rows = stride(from: 0, to: min(entry.items.count, 4), by: 2).map { i in
+                Array(entry.items[i..<min(i+2, min(entry.items.count, 4))])
+            }
+            VStack(spacing: 8) {
+                ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                    HStack(spacing: 8) {
+                        ForEach(row) { item in
+                            Link(destination: getUrl(for: item)) {
+                                HStack(spacing: 10) {
+                                    ZStack {
+                                        Circle()
+                                            .fill(Color.gray.opacity(0.3))
+                                            .frame(width: 36, height: 36)
+                                        
+                                        if let iconName = item.icon {
+                                            Image(systemName: iconName)
+                                                .font(.system(size: 16))
+                                                .foregroundColor(.white.opacity(0.9))
+                                        }
+                                    }
+                                    
+                                    Text(item.label)
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundColor(.white)
+                                        .lineLimit(2)
+                                        .minimumScaleFactor(0.8)
+                                    
+                                    Spacer(minLength: 0)
                                 }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 10)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 14)
+                                        .fill(Color(UIColor(red: 0.18, green: 0.18, blue: 0.18, alpha: 1.0)))
+                                )
                             }
-                            
-                            Text(item.label)
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(.white)
-                                .lineLimit(1)
-                            
-                            Spacer()
-                            
-                            Text(item.value)
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundColor(.gray)
-                                .lineLimit(1)
                         }
-                        .padding(.vertical, 2)
+                        // Fill remaining space if odd number of items in this row
+                        if row.count == 1 {
+                            Spacer()
+                                .frame(maxWidth: .infinity)
+                        }
                     }
                 }
             }
-            Spacer()
-        }
-        .containerBackground(for: .widget) {
-            Color(UIColor(red: 0.02, green: 0.05, blue: 0.1, alpha: 1.0)) // Match App Dark Theme
+            .containerBackground(for: .widget) {
+                Color(UIColor(red: 0.1, green: 0.1, blue: 0.1, alpha: 1.0))
+            }
         }
     }
 }
