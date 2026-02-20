@@ -780,10 +780,13 @@ export default function Dashboard() {
     const weatherFamilieGross = useMemo(() => entities.find(e => e.entity_id === cfgWeatherForecast), [entities, cfgWeatherForecast]);
     const weatherMeteo = useMemo(() => entities.find(e => e.entity_id === cfgWeatherAlarm), [entities, cfgWeatherAlarm]);
 
-    // Composite Weather Entity: Use Zell for current state, Familie Gross for Forecast
+    // Composite Weather Entity: Prefer main (configured) entity, skip unavailable
     const weatherComposite = useMemo(() => {
-        // Prefer Meteo, then Familie Gross, fallback to Zell
-        return weatherMeteo || weatherFamilieGross || weatherZell;
+        const isAvailable = (e: any) => e && e.state !== 'unavailable' && e.state !== 'unknown';
+        if (isAvailable(weatherZell)) return weatherZell;
+        if (isAvailable(weatherMeteo)) return weatherMeteo;
+        if (isAvailable(weatherFamilieGross)) return weatherFamilieGross;
+        return weatherZell || weatherMeteo || weatherFamilieGross;
     }, [weatherZell, weatherFamilieGross, weatherMeteo]);
 
     // Format Weather Status (German)
