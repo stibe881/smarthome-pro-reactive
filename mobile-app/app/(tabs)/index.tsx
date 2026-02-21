@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import React, { useMemo, useState, useCallback, memo, useEffect } from 'react';
 import { View, Text, ScrollView, Pressable, useWindowDimensions, Modal, StyleSheet, Image, ActivityIndicator, Alert, Animated, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -622,23 +622,28 @@ export default function Dashboard() {
     // Quick Actions Config: user → admin → defaults
     const [quickActions, setQuickActions] = useState<QuickActionConfig[]>(DEFAULT_QUICK_ACTIONS);
 
-    useEffect(() => {
-        (async () => {
-            // 1. Try user-specific config
-            if (user?.id) {
-                const userCfg = await AsyncStorage.getItem(`@quick_actions_user_${user.id}`);
-                if (userCfg) {
-                    try { setQuickActions(JSON.parse(userCfg)); return; } catch { }
+    // Reload quick actions every time the Dashboard tab is focused
+    // (so changes from Settings are immediately reflected)
+    useFocusEffect(
+        useCallback(() => {
+            (async () => {
+                // 1. Try user-specific config
+                if (user?.id) {
+                    const userCfg = await AsyncStorage.getItem(`@quick_actions_user_${user.id}`);
+                    if (userCfg) {
+                        try { setQuickActions(JSON.parse(userCfg)); return; } catch { }
+                    }
                 }
-            }
-            // 2. Try admin config
-            const adminCfg = await AsyncStorage.getItem('@quick_actions_admin');
-            if (adminCfg) {
-                try { setQuickActions(JSON.parse(adminCfg)); return; } catch { }
-            }
-            // 3. Use defaults (already set via useState)
-        })();
-    }, [user?.id]);
+                // 2. Try admin config
+                const adminCfg = await AsyncStorage.getItem('@quick_actions_admin');
+                if (adminCfg) {
+                    try { setQuickActions(JSON.parse(adminCfg)); return; } catch { }
+                }
+                // 3. Use defaults
+                setQuickActions(DEFAULT_QUICK_ACTIONS);
+            })();
+        }, [user?.id])
+    );
 
     // Wizard is only shown manually from Settings, not auto-opened here
     // (auto-open caused race condition in production builds where haBaseUrl
