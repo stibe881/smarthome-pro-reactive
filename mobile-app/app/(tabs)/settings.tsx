@@ -39,11 +39,11 @@ try {
 // App Icon color variants
 const APP_ICON_VARIANTS = [
     { key: null, label: 'Original', color: '#3B82F6', preview: require('../../assets/icon.png') },
-    { key: 'pink', label: 'Pink', color: '#FF1493', preview: require('../../assets/icons/icon-pink.png') },
-    { key: 'green', label: 'Grün', color: '#00B450', preview: require('../../assets/icons/icon-green.png') },
-    { key: 'black', label: 'Schwarz', color: '#1E1E28', preview: require('../../assets/icons/icon-black.png') },
-    { key: 'orange', label: 'Orange', color: '#FF8C00', preview: require('../../assets/icons/icon-orange.png') },
-    { key: 'pride', label: 'Pride 🌈', color: 'rainbow', preview: require('../../assets/icons/icon-pride.png') },
+    { key: 'Pink', label: 'Pink', color: '#FF1493', preview: require('../../assets/icons/icon-pink.png') },
+    { key: 'Green', label: 'Grün', color: '#00B450', preview: require('../../assets/icons/icon-green.png') },
+    { key: 'Black', label: 'Schwarz', color: '#1E1E28', preview: require('../../assets/icons/icon-black.png') },
+    { key: 'Orange', label: 'Orange', color: '#FF8C00', preview: require('../../assets/icons/icon-orange.png') },
+    { key: 'Pride', label: 'Pride 🌈', color: 'rainbow', preview: require('../../assets/icons/icon-pride.png') },
 ];
 
 // Icon mapping for dynamic notification types

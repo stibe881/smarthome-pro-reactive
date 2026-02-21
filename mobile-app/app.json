@@ -68,15 +68,28 @@
       "expo-audio",
       [
         "expo-alternate-app-icons",
-        {
-          "icons": {
-            "pink": "./assets/icons/icon-pink.png",
-            "green": "./assets/icons/icon-green.png",
-            "black": "./assets/icons/icon-black.png",
-            "orange": "./assets/icons/icon-orange.png",
-            "pride": "./assets/icons/icon-pride.png"
+        [
+          {
+            "name": "Pink",
+            "ios": "./assets/icons/icon-pink.png"
+          },
+          {
+            "name": "Green",
+            "ios": "./assets/icons/icon-green.png"
+          },
+          {
+            "name": "Black",
+            "ios": "./assets/icons/icon-black.png"
+          },
+          {
+            "name": "Orange",
+            "ios": "./assets/icons/icon-orange.png"
+          },
+          {
+            "name": "Pride",
+            "ios": "./assets/icons/icon-pride.png"
           }
-        }
+        ]
       ]
     ],
     "extra": {
