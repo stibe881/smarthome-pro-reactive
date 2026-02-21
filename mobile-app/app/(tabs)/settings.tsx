@@ -1111,7 +1111,11 @@ export default function Settings() {
             await setAlternateAppIcon(iconKey);
             setCurrentAppIcon(iconKey);
         } catch (e: any) {
-            Alert.alert('Fehler', 'Icon konnte nicht geändert werden: ' + e.message);
+            if (e?.message?.includes('not supported')) {
+                Alert.alert('Hinweis', 'App-Icons können nur im installierten Build geändert werden (nicht in Expo Go).');
+            } else {
+                Alert.alert('Fehler', 'Icon konnte nicht geändert werden: ' + e.message);
+            }
         }
     };
 
