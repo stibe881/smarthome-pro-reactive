@@ -34,7 +34,8 @@ struct Provider: TimelineProvider {
         }
 
         let entry = SimpleEntry(date: Date(), items: items)
-        let timeline = Timeline(entries: [entry], policy: .atEnd)
+        let nextUpdate = Calendar.current.date(byAdding: .minute, value: 15, to: Date())!
+        let timeline = Timeline(entries: [entry], policy: .after(nextUpdate))
         completion(timeline)
     }
 }

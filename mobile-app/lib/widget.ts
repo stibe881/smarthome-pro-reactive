@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { reloadAllWidgets } from '../modules/widget-reload';
 
 const APP_GROUP_ID = 'group.com.stibe88.mobileapp';
 const WIDGET_STORAGE_KEY = '@widget_data';
@@ -46,6 +47,8 @@ export const saveCookieToWidget = async (data: WidgetData) => {
     if (Platform.OS === 'ios' && userDefaults) {
         try {
             await userDefaults.set('widgetData', json);
+            // Trigger WidgetKit to reload timeline so widget picks up new data
+            await reloadAllWidgets();
         } catch (error) {
             console.error('Failed to save to widget UserDefaults:', error);
         }
