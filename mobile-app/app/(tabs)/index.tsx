@@ -503,6 +503,8 @@ export default function Dashboard() {
     const [cfgWeatherForecast, setCfgWeatherForecast] = useState('weather.familie_gross');
     const [cfgWeatherAlarm, setCfgWeatherAlarm] = useState('weather.meteo');
     const [cfgShoppingList, setCfgShoppingList] = useState('todo.google_keep_einkaufsliste');
+    const [cfgDoorFront, setCfgDoorFront] = useState('');
+    const [cfgDoorApart, setCfgDoorApart] = useState('');
 
     useEffect(() => {
         (async () => {
@@ -514,6 +516,10 @@ export default function Dashboard() {
             if (forecast) setCfgWeatherForecast(forecast);
             if (alarm) setCfgWeatherAlarm(alarm);
             if (shopping) setCfgShoppingList(shopping);
+            const doorF = await AsyncStorage.getItem('@door_front_entity');
+            const doorA = await AsyncStorage.getItem('@door_apartment_entity');
+            if (doorF) setCfgDoorFront(doorF);
+            if (doorA) setCfgDoorApart(doorA);
         })();
     }, []);
 
@@ -1152,6 +1158,76 @@ export default function Dashboard() {
                                     />
                                 </View>
                             ))}
+                        </View>
+                    );
+                })()}
+
+                {/* Door Opener Buttons */}
+                {(cfgDoorFront || cfgDoorApart) && (() => {
+                    const handleDoorOpen = (entityId: string) => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                        // Support lock, button, switch, and script entities
+                        if (entityId.startsWith('lock.')) {
+                            callService('lock', 'unlock', entityId);
+                        } else if (entityId.startsWith('button.')) {
+                            callService('button', 'press', entityId);
+                        } else if (entityId.startsWith('switch.')) {
+                            callService('switch', 'turn_on', entityId);
+                        } else if (entityId.startsWith('script.')) {
+                            callService('script', 'turn_on', entityId);
+                        } else {
+                            // Fallback: try lock.unlock
+                            callService('lock', 'unlock', entityId);
+                        }
+                    };
+
+                    return (
+                        <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
+                            {cfgDoorFront ? (
+                                <Pressable
+                                    onPress={() => handleDoorOpen(cfgDoorFront)}
+                                    style={({ pressed }) => [{
+                                        flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+                                        gap: 8, paddingVertical: 14, borderRadius: 14,
+                                        backgroundColor: pressed ? colors.accent + '40' : colors.card,
+                                        borderWidth: 1, borderColor: colors.border,
+                                    }]}
+                                >
+                                    <DoorOpen size={18} color={colors.accent} />
+                                    <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600' }}>Haustüre</Text>
+                                </Pressable>
+                            ) : null}
+                            {cfgDoorApart ? (
+                                <Pressable
+                                    onPress={() => handleDoorOpen(cfgDoorApart)}
+                                    style={({ pressed }) => [{
+                                        flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+                                        gap: 8, paddingVertical: 14, borderRadius: 14,
+                                        backgroundColor: pressed ? colors.accent + '40' : colors.card,
+                                        borderWidth: 1, borderColor: colors.border,
+                                    }]}
+                                >
+                                    <DoorOpen size={18} color="#8B5CF6" />
+                                    <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600' }}>Wohnung</Text>
+                                </Pressable>
+                            ) : null}
+                            {cfgDoorFront && cfgDoorApart ? (
+                                <Pressable
+                                    onPress={() => {
+                                        handleDoorOpen(cfgDoorFront);
+                                        handleDoorOpen(cfgDoorApart);
+                                    }}
+                                    style={({ pressed }) => [{
+                                        flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+                                        gap: 8, paddingVertical: 14, borderRadius: 14,
+                                        backgroundColor: pressed ? '#10B981' + '40' : colors.card,
+                                        borderWidth: 1, borderColor: '#10B981' + '60',
+                                    }]}
+                                >
+                                    <DoorOpen size={18} color="#10B981" />
+                                    <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600' }}>Beide</Text>
+                                </Pressable>
+                            ) : null}
                         </View>
                     );
                 })()}

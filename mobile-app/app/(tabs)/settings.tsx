@@ -1115,8 +1115,10 @@ export default function Settings() {
     const [weatherForecastEntity, setWeatherForecastEntity] = useState('weather.familie_gross');
     const [weatherAlarmEntity, setWeatherAlarmEntity] = useState('weather.meteo');
     const [shoppingListEntity, setShoppingListEntity] = useState('todo.google_keep_einkaufsliste');
+    const [doorFrontEntity, setDoorFrontEntity] = useState('');
+    const [doorApartmentEntity, setDoorApartmentEntity] = useState('');
     const [entityPickerVisible, setEntityPickerVisible] = useState(false);
-    const [entityPickerTarget, setEntityPickerTarget] = useState<'main' | 'forecast' | 'alarm' | 'shopping'>('main');
+    const [entityPickerTarget, setEntityPickerTarget] = useState<'main' | 'forecast' | 'alarm' | 'shopping' | 'door_front' | 'door_apartment'>('main');
     const [entityPickerSearch, setEntityPickerSearch] = useState('');
 
     // Load entity settings
@@ -1130,32 +1132,40 @@ export default function Settings() {
             if (forecast) setWeatherForecastEntity(forecast);
             if (alarm) setWeatherAlarmEntity(alarm);
             if (shopping) setShoppingListEntity(shopping);
+            const doorF = await AsyncStorage.getItem('@door_front_entity');
+            const doorA = await AsyncStorage.getItem('@door_apartment_entity');
+            if (doorF) setDoorFrontEntity(doorF);
+            if (doorA) setDoorApartmentEntity(doorA);
         })();
     }, []);
 
-    const saveEntityConfig = async (target: 'main' | 'forecast' | 'alarm' | 'shopping', entityId: string) => {
-        const mapping = {
+    const saveEntityConfig = async (target: 'main' | 'forecast' | 'alarm' | 'shopping' | 'door_front' | 'door_apartment', entityId: string) => {
+        const mapping: Record<string, { setter: (v: string) => void, key: string }> = {
             main: { setter: setWeatherMainEntity, key: '@weather_main_entity' },
             forecast: { setter: setWeatherForecastEntity, key: '@weather_forecast_entity' },
             alarm: { setter: setWeatherAlarmEntity, key: '@weather_alarm_entity' },
             shopping: { setter: setShoppingListEntity, key: '@shopping_list_entity' },
+            door_front: { setter: setDoorFrontEntity, key: '@door_front_entity' },
+            door_apartment: { setter: setDoorApartmentEntity, key: '@door_apartment_entity' },
         };
         mapping[target].setter(entityId);
         await AsyncStorage.setItem(mapping[target].key, entityId);
         setEntityPickerVisible(false);
     };
 
-    const openEntityPicker = (target: 'main' | 'forecast' | 'alarm' | 'shopping') => {
+    const openEntityPicker = (target: 'main' | 'forecast' | 'alarm' | 'shopping' | 'door_front' | 'door_apartment') => {
         setEntityPickerTarget(target);
         setEntityPickerSearch('');
         setEntityPickerVisible(true);
     };
 
-    const entityPickerTitle = {
+    const entityPickerTitle: Record<string, string> = {
         main: 'Wetter (Aktuell)',
         forecast: 'Wetter (Vorhersage)',
         alarm: 'MeteoAlarm',
         shopping: 'Einkaufsliste',
+        door_front: 'Haustüre (Entität)',
+        door_apartment: 'Wohnungstüre (Entität)',
     };
 
     const filteredPickerEntities = useMemo(() => {
@@ -1675,6 +1685,24 @@ export default function Settings() {
                                     value={shoppingListEntity}
                                     showChevron
                                     onPress={() => openEntityPicker('shopping')}
+                                    colors={colors}
+                                />
+                                <SettingsRow
+                                    icon={<Key size={20} color="#F59E0B" />}
+                                    iconColor="#F59E0B"
+                                    label="Haustüre"
+                                    value={doorFrontEntity || 'Nicht konfiguriert'}
+                                    showChevron
+                                    onPress={() => openEntityPicker('door_front')}
+                                    colors={colors}
+                                />
+                                <SettingsRow
+                                    icon={<Key size={20} color="#8B5CF6" />}
+                                    iconColor="#8B5CF6"
+                                    label="Wohnungstüre"
+                                    value={doorApartmentEntity || 'Nicht konfiguriert'}
+                                    showChevron
+                                    onPress={() => openEntityPicker('door_apartment')}
                                     isLast
                                     colors={colors}
                                 />
