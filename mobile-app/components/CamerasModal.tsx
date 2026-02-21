@@ -1,6 +1,6 @@
-import React, { useMemo } from 'react';
-import { View, Text, Modal, StyleSheet, Pressable, ScrollView, Image } from 'react-native';
-import { X, Video } from 'lucide-react-native';
+import React, { useMemo, useState } from 'react';
+import { View, Text, Modal, StyleSheet, Pressable, ScrollView, Image, Dimensions, StatusBar } from 'react-native';
+import { X, Video, Maximize2 } from 'lucide-react-native';
 import { useHomeAssistant } from '../contexts/HomeAssistantContext';
 
 interface CamerasModalProps {
@@ -8,14 +8,16 @@ interface CamerasModalProps {
     onClose: () => void;
 }
 
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
 export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
     const { entities, getEntityPictureUrl, authToken } = useHomeAssistant();
+    const [fullscreenCamera, setFullscreenCamera] = useState<any>(null);
 
     // Filter Cameras
     const cameras = useMemo(() => {
         return entities.filter(e => {
             if (!e.entity_id.startsWith('camera.') || e.attributes.hidden) return false;
-            // Exclude Map and Röbi cameras
             const id = e.entity_id.toLowerCase();
             const name = (e.attributes.friendly_name || '').toLowerCase();
             return !id.includes('map') && !id.includes('robi') && !name.includes('map') && !name.includes('röbi');
@@ -29,9 +31,18 @@ export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
         if (!visible) return;
         const interval = setInterval(() => {
             setRefreshTrigger(Date.now());
-        }, 3000); // Refresh every 3 seconds
+        }, 1500); // Refresh every 1.5 seconds for smoother experience
         return () => clearInterval(interval);
     }, [visible]);
+
+    const getCameraUri = (cam: any) => {
+        if (!cam.attributes.entity_picture) return null;
+        return `${getEntityPictureUrl(cam.attributes.entity_picture)}${cam.attributes.entity_picture?.includes('?') ? '&' : '?'}t=${refreshTrigger}`;
+    };
+
+    const imageHeaders = {
+        Authorization: `Bearer ${authToken || ''}`
+    };
 
     return (
         <Modal visible={visible} animationType="slide" transparent>
@@ -50,34 +61,43 @@ export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
                     <ScrollView style={styles.modalBody} contentContainerStyle={{ paddingBottom: 40 }}>
                         <View style={styles.cameraGrid}>
                             {cameras.length > 0 ? (
-                                cameras.map((cam) => (
-                                    <View key={cam.entity_id} style={styles.cameraCard}>
-                                        <Text style={styles.cameraTitle} numberOfLines={1}>{cam.attributes.friendly_name}</Text>
-                                        <View style={styles.cameraPreview}>
-                                            {cam.attributes.entity_picture ? (
-                                                <Image
-                                                    source={{
-                                                        uri: `${getEntityPictureUrl(cam.attributes.entity_picture)}${cam.attributes.entity_picture?.includes('?') ? '&' : '?'}t=${refreshTrigger}`,
-                                                        headers: {
-                                                            Authorization: `Bearer ${authToken || ''}`
-                                                        }
-                                                    }}
-                                                    style={styles.cameraImage}
-                                                    resizeMode="cover"
-                                                />
-                                            ) : (
-                                                <View style={styles.cameraPlaceholder}>
-                                                    <Video size={32} color="#475569" />
+                                cameras.map((cam) => {
+                                    const uri = getCameraUri(cam);
+                                    return (
+                                        <Pressable
+                                            key={cam.entity_id}
+                                            onPress={() => setFullscreenCamera(cam)}
+                                            style={({ pressed }) => [
+                                                styles.cameraCard,
+                                                pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }
+                                            ]}
+                                        >
+                                            <Text style={styles.cameraTitle} numberOfLines={1}>{cam.attributes.friendly_name}</Text>
+                                            <View style={styles.cameraPreview}>
+                                                {uri ? (
+                                                    <Image
+                                                        source={{ uri, headers: imageHeaders }}
+                                                        style={styles.cameraImage}
+                                                        resizeMode="cover"
+                                                    />
+                                                ) : (
+                                                    <View style={styles.cameraPlaceholder}>
+                                                        <Video size={32} color="#475569" />
+                                                    </View>
+                                                )}
+                                                {/* Live indicator */}
+                                                <View style={styles.liveBadge}>
+                                                    <View style={styles.liveDot} />
+                                                    <Text style={styles.liveText}>LIVE</Text>
                                                 </View>
-                                            )}
-                                            {/* Live indicator */}
-                                            <View style={styles.liveBadge}>
-                                                <View style={styles.liveDot} />
-                                                <Text style={styles.liveText}>LIVE</Text>
+                                                {/* Fullscreen hint */}
+                                                <View style={styles.fullscreenHint}>
+                                                    <Maximize2 size={14} color="#fff" />
+                                                </View>
                                             </View>
-                                        </View>
-                                    </View>
-                                ))
+                                        </Pressable>
+                                    );
+                                })
                             ) : (
                                 <Text style={styles.emptyText}>Keine Kameras gefunden.</Text>
                             )}
@@ -85,6 +105,52 @@ export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
                     </ScrollView>
                 </View>
             </View>
+
+            {/* Fullscreen Camera Modal */}
+            <Modal
+                visible={!!fullscreenCamera}
+                animationType="fade"
+                transparent
+                statusBarTranslucent
+                onRequestClose={() => setFullscreenCamera(null)}
+            >
+                <StatusBar hidden />
+                <Pressable
+                    style={styles.fullscreenOverlay}
+                    onPress={() => setFullscreenCamera(null)}
+                >
+                    {fullscreenCamera && getCameraUri(fullscreenCamera) && (
+                        <Image
+                            source={{
+                                uri: getCameraUri(fullscreenCamera)!,
+                                headers: imageHeaders
+                            }}
+                            style={styles.fullscreenImage}
+                            resizeMode="contain"
+                        />
+                    )}
+
+                    {/* Camera name overlay */}
+                    <View style={styles.fullscreenHeader}>
+                        <Text style={styles.fullscreenTitle}>
+                            {fullscreenCamera?.attributes.friendly_name}
+                        </Text>
+                        <Pressable
+                            onPress={() => setFullscreenCamera(null)}
+                            style={styles.fullscreenClose}
+                            hitSlop={12}
+                        >
+                            <X size={24} color="#fff" />
+                        </Pressable>
+                    </View>
+
+                    {/* Live badge */}
+                    <View style={styles.fullscreenLiveBadge}>
+                        <View style={styles.liveDot} />
+                        <Text style={styles.liveText}>LIVE</Text>
+                    </View>
+                </Pressable>
+            </Modal>
         </Modal>
     );
 }
@@ -144,5 +210,63 @@ const styles = StyleSheet.create({
     },
     liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#fff' },
     liveText: { color: '#fff', fontSize: 10, fontWeight: 'bold' },
-    emptyText: { color: '#64748B', fontStyle: 'italic', textAlign: 'center', marginTop: 20 }
+    fullscreenHint: {
+        position: 'absolute',
+        bottom: 10, right: 10,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        padding: 6,
+        borderRadius: 6
+    },
+    emptyText: { color: '#64748B', fontStyle: 'italic', textAlign: 'center', marginTop: 20 },
+
+    // Fullscreen styles
+    fullscreenOverlay: {
+        flex: 1,
+        backgroundColor: '#000',
+        justifyContent: 'center',
+        alignItems: 'center'
+    },
+    fullscreenImage: {
+        width: SCREEN_WIDTH,
+        height: SCREEN_HEIGHT,
+    },
+    fullscreenHeader: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        paddingTop: 54,
+        paddingHorizontal: 20,
+        paddingBottom: 16,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0,0,0,0.6)',
+    },
+    fullscreenTitle: {
+        color: '#fff',
+        fontSize: 18,
+        fontWeight: '700',
+        flex: 1,
+    },
+    fullscreenClose: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: 'rgba(255,255,255,0.15)',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    fullscreenLiveBadge: {
+        position: 'absolute',
+        bottom: 40,
+        left: 20,
+        backgroundColor: 'rgba(239, 68, 68, 0.9)',
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 6,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6
+    },
 });
