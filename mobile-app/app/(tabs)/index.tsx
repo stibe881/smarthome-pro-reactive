@@ -6,6 +6,7 @@ import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useHomeAssistant } from '../../contexts/HomeAssistantContext';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { Lightbulb, Blinds, Thermometer, Droplets, Wind, Lock, Unlock, Zap, Music, Play, Pause, SkipForward, SkipBack, Bot, PartyPopper, Calendar, CloudRain, Cloud, Sun, Moon, ShoppingCart, Info, Loader2, UtensilsCrossed, Shirt, Clapperboard, BedDouble, ChevronRight, Shield, LucideIcon, DoorOpen, DoorClosed, WifiOff, Tv, X, Wifi, RefreshCw, Power, Battery, PlayCircle, Home, Map, MapPin, Fan, Clock, Video, Star, Square, Bell, Baby } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import SecurityModal from '../../components/SecurityModal';
@@ -110,6 +111,34 @@ interface QuickActionProps {
     onLongPress?: () => void;
     gradient: [string, string];
 }
+
+// =====================================================
+// QUICK ACTION CONFIG SYSTEM
+// =====================================================
+interface QuickActionConfig {
+    id: string;
+    label: string;
+    iconName: string;
+    color: string;
+    description: string;
+    type: 'script' | 'button' | 'switch' | 'cover_open' | 'cover_close' | 'vacuum_start' | 'vacuum_home' | 'lights_off' | 'lights_on';
+    entityId?: string; // for script/button/switch types
+}
+
+const ICON_MAP: Record<string, LucideIcon> = {
+    Sun, Moon, Clapperboard, Blinds, Bot, BedDouble, Lightbulb, Power,
+    Home, Star, Shield, Fan, Bell, Zap, Music, Play, Lock, Unlock,
+    DoorOpen, DoorClosed, RefreshCw, Clock, Video, Baby, PartyPopper,
+};
+
+const DEFAULT_QUICK_ACTIONS: QuickActionConfig[] = [
+    { id: 'morning', label: 'Morgen', iconName: 'Sun', color: '#F59E0B', description: 'Startet die Morgenroutine: Spielt Radio, öffnet Storen und schaltet Licht im Wohnbereich an.', type: 'script', entityId: 'script.morgenroutine' },
+    { id: 'movie', label: 'Kino', iconName: 'Clapperboard', color: '#EC4899', description: 'Aktiviert den Kino-Modus: Dimmt Lichter und sorgt für Atmosphäre.', type: 'script', entityId: 'script.movie_night' },
+    { id: 'covers_open', label: 'Rollläden auf', iconName: 'Blinds', color: '#60A5FA', description: 'Öffnet alle Storen im Haus.', type: 'cover_open' },
+    { id: 'covers_close', label: 'Rollläden zu', iconName: 'Blinds', color: '#3B82F6', description: 'Schliesst alle Storen im Haus für Privatsphäre.', type: 'cover_close' },
+    { id: 'vacuum_start', label: 'Röbi Start', iconName: 'Bot', color: '#10B981', description: 'Startet den Saugroboter für eine komplette Reinigung.', type: 'vacuum_start' },
+    { id: 'sleep', label: 'Schlafen', iconName: 'BedDouble', color: '#8B5CF6', description: 'Aktiviert den Schlafmodus: Schaltet alle Lichter aus und schliesst die Storen.', type: 'script', entityId: 'script.bed_time' },
+];
 
 const QuickAction = memo(({
     icon: Icon,
@@ -442,6 +471,7 @@ const EventTile = ({ calendar, onPress }: { calendar: any, onPress?: () => void 
 export default function Dashboard() {
     const router = useRouter();
     const { colors } = useTheme();
+    const { user, userRole } = useAuth();
     // --- Calendar Modal Logic ---
     const [calendarModal, setCalendarModal] = useState<{ visible: boolean, entityId: string, title: string, color: string }>({ visible: false, entityId: '', title: '', color: '' });
     const [showShoppingList, setShowShoppingList] = useState(false);
@@ -522,6 +552,27 @@ export default function Dashboard() {
             if (doorA) setCfgDoorApart(doorA);
         })();
     }, []);
+
+    // Quick Actions Config: user → admin → defaults
+    const [quickActions, setQuickActions] = useState<QuickActionConfig[]>(DEFAULT_QUICK_ACTIONS);
+
+    useEffect(() => {
+        (async () => {
+            // 1. Try user-specific config
+            if (user?.id) {
+                const userCfg = await AsyncStorage.getItem(`@quick_actions_user_${user.id}`);
+                if (userCfg) {
+                    try { setQuickActions(JSON.parse(userCfg)); return; } catch { }
+                }
+            }
+            // 2. Try admin config
+            const adminCfg = await AsyncStorage.getItem('@quick_actions_admin');
+            if (adminCfg) {
+                try { setQuickActions(JSON.parse(adminCfg)); return; } catch { }
+            }
+            // 3. Use defaults (already set via useState)
+        })();
+    }, [user?.id]);
 
     // Wizard is only shown manually from Settings, not auto-opened here
     // (auto-open caused race condition in production builds where haBaseUrl
@@ -1232,95 +1283,64 @@ export default function Dashboard() {
                     );
                 })()}
 
-                {/* Quick Actions (Moved below Appliances) */}
+                {/* Quick Actions (Data-driven) */}
                 <View style={styles.section}>
                     <Text style={[styles.sectionTitle, { color: colors.subtext }]}>Schnellaktionen</Text>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickActionsRow}>
+                        {quickActions.map((qa) => {
+                            const IconComp = ICON_MAP[qa.iconName] || Zap;
+                            const gradient: [string, string] = [qa.color + '26', qa.color + '0D'];
 
-                        <QuickAction
-                            icon={Sun}
-                            iconColor={colors.warning}
-                            label="Morgen"
-                            onPress={handleMorning}
-                            onLongPress={() => setQuickActionInfo({
-                                title: "Guten Morgen",
-                                description: "Startet die Morgenroutine: Spielt Radio, öffnet Storen und schaltet Licht im Wohnbereich an.",
-                                icon: Sun,
-                                iconColor: colors.warning,
-                                gradient: [colors.warning + '26', colors.warning + '0D']
-                            })}
-                            gradient={[colors.warning + '26', colors.warning + '0D']}
-                        />
-                        <QuickAction
-                            icon={Clapperboard}
-                            iconColor={colors.accent} // Using accent as pink replacement if fits, else keep hardcoded or use custom property
-                            label="Kino"
-                            onPress={handleMovieNight}
-                            onLongPress={() => setQuickActionInfo({
-                                title: "Kino-Modus",
-                                description: "Aktiviert den Kino-Modus: Dimmt Lichter und sorgt für Atmosphäre.",
-                                icon: Clapperboard,
-                                iconColor: "#EC4899", // Keep distinct color for logical meaning
-                                gradient: ['rgba(236, 72, 153, 0.15)', 'rgba(236, 72, 153, 0.05)']
-                            })}
-                            gradient={['rgba(236, 72, 153, 0.15)', 'rgba(236, 72, 153, 0.05)']}
-                        />
-                        <QuickAction
-                            icon={Blinds}
-                            iconColor={colors.tint}
-                            label="Rollläden auf"
-                            onPress={handleAllCoversOpen}
-                            onLongPress={() => setQuickActionInfo({
-                                title: "Rollläden öffnen",
-                                description: "Öffnet alle Storen im Haus.",
-                                icon: Blinds,
-                                iconColor: "#60A5FA",
-                                gradient: ['rgba(96, 165, 250,0.15)', 'rgba(96, 165, 250,0.05)']
-                            })}
-                            gradient={['rgba(96, 165, 250,0.15)', 'rgba(96, 165, 250,0.05)']}
-                        />
-                        <QuickAction
-                            icon={Blinds}
-                            iconColor={colors.accent}
-                            label="Rollläden zu"
-                            onPress={handleAllCoversClose}
-                            onLongPress={() => setQuickActionInfo({
-                                title: "Rollläden schliessen",
-                                description: "Schliesst alle Storen im Haus für Privatsphäre.",
-                                icon: Blinds,
-                                iconColor: colors.accent,
-                                gradient: [colors.accent + '26', colors.accent + '0D']
-                            })}
-                            gradient={[colors.accent + '26', colors.accent + '0D']}
-                        />
-                        <QuickAction
-                            icon={Bot}
-                            iconColor={colors.success}
-                            label="Röbi Start"
-                            onPress={handleRobiStart}
-                            onLongPress={() => setQuickActionInfo({
-                                title: "Röbi starten",
-                                description: "Startet den Saugroboter für eine komplette Reinigung.",
-                                icon: Bot,
-                                iconColor: colors.success,
-                                gradient: [colors.success + '26', colors.success + '0D']
-                            })}
-                            gradient={[colors.success + '26', colors.success + '0D']}
-                        />
-                        <QuickAction
-                            icon={BedDouble}
-                            iconColor="#8B5CF6"
-                            label="Schlafen"
-                            onPress={handleSleep}
-                            onLongPress={() => setQuickActionInfo({
-                                title: "Gute Nacht",
-                                description: "Aktiviert den Schlafmodus: Schaltet alle Lichter aus und schliesst die Storen.",
-                                icon: BedDouble,
-                                iconColor: "#8B5CF6",
-                                gradient: ['rgba(139, 92, 246,0.15)', 'rgba(139, 92, 246,0.05)']
-                            })}
-                            gradient={['rgba(139, 92, 246,0.15)', 'rgba(139, 92, 246,0.05)']}
-                        />
+                            const handlePress = () => {
+                                switch (qa.type) {
+                                    case 'script':
+                                        if (qa.entityId) callService('script', 'turn_on', qa.entityId);
+                                        break;
+                                    case 'button':
+                                        if (qa.entityId) callService('button', 'press', qa.entityId);
+                                        break;
+                                    case 'switch':
+                                        if (qa.entityId) callService('switch', 'turn_on', qa.entityId);
+                                        break;
+                                    case 'cover_open':
+                                        handleAllCoversOpen();
+                                        break;
+                                    case 'cover_close':
+                                        handleAllCoversClose();
+                                        break;
+                                    case 'vacuum_start':
+                                        handleRobiStart();
+                                        break;
+                                    case 'vacuum_home':
+                                        handleRobiHome();
+                                        break;
+                                    case 'lights_off':
+                                        handleAllLightsOff();
+                                        break;
+                                    case 'lights_on':
+                                        handleAllLightsOn();
+                                        break;
+                                }
+                            };
+
+                            return (
+                                <QuickAction
+                                    key={qa.id}
+                                    icon={IconComp}
+                                    iconColor={qa.color}
+                                    label={qa.label}
+                                    onPress={handlePress}
+                                    onLongPress={() => setQuickActionInfo({
+                                        title: qa.label,
+                                        description: qa.description,
+                                        icon: IconComp,
+                                        iconColor: qa.color,
+                                        gradient
+                                    })}
+                                    gradient={gradient}
+                                />
+                            );
+                        })}
                     </ScrollView>
                 </View>
 

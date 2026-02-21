@@ -18,6 +18,7 @@ import { AutomationsModal } from '../../components/AutomationsModal';
 import { ShoppingLocationsModal } from '../../components/ShoppingLocationsModal';
 import { NotificationTypesManager } from '../../components/NotificationTypesManager';
 import { WidgetSettings } from '../../components/WidgetSettings';
+import { QuickActionsConfigModal } from '../../components/QuickActionsConfigModal';
 import { Activity, ShieldCheck, Zap, Blinds, AlertTriangle, Baby, Plus, Settings as SettingsIcon, LayoutGrid } from 'lucide-react-native';
 import { useKidsMode, KIDS_GENDER_THEMES, KidsGender } from '../../contexts/KidsContext';
 import { supabase } from '../../lib/supabase';
@@ -1087,6 +1088,8 @@ export default function Settings() {
     const [shoppingLocationsVisible, setShoppingLocationsVisible] = useState(false);
     const [widgetSettingsVisible, setWidgetSettingsVisible] = useState(false);
     const [isDesignExpanded, setIsDesignExpanded] = useState(false);
+    const [quickActionsAdminVisible, setQuickActionsAdminVisible] = useState(false);
+    const [quickActionsUserVisible, setQuickActionsUserVisible] = useState(false);
     const [currentAppIcon, setCurrentAppIcon] = useState<string | null>(null);
 
     // Load current app icon on mount
@@ -1172,6 +1175,13 @@ export default function Settings() {
         let filtered = entities;
         if (entityPickerTarget === 'shopping') {
             filtered = entities.filter(e => e.entity_id.startsWith('todo.') || e.entity_id.startsWith('sensor.'));
+        } else if (entityPickerTarget === 'door_front' || entityPickerTarget === 'door_apartment') {
+            filtered = entities.filter(e =>
+                e.entity_id.startsWith('lock.') ||
+                e.entity_id.startsWith('button.') ||
+                e.entity_id.startsWith('switch.') ||
+                e.entity_id.startsWith('script.')
+            );
         } else {
             filtered = entities.filter(e =>
                 e.entity_id.startsWith('weather.') ||
@@ -1608,6 +1618,30 @@ export default function Settings() {
                             />
                         </SettingsSection>
 
+                        <SettingsSection title="Schnellaktionen" colors={colors}>
+                            {userRole === 'admin' && (
+                                <SettingsRow
+                                    icon={<Zap size={20} color="#F59E0B" />}
+                                    iconColor="#F59E0B"
+                                    label="Standard-Aktionen (Admin)"
+                                    value="Für alle Nutzer"
+                                    showChevron
+                                    onPress={() => setQuickActionsAdminVisible(true)}
+                                    colors={colors}
+                                />
+                            )}
+                            <SettingsRow
+                                icon={<Zap size={20} color={colors.accent} />}
+                                iconColor={colors.accent}
+                                label="Meine Schnellaktionen"
+                                value="Personalisieren"
+                                showChevron
+                                onPress={() => setQuickActionsUserVisible(true)}
+                                isLast
+                                colors={colors}
+                            />
+                        </SettingsSection>
+
                         {/* App Settings */}
                         <SettingsSection title="App" colors={colors}>
                             <SettingsRow
@@ -1963,7 +1997,9 @@ export default function Settings() {
                                         ? shoppingListEntity
                                         : entityPickerTarget === 'main' ? weatherMainEntity
                                             : entityPickerTarget === 'forecast' ? weatherForecastEntity
-                                                : weatherAlarmEntity;
+                                                : entityPickerTarget === 'door_front' ? doorFrontEntity
+                                                    : entityPickerTarget === 'door_apartment' ? doorApartmentEntity
+                                                        : weatherAlarmEntity;
                                     const isSelected = entity.entity_id === currentValue;
                                     return (
                                         <Pressable
@@ -1995,6 +2031,17 @@ export default function Settings() {
                         </View>
                     </View>
                 </Modal>
+
+                <QuickActionsConfigModal
+                    visible={quickActionsAdminVisible}
+                    onClose={() => setQuickActionsAdminVisible(false)}
+                    isAdmin={true}
+                />
+                <QuickActionsConfigModal
+                    visible={quickActionsUserVisible}
+                    onClose={() => setQuickActionsUserVisible(false)}
+                    isAdmin={false}
+                />
             </SafeAreaView>
         </View>
     );
