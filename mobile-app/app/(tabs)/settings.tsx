@@ -1081,7 +1081,7 @@ export default function Settings() {
     const [automationsModalVisible, setAutomationsModalVisible] = useState(false);
     const [changePasswordModalVisible, setChangePasswordModalVisible] = useState(false);
     const [isHAExpanded, setIsHAExpanded] = useState(false);
-    const [isFamilyExpanded, setIsFamilyExpanded] = useState(false);
+    const [familyModalVisible, setFamilyModalVisible] = useState(false);
     const [kidsModalVisible, setKidsModalVisible] = useState(false);
     const [showWizard, setShowWizard] = useState(false);
     const [shoppingLocationsVisible, setShoppingLocationsVisible] = useState(false);
@@ -1631,25 +1631,12 @@ export default function Settings() {
                                     label="Familienmitglieder"
                                     value="Verwalten & Einladen"
                                     showChevron
-                                    onPress={() => setIsFamilyExpanded(!isFamilyExpanded)}
+                                    onPress={() => setFamilyModalVisible(true)}
                                     isLast
                                     colors={colors}
                                 />
                             )}
                         </SettingsSection>
-
-                        {/* Family Management - Inline under APP, admin only */}
-                        {userRole === 'admin' && isFamilyExpanded && (
-                            <View style={[styles.section, { marginTop: -8 }]}>
-                                <View style={[styles.sectionContent, {
-                                    backgroundColor: colors.card,
-                                    borderColor: colors.border,
-                                    padding: 8
-                                }]}>
-                                    <FamilyManagement colors={colors} />
-                                </View>
-                            </View>
-                        )}
 
                         {/* Entity Configuration - Admin Only */}
                         {userRole === 'admin' && (
@@ -1906,6 +1893,20 @@ export default function Settings() {
                     visible={shoppingLocationsVisible}
                     onClose={() => setShoppingLocationsVisible(false)}
                 />
+                {/* Family Management Modal */}
+                <Modal visible={familyModalVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setFamilyModalVisible(false)}>
+                    <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+                            <Text style={{ color: colors.text, fontSize: 20, fontWeight: '700' }}>Familienmitglieder</Text>
+                            <Pressable onPress={() => setFamilyModalVisible(false)} style={{ padding: 8 }}>
+                                <X size={24} color={colors.subtext} />
+                            </Pressable>
+                        </View>
+                        <ScrollView style={{ flex: 1, padding: 16 }}>
+                            <FamilyManagement colors={colors} />
+                        </ScrollView>
+                    </SafeAreaView>
+                </Modal>
                 {/* Entity Picker Modal */}
                 <Modal visible={entityPickerVisible} transparent animationType="slide">
                     <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
