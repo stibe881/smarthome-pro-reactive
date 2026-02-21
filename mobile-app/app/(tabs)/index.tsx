@@ -669,17 +669,7 @@ export default function Dashboard() {
 
     // Filter entities
     const lights = useMemo(() => {
-        const allowedLights = (dashboardConfig.lights?.length > 0 ? dashboardConfig.lights : null) || [
-            { id: 'light.wohnzimmer', name: '🛋️ Wohnzimmer' },
-            { id: 'light.essbereich', name: '🍽️ Essbereich' },
-            { id: 'light.kuche', name: '🍳 Küche' },
-            { id: 'light.linas_zimmer', name: "👧 Lina's Zimmer" },
-            { id: 'light.levins_zimmer', name: "👦 Levin's Zimmer" },
-            { id: 'light.schlafzimmer', name: '🛏️ Schlafzimmer' },
-            { id: 'light.badezimmer', name: '🚿 Badezimmer' },
-            { id: 'light.deckenbeleuchtung_buro', name: '🏢 Büro' },
-            { id: 'light.licht_garage', name: '🚽 Gäste WC' },
-        ];
+        const allowedLights = dashboardConfig.lights?.length > 0 ? dashboardConfig.lights : [];
 
         const sortedLights = [...allowedLights].sort((a, b) => {
             // Extract name after emoji (skip first 2-3 chars which are emoji)
@@ -703,15 +693,7 @@ export default function Dashboard() {
     }, [entities, dashboardConfig]);
 
     const covers = useMemo(() => {
-        const allowedCovers = (dashboardConfig.covers?.length > 0 ? dashboardConfig.covers : null) || [
-            { id: 'cover.alle_storen', name: 'Alle Storen' },
-            { id: 'cover.kuche', name: '🍳 Küche' },
-            { id: 'cover.ogp_3900159', name: '🍳 Küche Balkon' },
-            { id: 'cover.essbereich', name: '🍽️ Essbereich' },
-            { id: 'cover.wohnzimmer_spielplaetzchen', name: '🧸 Spielplätzchen' },
-            { id: 'cover.terrasse', name: '🪴 Terrasse' },
-            { id: 'cover.wohnzimmer_sofa', name: '🛋️ Wohnzimmer' },
-        ];
+        const allowedCovers = dashboardConfig.covers?.length > 0 ? dashboardConfig.covers : [];
 
         const sortedCovers = [...allowedCovers].sort((a, b) => {
             // "Alle Storen" always first, then alphabetically
@@ -735,7 +717,13 @@ export default function Dashboard() {
             };
         }).filter(Boolean) as any[];
     }, [entities, dashboardConfig]);
-    const vacuums = useMemo(() => entities.filter(e => e.entity_id.startsWith('vacuum.')), [entities]);
+    const vacuums = useMemo(() => {
+        if (dashboardConfig.vacuum) {
+            const v = entities.find(e => e.entity_id === dashboardConfig.vacuum);
+            return v ? [v] : [];
+        }
+        return entities.filter(e => e.entity_id.startsWith('vacuum.'));
+    }, [entities, dashboardConfig]);
     const mediaPlayers = useMemo(() => {
         // Dynamic Config (from Wizard) OR Fallback to Whitelist
         if (dashboardConfig.mediaPlayers && dashboardConfig.mediaPlayers.length > 0) {
@@ -847,7 +835,7 @@ export default function Dashboard() {
     }, [entities]);
 
     // Find Röbi and Cameras
-    const robi = useMemo(() => vacuums.find(v => v.entity_id.includes('robi') || v.attributes.friendly_name?.includes('Röbi')) || vacuums[0], [vacuums]);
+    const robi = useMemo(() => vacuums[0] || null, [vacuums]);
     const mapCamera = useMemo(() => entities.find(e => e.entity_id.startsWith('camera.') && (e.entity_id.includes('map') || e.entity_id.includes('robi'))), [entities]);
 
     // Scripts
@@ -882,10 +870,13 @@ export default function Dashboard() {
         }).length;
     }, [entities]);
 
-    // Find Alarm Entity
+    // Find Alarm Entity (from config or fallback to first alarm_control_panel)
     const alarmEntity = useMemo(() => {
+        if (dashboardConfig.alarm) {
+            return entities.find(e => e.entity_id === dashboardConfig.alarm) || null;
+        }
         return entities.find(e => e.entity_id.startsWith('alarm_control_panel.')) || null;
-    }, [entities]);
+    }, [entities, dashboardConfig]);
 
     const alarmStatusText = useMemo(() => {
         if (!alarmEntity) return 'N/A';

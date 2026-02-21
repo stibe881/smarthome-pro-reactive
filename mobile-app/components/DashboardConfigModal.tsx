@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { View, Text, Pressable, ScrollView, Modal, StyleSheet, ActivityIndicator, Alert, TextInput } from 'react-native';
-import { X, Plus, Trash2, Lightbulb, Blinds, Search } from 'lucide-react-native';
+import { X, Plus, Trash2, Lightbulb, Blinds, Bot, Shield, Search, Pencil, Check } from 'lucide-react-native';
 import { useHomeAssistant, EntityState } from '../contexts/HomeAssistantContext';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -9,33 +9,69 @@ interface DashboardConfigModalProps {
     onClose: () => void;
 }
 
+type SectionType = 'lights' | 'covers' | 'vacuum' | 'alarm';
+
+const TABS: { key: SectionType; label: string; icon: any; domain: string; single?: boolean }[] = [
+    { key: 'lights', label: 'Lichter', icon: Lightbulb, domain: 'light.' },
+    { key: 'covers', label: 'Rollläden', icon: Blinds, domain: 'cover.' },
+    { key: 'vacuum', label: 'Saugroboter', icon: Bot, domain: 'vacuum.', single: true },
+    { key: 'alarm', label: 'Alarmanlage', icon: Shield, domain: 'alarm_control_panel.', single: true },
+];
+
 export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalProps) => {
     const { colors } = useTheme();
     const { entities, dashboardConfig, saveDashboardConfig } = useHomeAssistant();
     const [searchQuery, setSearchQuery] = useState('');
-    const [activeSection, setActiveSection] = useState<'lights' | 'covers'>('lights');
+    const [activeSection, setActiveSection] = useState<SectionType>('lights');
     const [isSaving, setIsSaving] = useState(false);
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [editName, setEditName] = useState('');
+
+    const activeTab = TABS.find(t => t.key === activeSection)!;
 
     // Filter available entities by domain
     const availableEntities = useMemo(() => {
-        const domain = activeSection === 'lights' ? 'light.' : 'cover.';
         return entities
-            .filter(e => e.entity_id.startsWith(domain))
+            .filter(e => e.entity_id.startsWith(activeTab.domain))
             .filter(e => e.entity_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 (e.attributes.friendly_name || '').toLowerCase().includes(searchQuery.toLowerCase()))
             .sort((a, b) => (a.attributes.friendly_name || a.entity_id).localeCompare(b.attributes.friendly_name || b.entity_id));
-    }, [entities, activeSection, searchQuery]);
+    }, [entities, activeTab, searchQuery]);
 
     // Current config for the section
     const currentMapped = useMemo(() => {
+        if (activeTab.single) {
+            // For single-select: wrap in array for consistent rendering
+            const entityId = dashboardConfig[activeSection];
+            if (!entityId) return [];
+            const entity = entities.find(e => e.entity_id === entityId);
+            return [{ id: entityId, name: entity?.attributes?.friendly_name || entityId }];
+        }
         return dashboardConfig[activeSection] || [];
-    }, [dashboardConfig, activeSection]);
+    }, [dashboardConfig, activeSection, entities]);
 
     const handleAdd = async (entity: EntityState) => {
         const name = entity.attributes.friendly_name || entity.entity_id;
-        const newEntry = { id: entity.entity_id, name };
 
-        // Prevent duplicates
+        if (activeTab.single) {
+            // Single-select: replace the value
+            const newConfig = {
+                ...dashboardConfig,
+                [activeSection]: entity.entity_id,
+            };
+            setIsSaving(true);
+            try {
+                await saveDashboardConfig(newConfig);
+            } catch (e) {
+                Alert.alert("Fehler", "Konfiguration konnte nicht gespeichert werden.");
+            } finally {
+                setIsSaving(false);
+            }
+            return;
+        }
+
+        // Multi-select: add to array
+        const newEntry = { id: entity.entity_id, name };
         if (currentMapped.find((m: any) => m.id === entity.entity_id)) {
             Alert.alert("Hinweis", "Diese Entität ist bereits zugeordnet.");
             return;
@@ -57,10 +93,15 @@ export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalP
     };
 
     const handleRemove = async (id: string) => {
-        const newConfig = {
-            ...dashboardConfig,
-            [activeSection]: currentMapped.filter((m: any) => m.id !== id)
-        };
+        let newConfig;
+        if (activeTab.single) {
+            newConfig = { ...dashboardConfig, [activeSection]: null };
+        } else {
+            newConfig = {
+                ...dashboardConfig,
+                [activeSection]: currentMapped.filter((m: any) => m.id !== id)
+            };
+        }
 
         setIsSaving(true);
         try {
@@ -69,6 +110,23 @@ export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalP
             Alert.alert("Fehler", "Entität konnte nicht entfernt werden.");
         } finally {
             setIsSaving(false);
+        }
+    };
+
+    const handleRename = async (id: string, newName: string) => {
+        if (!newName.trim()) return;
+        const newConfig = {
+            ...dashboardConfig,
+            [activeSection]: currentMapped.map((m: any) => m.id === id ? { ...m, name: newName.trim() } : m)
+        };
+        setIsSaving(true);
+        try {
+            await saveDashboardConfig(newConfig);
+        } catch (e) {
+            Alert.alert("Fehler", "Name konnte nicht geändert werden.");
+        } finally {
+            setIsSaving(false);
+            setEditingId(null);
         }
     };
 
@@ -82,39 +140,72 @@ export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalP
                     </Pressable>
                 </View>
 
-                <View style={styles.tabContainer}>
-                    <Pressable
-                        onPress={() => setActiveSection('lights')}
-                        style={[styles.tab, activeSection === 'lights' && { borderBottomColor: colors.accent, borderBottomWidth: 2 }]}
-                    >
-                        <Lightbulb size={18} color={activeSection === 'lights' ? colors.accent : colors.subtext} />
-                        <Text style={[styles.tabText, { color: activeSection === 'lights' ? colors.accent : colors.subtext }]}>Lichter</Text>
-                    </Pressable>
-                    <Pressable
-                        onPress={() => setActiveSection('covers')}
-                        style={[styles.tab, activeSection === 'covers' && { borderBottomColor: colors.accent, borderBottomWidth: 2 }]}
-                    >
-                        <Blinds size={18} color={activeSection === 'covers' ? colors.accent : colors.subtext} />
-                        <Text style={[styles.tabText, { color: activeSection === 'covers' ? colors.accent : colors.subtext }]}>Rollläden</Text>
-                    </Pressable>
-                </View>
+                {/* Tab Bar */}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={[styles.tabContainer, { borderBottomColor: colors.border }]}>
+                    {TABS.map(tab => {
+                        const Icon = tab.icon;
+                        const active = activeSection === tab.key;
+                        return (
+                            <Pressable
+                                key={tab.key}
+                                onPress={() => { setActiveSection(tab.key); setSearchQuery(''); setEditingId(null); }}
+                                style={[styles.tab, active && { borderBottomColor: colors.accent, borderBottomWidth: 2 }]}
+                            >
+                                <Icon size={18} color={active ? colors.accent : colors.subtext} />
+                                <Text style={[styles.tabText, { color: active ? colors.accent : colors.subtext }]}>{tab.label}</Text>
+                            </Pressable>
+                        );
+                    })}
+                </ScrollView>
 
                 <View style={styles.content}>
                     {/* Current Config Section */}
-                    <Text style={[styles.sectionTitle, { color: colors.subtext }]}>AKTUELLE ZUORDNUNG</Text>
+                    <Text style={[styles.sectionTitle, { color: colors.subtext }]}>
+                        {activeTab.single ? 'AUSGEWÄHLTE ENTITÄT' : 'AKTUELLE ZUORDNUNG'}
+                    </Text>
                     <View style={styles.mappedList}>
                         {currentMapped.length === 0 ? (
-                            <Text style={[styles.emptyText, { color: colors.subtext }]}>Noch keine Entitäten zugeordnet.</Text>
+                            <Text style={[styles.emptyText, { color: colors.subtext }]}>
+                                {activeTab.single ? 'Noch keine Entität ausgewählt.' : 'Noch keine Entitäten zugeordnet.'}
+                            </Text>
                         ) : (
                             currentMapped.map((m: any) => (
                                 <View key={m.id} style={[styles.mappedItem, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                                    <View style={{ flex: 1 }}>
-                                        <Text style={[styles.mappedName, { color: colors.text }]}>{m.name}</Text>
-                                        <Text style={[styles.mappedId, { color: colors.subtext }]}>{m.id}</Text>
-                                    </View>
-                                    <Pressable onPress={() => handleRemove(m.id)} style={styles.removeBtn}>
-                                        <Trash2 size={18} color="#EF4444" />
-                                    </Pressable>
+                                    {editingId === m.id && !activeTab.single ? (
+                                        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                            <TextInput
+                                                value={editName}
+                                                onChangeText={setEditName}
+                                                autoFocus
+                                                style={[styles.renameInput, { color: colors.text, borderColor: colors.accent, backgroundColor: colors.background }]}
+                                                onSubmitEditing={() => handleRename(m.id, editName)}
+                                            />
+                                            <Pressable onPress={() => handleRename(m.id, editName)} style={[styles.confirmBtn, { backgroundColor: colors.accent }]}>
+                                                <Check size={16} color="#fff" />
+                                            </Pressable>
+                                        </View>
+                                    ) : (
+                                        <>
+                                            <Pressable
+                                                style={{ flex: 1 }}
+                                                onPress={() => {
+                                                    if (!activeTab.single) {
+                                                        setEditingId(m.id);
+                                                        setEditName(m.name);
+                                                    }
+                                                }}
+                                            >
+                                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                                    <Text style={[styles.mappedName, { color: colors.text }]}>{m.name}</Text>
+                                                    {!activeTab.single && <Pencil size={12} color={colors.subtext} />}
+                                                </View>
+                                                <Text style={[styles.mappedId, { color: colors.subtext }]}>{m.id}</Text>
+                                            </Pressable>
+                                            <Pressable onPress={() => handleRemove(m.id)} style={styles.removeBtn}>
+                                                <Trash2 size={18} color="#EF4444" />
+                                            </Pressable>
+                                        </>
+                                    )}
                                 </View>
                             ))
                         )}
@@ -138,7 +229,9 @@ export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalP
 
                     <ScrollView style={styles.scrollArea}>
                         {availableEntities.map(e => {
-                            const isAdded = currentMapped.some((m: any) => m.id === e.entity_id);
+                            const isAdded = activeTab.single
+                                ? dashboardConfig[activeSection] === e.entity_id
+                                : currentMapped.some((m: any) => m.id === e.entity_id);
                             return (
                                 <Pressable
                                     key={e.entity_id}
@@ -152,12 +245,12 @@ export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalP
                                         <Text style={[styles.entityId, { color: colors.subtext }]}>{e.entity_id}</Text>
                                     </View>
                                     {isAdded ? (
-                                        <Text style={{ color: colors.success, fontSize: 12 }}>Zugeordnet</Text>
+                                        <Text style={{ color: colors.success || '#10B981', fontSize: 12 }}>Zugeordnet</Text>
                                     ) : (
                                         <Plus size={18} color={colors.accent} />
                                     )}
                                 </Pressable>
-                            )
+                            );
                         })}
                     </ScrollView>
                 </View>
@@ -191,20 +284,20 @@ const styles = StyleSheet.create({
         padding: 4,
     },
     tabContainer: {
-        flexDirection: 'row',
         borderBottomWidth: 1,
-        borderBottomColor: '#1e293b',
+        flexGrow: 0,
     },
     tab: {
-        flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
         paddingVertical: 12,
-        gap: 8,
+        paddingHorizontal: 16,
+        gap: 6,
     },
     tabText: {
         fontWeight: '600',
+        fontSize: 13,
     },
     content: {
         flex: 1,
@@ -235,6 +328,21 @@ const styles = StyleSheet.create({
     },
     removeBtn: {
         padding: 8,
+    },
+    renameInput: {
+        flex: 1,
+        fontSize: 15,
+        borderWidth: 1,
+        borderRadius: 8,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+    },
+    confirmBtn: {
+        width: 32,
+        height: 32,
+        borderRadius: 8,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     searchSection: {
         marginTop: 16,

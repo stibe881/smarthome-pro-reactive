@@ -19,6 +19,7 @@ import { ShoppingLocationsModal } from '../../components/ShoppingLocationsModal'
 import { NotificationTypesManager } from '../../components/NotificationTypesManager';
 import { WidgetSettings } from '../../components/WidgetSettings';
 import { QuickActionsConfigModal } from '../../components/QuickActionsConfigModal';
+import { DashboardConfigModal } from '../../components/DashboardConfigModal';
 import { Activity, ShieldCheck, Zap, Blinds, AlertTriangle, Baby, Plus, Settings as SettingsIcon, LayoutGrid } from 'lucide-react-native';
 import { useKidsMode, KIDS_GENDER_THEMES, KidsGender } from '../../contexts/KidsContext';
 import { supabase } from '../../lib/supabase';
@@ -1091,6 +1092,7 @@ export default function Settings() {
     const [widgetSettingsVisible, setWidgetSettingsVisible] = useState(false);
     const [isDesignExpanded, setIsDesignExpanded] = useState(false);
     const [quickActionsAdminVisible, setQuickActionsAdminVisible] = useState(false);
+    const [dashboardConfigVisible, setDashboardConfigVisible] = useState(false);
     const [quickActionsUserVisible, setQuickActionsUserVisible] = useState(false);
     const [currentAppIcon, setCurrentAppIcon] = useState<string | null>(null);
 
@@ -1643,6 +1645,21 @@ export default function Settings() {
                             />
                         </SettingsSection>
 
+                        {userRole === 'admin' && (
+                            <SettingsSection title="Dashboard" colors={colors}>
+                                <SettingsRow
+                                    icon={<SettingsIcon size={20} color={colors.accent} />}
+                                    iconColor={colors.accent}
+                                    label="Dashboard anpassen"
+                                    value="Lichter, Rollläden, Saugroboter, Alarm"
+                                    showChevron
+                                    isLast
+                                    onPress={() => setDashboardConfigVisible(true)}
+                                    colors={colors}
+                                />
+                            </SettingsSection>
+                        )}
+
                         <SettingsSection title="Schnellaktionen" colors={colors}>
                             {userRole === 'admin' && (
                                 <SettingsRow
@@ -2075,6 +2092,10 @@ export default function Settings() {
                     visible={quickActionsUserVisible}
                     onClose={() => setQuickActionsUserVisible(false)}
                     isAdmin={false}
+                />
+                <DashboardConfigModal
+                    visible={dashboardConfigVisible}
+                    onClose={() => setDashboardConfigVisible(false)}
                 />
             </SafeAreaView>
         </View>
