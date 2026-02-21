@@ -670,18 +670,9 @@ export default function Dashboard() {
     // Filter entities
     const lights = useMemo(() => {
         const allowedLights = dashboardConfig.lights?.length > 0 ? dashboardConfig.lights : [];
-
-        const sortedLights = [...allowedLights].sort((a, b) => {
-            // Extract name after emoji (skip first 2-3 chars which are emoji)
-            const nameA = a.name.includes(' ') ? a.name.slice(a.name.indexOf(' ') + 1).toLowerCase() : a.name.toLowerCase();
-            const nameB = b.name.includes(' ') ? b.name.slice(b.name.indexOf(' ') + 1).toLowerCase() : b.name.toLowerCase();
-            return nameA.localeCompare(nameB, 'de');
-        });
-
-        return sortedLights.map(def => {
-            const entity = entities.find(e => e.entity_id === def.id);
+        return allowedLights.map((def: any) => {
+            const entity = entities.find((e: any) => e.entity_id === def.id);
             if (!entity) return null;
-            // Override friendly name for display
             return {
                 ...entity,
                 attributes: {
@@ -694,19 +685,8 @@ export default function Dashboard() {
 
     const covers = useMemo(() => {
         const allowedCovers = dashboardConfig.covers?.length > 0 ? dashboardConfig.covers : [];
-
-        const sortedCovers = [...allowedCovers].sort((a, b) => {
-            // "Alle Storen" always first, then alphabetically
-            if (a.name === 'Alle Storen') return -1;
-            if (b.name === 'Alle Storen') return 1;
-            // Extract name after emoji (skip first space)
-            const nameA = a.name.includes(' ') ? a.name.slice(a.name.indexOf(' ') + 1).toLowerCase() : a.name.toLowerCase();
-            const nameB = b.name.includes(' ') ? b.name.slice(b.name.indexOf(' ') + 1).toLowerCase() : b.name.toLowerCase();
-            return nameA.localeCompare(nameB, 'de');
-        });
-
-        return sortedCovers.map(def => {
-            const entity = entities.find(e => e.entity_id === def.id);
+        return allowedCovers.map((def: any) => {
+            const entity = entities.find((e: any) => e.entity_id === def.id);
             if (!entity) return null;
             return {
                 ...entity,

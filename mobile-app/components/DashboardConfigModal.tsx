@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { View, Text, Pressable, ScrollView, Modal, StyleSheet, ActivityIndicator, Alert, TextInput } from 'react-native';
-import { X, Plus, Trash2, Lightbulb, Blinds, Bot, Shield, Search, Pencil, Check } from 'lucide-react-native';
+import { X, Plus, Trash2, Lightbulb, Blinds, Bot, Shield, Search, Pencil, Check, ChevronUp, ChevronDown } from 'lucide-react-native';
 import { useHomeAssistant, EntityState } from '../contexts/HomeAssistantContext';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -130,6 +130,24 @@ export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalP
         }
     };
 
+    const handleMove = async (id: string, direction: 'up' | 'down') => {
+        const idx = currentMapped.findIndex((m: any) => m.id === id);
+        if (idx < 0) return;
+        const newIdx = direction === 'up' ? idx - 1 : idx + 1;
+        if (newIdx < 0 || newIdx >= currentMapped.length) return;
+        const arr = [...currentMapped];
+        [arr[idx], arr[newIdx]] = [arr[newIdx], arr[idx]];
+        const newConfig = { ...dashboardConfig, [activeSection]: arr };
+        setIsSaving(true);
+        try {
+            await saveDashboardConfig(newConfig);
+        } catch (e) {
+            Alert.alert("Fehler", "Reihenfolge konnte nicht geändert werden.");
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
     return (
         <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
             <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
@@ -201,6 +219,16 @@ export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalP
                                                 </View>
                                                 <Text style={[styles.mappedId, { color: colors.subtext }]}>{m.id}</Text>
                                             </Pressable>
+                                            {!activeTab.single && (
+                                                <View style={styles.reorderBtns}>
+                                                    <Pressable onPress={() => handleMove(m.id, 'up')} style={styles.arrowBtn}>
+                                                        <ChevronUp size={16} color={colors.subtext} />
+                                                    </Pressable>
+                                                    <Pressable onPress={() => handleMove(m.id, 'down')} style={styles.arrowBtn}>
+                                                        <ChevronDown size={16} color={colors.subtext} />
+                                                    </Pressable>
+                                                </View>
+                                            )}
                                             <Pressable onPress={() => handleRemove(m.id)} style={styles.removeBtn}>
                                                 <Trash2 size={18} color="#EF4444" />
                                             </Pressable>
@@ -331,6 +359,13 @@ const styles = StyleSheet.create({
     },
     removeBtn: {
         padding: 8,
+    },
+    reorderBtns: {
+        flexDirection: 'column',
+        marginRight: 4,
+    },
+    arrowBtn: {
+        padding: 2,
     },
     renameInput: {
         flex: 1,
