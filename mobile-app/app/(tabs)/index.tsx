@@ -423,6 +423,56 @@ const SecuritySensorTile = ({ entity }: { entity: any }) => {
     );
 };
 
+// Animated Wohnungstüre button with dynamic state coloring
+const DoorApartButton = ({ onPress, isUnlocked, isDoorOpen, btnColor, cardColor, textColor, borderColor }: {
+    onPress: () => void,
+    isUnlocked: boolean,
+    isDoorOpen: boolean,
+    btnColor: string,
+    cardColor: string,
+    textColor: string,
+    borderColor: string,
+}) => {
+    const blinkAnim = React.useRef(new Animated.Value(1)).current;
+
+    React.useEffect(() => {
+        if (isDoorOpen) {
+            const blink = Animated.loop(
+                Animated.sequence([
+                    Animated.timing(blinkAnim, { toValue: 0.3, duration: 500, useNativeDriver: true }),
+                    Animated.timing(blinkAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+                ])
+            );
+            blink.start();
+            return () => blink.stop();
+        } else {
+            blinkAnim.setValue(1);
+        }
+    }, [isDoorOpen]);
+
+    // Determine background and border based on state
+    const bgColor = isDoorOpen ? '#F97316' + '20' : isUnlocked ? '#EF4444' + '20' : cardColor;
+    const borderCol = isDoorOpen ? '#F97316' : isUnlocked ? '#EF4444' : borderColor;
+    const label = isDoorOpen ? 'Offen!' : isUnlocked ? 'Entriegelt' : 'Wohnung';
+
+    return (
+        <Animated.View style={{ flex: 1, opacity: isDoorOpen ? blinkAnim : 1 }}>
+            <Pressable
+                onPress={onPress}
+                style={({ pressed }) => [{
+                    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+                    gap: 8, paddingVertical: 14, borderRadius: 14,
+                    backgroundColor: pressed ? btnColor + '40' : bgColor,
+                    borderWidth: isDoorOpen || isUnlocked ? 2 : 1,
+                    borderColor: borderCol,
+                }]}
+            >
+                <DoorOpen size={18} color={btnColor} />
+                <Text style={{ color: isDoorOpen || isUnlocked ? btnColor : textColor, fontSize: 13, fontWeight: '600' }}>{label}</Text>
+            </Pressable>
+        </Animated.View>
+    );
+};
 
 
 const EventTile = ({ calendar, onPress }: { calendar: any, onPress?: () => void }) => {
@@ -535,6 +585,7 @@ export default function Dashboard() {
     const [cfgShoppingList, setCfgShoppingList] = useState('todo.google_keep_einkaufsliste');
     const [cfgDoorFront, setCfgDoorFront] = useState('');
     const [cfgDoorApart, setCfgDoorApart] = useState('');
+    const [cfgDoorApartSensor, setCfgDoorApartSensor] = useState('');
 
     useEffect(() => {
         (async () => {
@@ -548,10 +599,25 @@ export default function Dashboard() {
             if (shopping) setCfgShoppingList(shopping);
             const doorF = await AsyncStorage.getItem('@door_front_entity');
             const doorA = await AsyncStorage.getItem('@door_apartment_entity');
+            const doorAS = await AsyncStorage.getItem('@door_apartment_sensor_entity');
             if (doorF) setCfgDoorFront(doorF);
             if (doorA) setCfgDoorApart(doorA);
+            if (doorAS) setCfgDoorApartSensor(doorAS);
         })();
     }, []);
+
+    // Sync entity configs from shared Supabase dashboardConfig (overrides local AsyncStorage)
+    useEffect(() => {
+        const ec = dashboardConfig?.entityConfig;
+        if (!ec) return;
+        if (ec.main) setCfgWeatherMain(ec.main);
+        if (ec.forecast) setCfgWeatherForecast(ec.forecast);
+        if (ec.alarm) setCfgWeatherAlarm(ec.alarm);
+        if (ec.shopping) setCfgShoppingList(ec.shopping);
+        if (ec.door_front) setCfgDoorFront(ec.door_front);
+        if (ec.door_apartment) setCfgDoorApart(ec.door_apartment);
+        if (ec.door_apartment_sensor) setCfgDoorApartSensor(ec.door_apartment_sensor);
+    }, [dashboardConfig]);
 
     // Quick Actions Config: user → admin → defaults
     const [quickActions, setQuickActions] = useState<QuickActionConfig[]>(DEFAULT_QUICK_ACTIONS);
@@ -1232,6 +1298,20 @@ export default function Dashboard() {
                         }
                     };
 
+                    // Dynamic state for Wohnungstüre button
+                    const apartLockEntity = cfgDoorApart ? entities.find(e => e.entity_id === cfgDoorApart) : null;
+                    const apartDoorSensor = cfgDoorApartSensor ? entities.find(e => e.entity_id === cfgDoorApartSensor) : null;
+                    const isApartUnlocked = apartLockEntity?.state === 'unlocked';
+                    const isApartDoorOpen = apartDoorSensor?.state === 'on';
+
+                    // Determine Wohnungstüre button color
+                    const getApartBtnColor = () => {
+                        if (isApartDoorOpen) return '#F97316'; // Orange - door physically open
+                        if (isApartUnlocked) return '#EF4444'; // Red - unlocked
+                        return '#8B5CF6'; // Standard purple - locked
+                    };
+                    const apartBtnColor = getApartBtnColor();
+
                     return (
                         <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
                             {cfgDoorFront ? (
@@ -1249,18 +1329,15 @@ export default function Dashboard() {
                                 </Pressable>
                             ) : null}
                             {cfgDoorApart ? (
-                                <Pressable
+                                <DoorApartButton
                                     onPress={() => handleDoorOpen(cfgDoorApart)}
-                                    style={({ pressed }) => [{
-                                        flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-                                        gap: 8, paddingVertical: 14, borderRadius: 14,
-                                        backgroundColor: pressed ? colors.accent + '40' : colors.card,
-                                        borderWidth: 1, borderColor: colors.border,
-                                    }]}
-                                >
-                                    <DoorOpen size={18} color="#8B5CF6" />
-                                    <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600' }}>Wohnung</Text>
-                                </Pressable>
+                                    isUnlocked={isApartUnlocked}
+                                    isDoorOpen={isApartDoorOpen}
+                                    btnColor={apartBtnColor}
+                                    cardColor={colors.card}
+                                    textColor={colors.text}
+                                    borderColor={colors.border}
+                                />
                             ) : null}
                             {cfgDoorFront && cfgDoorApart ? (
                                 <Pressable

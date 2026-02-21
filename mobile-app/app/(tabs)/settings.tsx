@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { useHomeAssistant } from '../../contexts/HomeAssistantContext';
 import { useTheme, THEMES, ThemeType, AutoThemeConfig, THEME_DISPLAY_NAMES, DARK_THEMES, LIGHT_THEMES } from '../../contexts/ThemeContext';
-import { Wifi, WifiOff, Save, LogOut, User, Server, Key, CheckCircle, XCircle, Shield, Bell, Palette, ChevronRight, LucideIcon, X, ScanFace, MapPin, Smartphone, Search, Calendar, Trash2, Users, Eye, EyeOff, Sun, Moon, Store, Camera, RotateCw, Cloud, CloudRain, ShoppingCart } from 'lucide-react-native';
+import { Wifi, WifiOff, Save, LogOut, User, Server, Key, CheckCircle, XCircle, Shield, Bell, Palette, ChevronRight, LucideIcon, X, ScanFace, MapPin, Smartphone, Search, Calendar, Trash2, Users, Eye, EyeOff, Sun, Moon, Store, Camera, RotateCw, Cloud, CloudRain, ShoppingCart, DoorOpen } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -1067,7 +1067,9 @@ export default function Settings() {
         connect,
         getCredentials,
         entities,
-        isConnecting
+        isConnecting,
+        dashboardConfig,
+        saveDashboardConfig
     } = useHomeAssistant();
     const { theme, setTheme, colors, autoTheme, setAutoTheme } = useTheme();
     const { isKidsMode } = useKidsMode();
@@ -1120,8 +1122,9 @@ export default function Settings() {
     const [shoppingListEntity, setShoppingListEntity] = useState('todo.google_keep_einkaufsliste');
     const [doorFrontEntity, setDoorFrontEntity] = useState('');
     const [doorApartmentEntity, setDoorApartmentEntity] = useState('');
+    const [doorApartmentSensorEntity, setDoorApartmentSensorEntity] = useState('');
     const [entityPickerVisible, setEntityPickerVisible] = useState(false);
-    const [entityPickerTarget, setEntityPickerTarget] = useState<'main' | 'forecast' | 'alarm' | 'shopping' | 'door_front' | 'door_apartment'>('main');
+    const [entityPickerTarget, setEntityPickerTarget] = useState<'main' | 'forecast' | 'alarm' | 'shopping' | 'door_front' | 'door_apartment' | 'door_apartment_sensor'>('main');
     const [entityPickerSearch, setEntityPickerSearch] = useState('');
 
     // Load entity settings
@@ -1137,12 +1140,14 @@ export default function Settings() {
             if (shopping) setShoppingListEntity(shopping);
             const doorF = await AsyncStorage.getItem('@door_front_entity');
             const doorA = await AsyncStorage.getItem('@door_apartment_entity');
+            const doorAS = await AsyncStorage.getItem('@door_apartment_sensor_entity');
             if (doorF) setDoorFrontEntity(doorF);
             if (doorA) setDoorApartmentEntity(doorA);
+            if (doorAS) setDoorApartmentSensorEntity(doorAS);
         })();
     }, []);
 
-    const saveEntityConfig = async (target: 'main' | 'forecast' | 'alarm' | 'shopping' | 'door_front' | 'door_apartment', entityId: string) => {
+    const saveEntityConfig = async (target: 'main' | 'forecast' | 'alarm' | 'shopping' | 'door_front' | 'door_apartment' | 'door_apartment_sensor', entityId: string) => {
         const mapping: Record<string, { setter: (v: string) => void, key: string }> = {
             main: { setter: setWeatherMainEntity, key: '@weather_main_entity' },
             forecast: { setter: setWeatherForecastEntity, key: '@weather_forecast_entity' },
@@ -1150,13 +1155,24 @@ export default function Settings() {
             shopping: { setter: setShoppingListEntity, key: '@shopping_list_entity' },
             door_front: { setter: setDoorFrontEntity, key: '@door_front_entity' },
             door_apartment: { setter: setDoorApartmentEntity, key: '@door_apartment_entity' },
+            door_apartment_sensor: { setter: setDoorApartmentSensorEntity, key: '@door_apartment_sensor_entity' },
         };
         mapping[target].setter(entityId);
         await AsyncStorage.setItem(mapping[target].key, entityId);
         setEntityPickerVisible(false);
+
+        // Sync ALL entity configs to Supabase (shared across household)
+        const allConfigs = {
+            ...(dashboardConfig || {}),
+            entityConfig: {
+                ...(dashboardConfig?.entityConfig || {}),
+                [target]: entityId,
+            },
+        };
+        saveDashboardConfig(allConfigs);
     };
 
-    const openEntityPicker = (target: 'main' | 'forecast' | 'alarm' | 'shopping' | 'door_front' | 'door_apartment') => {
+    const openEntityPicker = (target: 'main' | 'forecast' | 'alarm' | 'shopping' | 'door_front' | 'door_apartment' | 'door_apartment_sensor') => {
         setEntityPickerTarget(target);
         setEntityPickerSearch('');
         setEntityPickerVisible(true);
@@ -1169,12 +1185,17 @@ export default function Settings() {
         shopping: 'Einkaufsliste',
         door_front: 'Haustüre (Entität)',
         door_apartment: 'Wohnungstüre (Entität)',
+        door_apartment_sensor: 'Wohnungstüre Sensor (Tür offen/zu)',
     };
 
     const filteredPickerEntities = useMemo(() => {
         let filtered = entities;
         if (entityPickerTarget === 'shopping') {
             filtered = entities.filter(e => e.entity_id.startsWith('todo.') || e.entity_id.startsWith('sensor.'));
+        } else if (entityPickerTarget === 'door_apartment_sensor') {
+            filtered = entities.filter(e =>
+                e.entity_id.startsWith('binary_sensor.')
+            );
         } else if (entityPickerTarget === 'door_front' || entityPickerTarget === 'door_apartment') {
             filtered = entities.filter(e =>
                 e.entity_id.startsWith('lock.') ||
@@ -1737,6 +1758,15 @@ export default function Settings() {
                                     value={doorApartmentEntity || 'Nicht konfiguriert'}
                                     showChevron
                                     onPress={() => openEntityPicker('door_apartment')}
+                                    colors={colors}
+                                />
+                                <SettingsRow
+                                    icon={<DoorOpen size={20} color="#F97316" />}
+                                    iconColor="#F97316"
+                                    label="Wohnungstüre Sensor"
+                                    value={doorApartmentSensorEntity || 'Nicht konfiguriert'}
+                                    showChevron
+                                    onPress={() => openEntityPicker('door_apartment_sensor')}
                                     isLast
                                     colors={colors}
                                 />

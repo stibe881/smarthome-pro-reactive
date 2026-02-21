@@ -68,7 +68,7 @@ const findNearbyShop = async (lat: number, lng: number): Promise<string | null> 
     const shops = await getShopList();
     for (const shop of shops) {
         const distance = haversineDistance(lat, lng, shop.lat, shop.lng);
-        if (distance <= 60) { // 60 meters radius
+        if (distance <= 100) { // 100 meters radius (GPS can be inaccurate)
             console.log(`🛒 Near ${shop.name} (${Math.round(distance)}m)`);
             return shop.name;
         }
@@ -146,8 +146,8 @@ if (Platform.OS !== 'web') TaskManager.defineTask(SHOPPING_TASK, async ({ data, 
                     const durationMinutes = (now - entryData.timestamp) / 60000;
                     console.log(`⏱️ Duration in ${matchingShop}: ${durationMinutes.toFixed(1)} min`);
 
-                    if (durationMinutes >= 3 && !entryData.notified) {
-                        // > 3 Minutes and not yet notified -> NOTIFY!
+                    if (durationMinutes >= 1 && !entryData.notified) {
+                        // > 1 Minute and not yet notified -> NOTIFY!
                         await Notifications.scheduleNotificationAsync({
                             content: {
                                 title: "Haushalt",
@@ -951,24 +951,28 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
 
     // Sync Shopping List Count for Background Task
     // HA todo entities don't have numeric state - we must fetch items and count
+    // Uses configurable entity from dashboard config, falls back to default
     useEffect(() => {
         const syncShoppingCount = async () => {
             try {
-                const items = await serviceRef.current?.fetchTodoItems('todo.google_keep_einkaufsliste');
+                // Use configured shopping list entity (from dashboardConfig or default)
+                const configuredEntity = dashboardConfig?.entityConfig?.shopping || 'todo.google_keep_einkaufsliste';
+                const items = await serviceRef.current?.fetchTodoItems(configuredEntity);
                 if (items) {
                     const count = items.filter((i: any) => i.status === 'needs_action').length;
                     await AsyncStorage.setItem(SHOPPING_COUNT_KEY, count.toString());
-                    console.log(`🛒 Shopping count synced: ${count} items`);
+                    console.log(`🛒 Shopping count synced: ${count} items (from ${configuredEntity})`);
                 }
             } catch (e) {
                 console.warn('Failed to sync shopping count:', e);
             }
         };
         // Sync when HA connects and entities load
-        if (entities.length > 0 && entities.find(e => e.entity_id === 'todo.google_keep_einkaufsliste')) {
+        const shoppingEntity = dashboardConfig?.entityConfig?.shopping || 'todo.google_keep_einkaufsliste';
+        if (entities.length > 0 && entities.find(e => e.entity_id === shoppingEntity)) {
             syncShoppingCount();
         }
-    }, [entities.find(e => e.entity_id === 'todo.google_keep_einkaufsliste')?.state]);
+    }, [entities, dashboardConfig?.entityConfig?.shopping]);
 
     // Sync Supabase shopping locations → AsyncStorage for background task
     useEffect(() => {
@@ -1066,9 +1070,9 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
             }
 
             await Location.startLocationUpdatesAsync(SHOPPING_TASK, {
-                accuracy: Location.Accuracy.Balanced,
-                distanceInterval: 100, // Update every 100 meters
-                deferredUpdatesInterval: 60000, // Minimum 1 minute between updates (on Android)
+                accuracy: Location.Accuracy.High,
+                distanceInterval: 50, // Update every 50 meters (was 100 - too infrequent)
+                deferredUpdatesInterval: 30000, // Minimum 30 seconds between updates (on Android)
                 showsBackgroundLocationIndicator: false,
             });
             console.log("🛒 Shopping Geofencing (Background Task) started");
