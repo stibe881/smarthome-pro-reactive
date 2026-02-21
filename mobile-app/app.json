@@ -63,7 +63,8 @@
       "expo-router",
       "expo-web-browser",
       "expo-secure-store",
-      "@bacons/apple-targets"
+      "@bacons/apple-targets",
+      "expo-video"
     ],
     "extra": {
       "router": {},

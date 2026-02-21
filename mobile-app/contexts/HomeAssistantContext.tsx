@@ -307,6 +307,7 @@ interface HomeAssistantContextType {
     setShoppingListVisible: (visible: boolean) => void;
     startShoppingGeofencing: () => Promise<void>;
     fetchWeatherForecast: (entityId: string, forecastType?: 'daily' | 'hourly') => Promise<any[]>;
+    getCameraStream: (entityId: string) => Promise<string | null>;
     debugShoppingLogic: () => Promise<void>;
     getExpoPushToken: () => string | null;
     isDoorbellRinging: boolean;
@@ -1514,6 +1515,7 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
         setShoppingListVisible,
         startShoppingGeofencing,
         fetchWeatherForecast: async (entityId: string, forecastType: 'daily' | 'hourly' = 'daily') => serviceRef.current?.fetchWeatherForecast(entityId, forecastType) || [],
+        getCameraStream: async (entityId: string) => serviceRef.current?.getCameraStream(entityId) || null,
         debugShoppingLogic: async () => {
             try {
                 // 1. Check Permissions

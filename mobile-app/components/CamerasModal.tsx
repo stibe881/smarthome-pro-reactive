@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { View, Text, Modal, StyleSheet, Pressable, ScrollView, Image, useWindowDimensions, ActivityIndicator, TextInput, Alert, Switch, KeyboardAvoidingView, Platform } from 'react-native';
-import { X, Video, Maximize2, Settings, Pencil, Trash2, Plus, Check, ChevronUp, ChevronDown, Volume2, VolumeX } from 'lucide-react-native';
+import { X, Video as VideoIcon, Maximize2, Settings, Pencil, Trash2, Plus, Check, ChevronUp, ChevronDown, Volume2, VolumeX } from 'lucide-react-native';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import { useHomeAssistant } from '../contexts/HomeAssistantContext';
 import { supabase } from '../lib/supabase';
 import { useHousehold } from '../hooks/useHousehold';
@@ -15,10 +16,18 @@ const BufferedCameraImage = React.memo(({ uri, headers, style, resizeMode = 'cov
 }) => {
     const [displayUri, setDisplayUri] = React.useState(uri);
     const [nextUri, setNextUri] = React.useState<string | null>(null);
+    const displayUriRef = React.useRef(displayUri);
+    displayUriRef.current = displayUri;
 
     React.useEffect(() => {
-        if (uri && uri !== displayUri) {
+        if (uri && uri !== displayUriRef.current) {
             setNextUri(uri);
+            // Timeout: if image doesn't load in 2s, skip to direct display
+            const timeout = setTimeout(() => {
+                setDisplayUri(uri);
+                setNextUri(null);
+            }, 2000);
+            return () => clearTimeout(timeout);
         }
     }, [uri]);
 
@@ -33,11 +42,16 @@ const BufferedCameraImage = React.memo(({ uri, headers, style, resizeMode = 'cov
             )}
             {nextUri && nextUri !== displayUri && (
                 <Image
+                    key={nextUri}
                     source={{ uri: nextUri, headers }}
                     style={[StyleSheet.absoluteFill, { opacity: 0 }]}
                     resizeMode={resizeMode}
                     onLoad={() => {
                         setDisplayUri(nextUri);
+                        setNextUri(null);
+                    }}
+                    onError={() => {
+                        // Skip this frame, keep showing current
                         setNextUri(null);
                     }}
                 />
@@ -65,7 +79,7 @@ interface CameraConfig {
 }
 
 export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
-    const { entities, getEntityPictureUrl, authToken, callService } = useHomeAssistant();
+    const { entities, getEntityPictureUrl, authToken, callService, getCameraStream } = useHomeAssistant();
     const { householdId } = useHousehold();
     const [fullscreenCamera, setFullscreenCamera] = useState<any>(null);
     const [cameraConfigs, setCameraConfigs] = useState<CameraConfig[]>([]);
@@ -74,6 +88,20 @@ export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
     const [showManage, setShowManage] = useState(false);
     const [editingCamera, setEditingCamera] = useState<string | null>(null);
     const [editName, setEditName] = useState('');
+    // Audio / HLS stream
+    const [isMuted, setIsMuted] = useState(true);
+    const [hlsUrl, setHlsUrl] = React.useState<string | null>(null);
+    const [hlsLoading, setHlsLoading] = useState(false);
+    const player = useVideoPlayer(hlsUrl || '', (p) => {
+        p.loop = true;
+        p.muted = true;
+        p.play();
+    });
+
+    // Sync mute state with player
+    useEffect(() => {
+        if (player) player.muted = isMuted;
+    }, [isMuted, player]);
     // Extra entity editing
     const [addingExtraTo, setAddingExtraTo] = useState<string | null>(null);
     const [extraEntityInput, setExtraEntityInput] = useState('');
@@ -140,11 +168,25 @@ export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
     // Orientation handling
     const openFullscreen = useCallback(async (cam: any) => {
         setFullscreenCamera(cam);
+        setHlsUrl(null);
+        setIsMuted(true);
         try { await ScreenOrientation.unlockAsync(); } catch (e) { }
-    }, []);
+        // Request HLS stream in background
+        setHlsLoading(true);
+        try {
+            const url = await getCameraStream(cam.entity_id);
+            if (url) setHlsUrl(url);
+        } catch (e) {
+            console.warn('HLS stream not available:', e);
+        } finally {
+            setHlsLoading(false);
+        }
+    }, [getCameraStream]);
 
     const closeFullscreen = useCallback(async () => {
         setFullscreenCamera(null);
+        setHlsUrl(null);
+        setIsMuted(true);
         try { await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP); } catch (e) { }
     }, []);
 
@@ -476,7 +518,7 @@ export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
                                                         />
                                                     ) : (
                                                         <View style={styles.cameraPlaceholder}>
-                                                            <Video size={32} color="#475569" />
+                                                            <VideoIcon size={32} color="#475569" />
                                                         </View>
                                                     )}
                                                     <View style={styles.liveBadge}>
@@ -492,7 +534,7 @@ export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
                                     })
                                 ) : (
                                     <View style={{ alignItems: 'center', paddingTop: 40 }}>
-                                        <Video size={48} color="#334155" />
+                                        <VideoIcon size={48} color="#334155" />
                                         <Text style={styles.emptyText}>Keine Kameras konfiguriert.{'\n'}Tippe auf ⚙️ um Kameras hinzuzufügen.</Text>
                                     </View>
                                 )}
@@ -512,6 +554,18 @@ export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
             >
                 <View style={[styles.fullscreenOverlay, { width, height }]}>
                     {fullscreenCamera && (() => {
+                        // If HLS stream is available, use Video player (with audio)
+                        if (hlsUrl && player) {
+                            return (
+                                <VideoView
+                                    player={player}
+                                    style={{ width, height }}
+                                    contentFit="contain"
+                                    nativeControls={false}
+                                />
+                            );
+                        }
+                        // Fallback: image snapshots
                         const fsUri = getFullscreenUri(fullscreenCamera);
                         return fsUri ? (
                             <BufferedCameraImage
@@ -531,9 +585,19 @@ export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
                     {/* Header overlay */}
                     <View style={styles.fullscreenHeader} pointerEvents="box-none">
                         <Text style={styles.fullscreenTitle}>{fullscreenCamera?.attributes.friendly_name}</Text>
-                        <Pressable onPress={closeFullscreen} style={styles.fullscreenClose} hitSlop={12}>
-                            <X size={24} color="#fff" />
-                        </Pressable>
+                        <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+                            {/* Mute/Unmute toggle */}
+                            <Pressable
+                                onPress={() => setIsMuted(!isMuted)}
+                                style={[styles.fullscreenClose, isMuted ? {} : { backgroundColor: 'rgba(59,130,246,0.5)' }]}
+                                hitSlop={12}
+                            >
+                                {isMuted ? <VolumeX size={20} color="#fff" /> : <Volume2 size={20} color="#fff" />}
+                            </Pressable>
+                            <Pressable onPress={closeFullscreen} style={styles.fullscreenClose} hitSlop={12}>
+                                <X size={24} color="#fff" />
+                            </Pressable>
+                        </View>
                     </View>
 
                     {/* Extra entity controls in fullscreen */}

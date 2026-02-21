@@ -650,4 +650,32 @@ export class HomeAssistantService {
             });
         });
     }
+
+    // Camera Stream: request HLS stream URL from HA
+    async getCameraStream(entityId: string): Promise<string | null> {
+        if (!this.isConnected() || !this.credentials) {
+            return null;
+        }
+
+        return new Promise((resolve) => {
+            const timeout = setTimeout(() => {
+                resolve(null);
+            }, 10000);
+
+            this.send({
+                type: 'camera/stream',
+                entity_id: entityId,
+            }, (response) => {
+                clearTimeout(timeout);
+                if (response.success && response.result?.url) {
+                    // Build full URL from base
+                    const fullUrl = `${this.credentials!.url}${response.result.url}`;
+                    resolve(fullUrl);
+                } else {
+                    console.warn('Camera stream request failed:', response);
+                    resolve(null);
+                }
+            });
+        });
+    }
 }
