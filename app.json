@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "4332c70f-7b02-4472-850b-32331e8d897f"
+      }
+    },
+    "ios": {
+      "bundleIdentifier": "com.stibe88.titanossmarthome",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    }
+  }
+}

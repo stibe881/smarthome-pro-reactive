@@ -132,37 +132,36 @@ if (Platform.OS !== 'web') TaskManager.defineTask(SHOPPING_TASK, async ({ data, 
             if (matchingShop) {
                 console.log(`🛒 At Shop: ${matchingShop}`);
 
-                // 3. Logic: Check Duration
-                const now = Date.now();
+                // Check if we already notified for this shop recently (2h cooldown)
                 const entryDataStr = await AsyncStorage.getItem(SHOP_ENTRY_KEY);
                 let entryData = entryDataStr ? JSON.parse(entryDataStr) : null;
+                const now = Date.now();
 
-                if (!entryData || entryData.shop !== matchingShop) {
-                    // New shop entry
-                    entryData = { shop: matchingShop, timestamp: now, notified: false };
-                    await AsyncStorage.setItem(SHOP_ENTRY_KEY, JSON.stringify(entryData));
+                const alreadyNotified = entryData
+                    && entryData.shop === matchingShop
+                    && entryData.notified === true
+                    && (now - entryData.timestamp) < 2 * 60 * 60 * 1000; // 2 hours cooldown
+
+                if (!alreadyNotified) {
+                    // NOTIFY immediately!
+                    console.log(`🛒 Sending shopping notification for ${matchingShop}`);
+                    await Notifications.scheduleNotificationAsync({
+                        content: {
+                            title: "Haushalt",
+                            body: "Schau doch kurz in eure Einkaufsliste",
+                            sound: true,
+                            categoryIdentifier: 'SHOPPING_ACTION',
+                            data: { action: 'open_list' }
+                        },
+                        trigger: null
+                    });
+
+                    // Mark as notified
+                    await AsyncStorage.setItem(SHOP_ENTRY_KEY, JSON.stringify({
+                        shop: matchingShop, timestamp: now, notified: true
+                    }));
                 } else {
-                    // Still in same shop
-                    const durationMinutes = (now - entryData.timestamp) / 60000;
-                    console.log(`⏱️ Duration in ${matchingShop}: ${durationMinutes.toFixed(1)} min`);
-
-                    if (durationMinutes >= 1 && !entryData.notified) {
-                        // > 1 Minute and not yet notified -> NOTIFY!
-                        await Notifications.scheduleNotificationAsync({
-                            content: {
-                                title: "Haushalt",
-                                body: "Schau doch kurz in eure Einkaufsliste",
-                                sound: true,
-                                categoryIdentifier: 'SHOPPING_ACTION',
-                                data: { action: 'open_list' }
-                            },
-                            trigger: null
-                        });
-
-                        // Mark as notified
-                        entryData.notified = true;
-                        await AsyncStorage.setItem(SHOP_ENTRY_KEY, JSON.stringify(entryData));
-                    }
+                    console.log(`🛒 Already notified for ${matchingShop}, cooldown active`);
                 }
             } else {
                 // Not at a known shop -> Reset entry
