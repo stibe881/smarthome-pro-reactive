@@ -1529,6 +1529,19 @@ export default function Settings() {
                             )}
                         </SettingsSection>
 
+                        {/* Family Management - Inline under APP, admin only */}
+                        {userRole === 'admin' && isFamilyExpanded && (
+                            <View style={[styles.section, { marginTop: -8 }]}>
+                                <View style={[styles.sectionContent, {
+                                    backgroundColor: colors.card,
+                                    borderColor: colors.border,
+                                    padding: 8
+                                }]}>
+                                    <FamilyManagement colors={colors} />
+                                </View>
+                            </View>
+                        )}
+
                         {/* Entity Configuration - Admin Only */}
                         {userRole === 'admin' && (
                             <SettingsSection title="Entitäten (Admin)" colors={colors}>
@@ -1572,18 +1585,6 @@ export default function Settings() {
                             </SettingsSection>
                         )}
 
-                        {/* Family Management - Inline under APP, admin only */}
-                        {userRole === 'admin' && isFamilyExpanded && (
-                            <View style={[styles.section, { marginTop: -8 }]}>
-                                <View style={[styles.sectionContent, {
-                                    backgroundColor: colors.card,
-                                    borderColor: colors.border,
-                                    padding: 8
-                                }]}>
-                                    <FamilyManagement colors={colors} />
-                                </View>
-                            </View>
-                        )}
 
                         <WidgetSettings
                             visible={widgetSettingsVisible}
