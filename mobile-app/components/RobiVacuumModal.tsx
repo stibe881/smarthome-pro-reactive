@@ -54,8 +54,8 @@ export default function RobiVacuumModal({
 
     if (!vacuum) return null;
 
-    const batteryLevel = vacuum.attributes.battery_level;
-    const status = vacuum.attributes.status || vacuum.state;
+    const batteryLevel = vacuum.attributes?.battery_level ?? '?';
+    const status = vacuum.attributes?.status || vacuum.state || 'Unbekannt';
 
     return (
         <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -63,7 +63,7 @@ export default function RobiVacuumModal({
                 {/* Header */}
                 <View style={styles.header}>
                     <View>
-                        <Text style={styles.headerTitle}>Röbi</Text>
+                        <Text style={styles.headerTitle}>{vacuum.attributes?.friendly_name || 'Röbi'}</Text>
                         <Text style={styles.headerSubtitle}>{status} • {batteryLevel}% Akku</Text>
                     </View>
                     <Pressable onPress={onClose} style={styles.closeButton}>
