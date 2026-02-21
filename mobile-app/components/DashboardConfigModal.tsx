@@ -163,7 +163,7 @@ export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalP
                     <Text style={[styles.sectionTitle, { color: colors.subtext }]}>
                         {activeTab.single ? 'AUSGEWÄHLTE ENTITÄT' : 'AKTUELLE ZUORDNUNG'}
                     </Text>
-                    <View style={styles.mappedList}>
+                    <ScrollView style={styles.mappedListScroll} nestedScrollEnabled>
                         {currentMapped.length === 0 ? (
                             <Text style={[styles.emptyText, { color: colors.subtext }]}>
                                 {activeTab.single ? 'Noch keine Entität ausgewählt.' : 'Noch keine Entitäten zugeordnet.'}
@@ -209,7 +209,7 @@ export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalP
                                 </View>
                             ))
                         )}
-                    </View>
+                    </ScrollView>
 
                     {/* Search & Available Entities */}
                     <View style={styles.searchSection}>
@@ -261,7 +261,7 @@ export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalP
                     </View>
                 )}
             </View>
-        </Modal>
+        </Modal >
     );
 };
 
@@ -307,6 +307,9 @@ const styles = StyleSheet.create({
         fontSize: 12,
         fontWeight: '700',
         marginBottom: 8,
+    },
+    mappedListScroll: {
+        maxHeight: 200,
     },
     mappedList: {
         gap: 8,
