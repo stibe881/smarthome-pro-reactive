@@ -3,7 +3,7 @@ import {
     View, Text, Pressable, Alert, Modal, ScrollView, TextInput,
     StyleSheet, ActivityIndicator, Switch, Platform
 } from 'react-native';
-import { Audio } from 'expo-av';
+import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -153,21 +153,14 @@ export const NotificationTypesManager = ({ visible, onClose }: { visible: boolea
         if (!soundValue || !SOUND_FILES[soundValue]) return;
         try {
             setPlayingSound(soundValue);
-            await Audio.setAudioModeAsync({
-                playsInSilentModeIOS: true,
-                allowsRecordingIOS: false,
-                staysActiveInBackground: false,
-            });
-            const { sound } = await Audio.Sound.createAsync(
-                SOUND_FILES[soundValue],
-                { shouldPlay: true, volume: 1.0 }
-            );
-            sound.setOnPlaybackStatusUpdate((status) => {
-                if ('didJustFinish' in status && status.didJustFinish) {
-                    sound.unloadAsync();
-                    setPlayingSound(null);
-                }
-            });
+            await setAudioModeAsync({ playsInSilentMode: true });
+            const player = createAudioPlayer(SOUND_FILES[soundValue]);
+            player.play();
+            // Auto-cleanup after 3s (sound files are short)
+            setTimeout(() => {
+                try { player.remove(); } catch (e) { }
+                setPlayingSound(null);
+            }, 3000);
         } catch (e) {
             console.warn('Sound preview failed:', e);
             setPlayingSound(null);
