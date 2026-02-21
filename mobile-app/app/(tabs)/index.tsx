@@ -1602,17 +1602,30 @@ export default function Dashboard() {
                         </View>
                         <ScrollView style={styles.modalBody}>
                             <View style={styles.modalGrid}>
-                                {/* Full-width "Alle Lichter" tile */}
-                                <View style={{ width: '100%' }}>
-                                    <Tile
-                                        label="Alle Lichter"
-                                        subtext={lightsOn > 0 ? `${lightsOn} an` : 'Alle aus'}
-                                        icon={Lightbulb}
-                                        iconColor={colors.subtext}
-                                        activeColor={colors.accent}
-                                        isActive={lightsOn > 0}
-                                        onPress={() => lightsOn > 0 ? handleAllLightsOff() : handleAllLightsOn()}
-                                    />
+                                {/* Full-width "Alle Lichter" action bar */}
+                                <View style={{ width: '100%', flexDirection: 'row', gap: 8, marginBottom: 4 }}>
+                                    <Pressable
+                                        onPress={handleAllLightsOn}
+                                        style={({ pressed }) => [{
+                                            flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+                                            paddingVertical: 14, borderRadius: 14,
+                                            backgroundColor: colors.accent, opacity: pressed ? 0.8 : 1,
+                                        }]}
+                                    >
+                                        <Lightbulb size={18} color="#fff" />
+                                        <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Alle An</Text>
+                                    </Pressable>
+                                    <Pressable
+                                        onPress={handleAllLightsOff}
+                                        style={({ pressed }) => [{
+                                            flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+                                            paddingVertical: 14, borderRadius: 14,
+                                            backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, opacity: pressed ? 0.8 : 1,
+                                        }]}
+                                    >
+                                        <Lightbulb size={18} color={colors.subtext} />
+                                        <Text style={{ color: colors.text, fontWeight: '700', fontSize: 14 }}>Alle Aus</Text>
+                                    </Pressable>
                                 </View>
                                 {lights.map(l => (
                                     <View key={l.entity_id} style={{ width: tileWidth }}>
@@ -1643,18 +1656,30 @@ export default function Dashboard() {
                         </View>
                         <ScrollView style={styles.modalBody}>
                             <View style={styles.modalGrid}>
-                                {/* Full-width "Alle Rollläden" tile */}
-                                <View style={{ width: '100%' }}>
-                                    <Tile
-                                        label="Alle Rollläden"
-                                        subtext={coversOpen > 0 ? `${coversOpen} offen` : 'Alle zu'}
-                                        icon={Blinds}
-                                        iconColor={colors.subtext}
-                                        activeColor={colors.accent}
-                                        isActive={coversOpen > 0}
+                                {/* Full-width "Alle Rollläden" action bar */}
+                                <View style={{ width: '100%', flexDirection: 'row', gap: 8, marginBottom: 4 }}>
+                                    <Pressable
                                         onPress={handleAllCoversOpen}
-                                        onLongPress={handleAllCoversClose}
-                                    />
+                                        style={({ pressed }) => [{
+                                            flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+                                            paddingVertical: 14, borderRadius: 14,
+                                            backgroundColor: colors.accent, opacity: pressed ? 0.8 : 1,
+                                        }]}
+                                    >
+                                        <Blinds size={18} color="#fff" />
+                                        <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Alle Hoch</Text>
+                                    </Pressable>
+                                    <Pressable
+                                        onPress={handleAllCoversClose}
+                                        style={({ pressed }) => [{
+                                            flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+                                            paddingVertical: 14, borderRadius: 14,
+                                            backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, opacity: pressed ? 0.8 : 1,
+                                        }]}
+                                    >
+                                        <Blinds size={18} color={colors.subtext} />
+                                        <Text style={{ color: colors.text, fontWeight: '700', fontSize: 14 }}>Alle Runter</Text>
+                                    </Pressable>
                                 </View>
                                 {covers.map(c => {
                                     return (
