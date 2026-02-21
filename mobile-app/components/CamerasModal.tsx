@@ -7,56 +7,22 @@ import { supabase } from '../lib/supabase';
 import { useHousehold } from '../hooks/useHousehold';
 import * as ScreenOrientation from 'expo-screen-orientation';
 
-// Double-buffered camera image: keeps current frame visible while next one loads
-const BufferedCameraImage = React.memo(({ uri, headers, style, resizeMode = 'cover' as any }: {
+// Direct camera image - no double-buffering, minimal delay
+const CameraImage = React.memo(({ uri, headers, style, resizeMode = 'cover' as any }: {
     uri: string | null;
     headers: any;
     style: any;
     resizeMode?: 'cover' | 'contain';
 }) => {
-    const [displayUri, setDisplayUri] = React.useState(uri);
-    const [nextUri, setNextUri] = React.useState<string | null>(null);
-    const displayUriRef = React.useRef(displayUri);
-    displayUriRef.current = displayUri;
-
-    React.useEffect(() => {
-        if (uri && uri !== displayUriRef.current) {
-            setNextUri(uri);
-            // Timeout: if image doesn't load in 2s, skip to direct display
-            const timeout = setTimeout(() => {
-                setDisplayUri(uri);
-                setNextUri(null);
-            }, 2000);
-            return () => clearTimeout(timeout);
-        }
-    }, [uri]);
-
+    if (!uri) return null;
     return (
-        <View style={[style, { overflow: 'hidden' }]}>
-            {displayUri && (
-                <Image
-                    source={{ uri: displayUri, headers }}
-                    style={StyleSheet.absoluteFill}
-                    resizeMode={resizeMode}
-                />
-            )}
-            {nextUri && nextUri !== displayUri && (
-                <Image
-                    key={nextUri}
-                    source={{ uri: nextUri, headers }}
-                    style={[StyleSheet.absoluteFill, { opacity: 0 }]}
-                    resizeMode={resizeMode}
-                    onLoad={() => {
-                        setDisplayUri(nextUri);
-                        setNextUri(null);
-                    }}
-                    onError={() => {
-                        // Skip this frame, keep showing current
-                        setNextUri(null);
-                    }}
-                />
-            )}
-        </View>
+        <Image
+            key={uri}
+            source={{ uri, headers, cache: 'reload' }}
+            style={style}
+            resizeMode={resizeMode}
+            fadeDuration={0}
+        />
     );
 });
 
@@ -510,7 +476,7 @@ export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
                                                 <Text style={styles.cameraTitle} numberOfLines={1}>{cam.attributes.friendly_name}</Text>
                                                 <View style={[styles.cameraPreview, isTablet && { height: 160 }]}>
                                                     {uri ? (
-                                                        <BufferedCameraImage
+                                                        <CameraImage
                                                             uri={uri}
                                                             headers={imageHeaders}
                                                             style={{ width: '100%', height: '100%' }}
@@ -568,7 +534,7 @@ export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
                         // Fallback: image snapshots
                         const fsUri = getFullscreenUri(fullscreenCamera);
                         return fsUri ? (
-                            <BufferedCameraImage
+                            <CameraImage
                                 uri={fsUri}
                                 headers={imageHeaders}
                                 style={{ width, height }}
