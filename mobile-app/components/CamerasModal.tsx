@@ -1,28 +1,79 @@
-import React, { useMemo, useState } from 'react';
-import { View, Text, Modal, StyleSheet, Pressable, ScrollView, Image, Dimensions } from 'react-native';
-import { X, Video, Maximize2 } from 'lucide-react-native';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import { View, Text, Modal, StyleSheet, Pressable, ScrollView, Image, useWindowDimensions, ActivityIndicator } from 'react-native';
+import { X, Video, Maximize2, Settings } from 'lucide-react-native';
 import { useHomeAssistant } from '../contexts/HomeAssistantContext';
+import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
+import { useHousehold } from '../hooks/useHousehold';
+import * as ScreenOrientation from 'expo-screen-orientation';
 
 interface CamerasModalProps {
     visible: boolean;
     onClose: () => void;
 }
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+interface CameraConfig {
+    id: string;
+    entity_id: string;
+    custom_name: string | null;
+    sort_order: number;
+}
 
 export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
     const { entities, getEntityPictureUrl, authToken } = useHomeAssistant();
+    const { userRole } = useAuth();
+    const { householdId } = useHousehold();
     const [fullscreenCamera, setFullscreenCamera] = useState<any>(null);
+    const [cameraConfigs, setCameraConfigs] = useState<CameraConfig[]>([]);
+    const { width, height } = useWindowDimensions();
 
-    // Filter Cameras
+    // Load camera configs from Supabase
+    useEffect(() => {
+        if (visible && householdId) {
+            loadCameraConfigs();
+        }
+    }, [visible, householdId]);
+
+    const loadCameraConfigs = async () => {
+        if (!householdId) return;
+        try {
+            const { data } = await supabase
+                .from('household_cameras')
+                .select('*')
+                .eq('household_id', householdId)
+                .order('sort_order', { ascending: true });
+            if (data) setCameraConfigs(data);
+        } catch (e) {
+            console.warn('Failed to load camera configs:', e);
+        }
+    };
+
+    // Filter Cameras: use configured cameras if available, fallback to auto-discovery
     const cameras = useMemo(() => {
+        if (cameraConfigs.length > 0) {
+            // Use configured cameras
+            return cameraConfigs
+                .map(cfg => {
+                    const entity = entities.find(e => e.entity_id === cfg.entity_id);
+                    if (!entity) return null;
+                    return {
+                        ...entity,
+                        attributes: {
+                            ...entity.attributes,
+                            friendly_name: cfg.custom_name || entity.attributes.friendly_name
+                        }
+                    };
+                })
+                .filter(Boolean);
+        }
+        // Fallback: auto-discover camera entities
         return entities.filter(e => {
             if (!e.entity_id.startsWith('camera.') || e.attributes.hidden) return false;
             const id = e.entity_id.toLowerCase();
             const name = (e.attributes.friendly_name || '').toLowerCase();
             return !id.includes('map') && !id.includes('robi') && !name.includes('map') && !name.includes('röbi');
         });
-    }, [entities]);
+    }, [entities, cameraConfigs]);
 
     // Auto-Refresh for "Live" View
     const [refreshTrigger, setRefreshTrigger] = React.useState(Date.now());
@@ -31,17 +82,75 @@ export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
         if (!visible) return;
         const interval = setInterval(() => {
             setRefreshTrigger(Date.now());
-        }, 1500); // Refresh every 1.5 seconds for smoother experience
+        }, 1500);
         return () => clearInterval(interval);
     }, [visible]);
 
+    // Handle landscape orientation for fullscreen
+    const openFullscreen = useCallback(async (cam: any) => {
+        setFullscreenCamera(cam);
+        try {
+            await ScreenOrientation.unlockAsync();
+        } catch (e) {
+            console.warn('Could not unlock orientation:', e);
+        }
+    }, []);
+
+    const closeFullscreen = useCallback(async () => {
+        setFullscreenCamera(null);
+        try {
+            await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+        } catch (e) {
+            console.warn('Could not lock orientation:', e);
+        }
+    }, []);
+
+    // Lock back to portrait when modal closes
+    useEffect(() => {
+        if (!visible && fullscreenCamera) {
+            closeFullscreen();
+        }
+    }, [visible]);
+
     const getCameraUri = (cam: any) => {
-        if (!cam.attributes.entity_picture) return null;
+        if (!cam?.attributes?.entity_picture) return null;
         return `${getEntityPictureUrl(cam.attributes.entity_picture)}${cam.attributes.entity_picture?.includes('?') ? '&' : '?'}t=${refreshTrigger}`;
     };
 
     const imageHeaders = {
         Authorization: `Bearer ${authToken || ''}`
+    };
+
+    // Manage cameras state
+    const [showManage, setShowManage] = useState(false);
+    const allCameraEntities = useMemo(() => {
+        return entities.filter(e => e.entity_id.startsWith('camera.'));
+    }, [entities]);
+
+    const addCamera = async (entityId: string) => {
+        if (!householdId) return;
+        const existing = cameraConfigs.find(c => c.entity_id === entityId);
+        if (existing) return;
+        try {
+            await supabase.from('household_cameras').insert({
+                household_id: householdId,
+                entity_id: entityId,
+                custom_name: null,
+                sort_order: cameraConfigs.length
+            });
+            await loadCameraConfigs();
+        } catch (e) {
+            console.warn('Failed to add camera:', e);
+        }
+    };
+
+    const removeCamera = async (id: string) => {
+        try {
+            await supabase.from('household_cameras').delete().eq('id', id);
+            await loadCameraConfigs();
+        } catch (e) {
+            console.warn('Failed to remove camera:', e);
+        }
     };
 
     return (
@@ -53,20 +162,57 @@ export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
                             <Text style={styles.modalTitle}>Kameras</Text>
                             <Text style={styles.modalSubtitle}>{cameras.length} Kameras online</Text>
                         </View>
-                        <Pressable onPress={onClose} style={styles.closeBtn}>
-                            <X size={24} color="#fff" />
-                        </Pressable>
+                        <View style={{ flexDirection: 'row', gap: 8 }}>
+                            {userRole === 'admin' && (
+                                <Pressable onPress={() => setShowManage(!showManage)} style={styles.closeBtn}>
+                                    <Settings size={20} color="#fff" />
+                                </Pressable>
+                            )}
+                            <Pressable onPress={onClose} style={styles.closeBtn}>
+                                <X size={24} color="#fff" />
+                            </Pressable>
+                        </View>
                     </View>
+
+                    {/* Admin: Camera Management */}
+                    {showManage && userRole === 'admin' && (
+                        <View style={styles.manageSection}>
+                            <Text style={styles.manageSectionTitle}>Kameras verwalten</Text>
+                            <Text style={styles.manageSectionDesc}>
+                                Wähle aus, welche Kameras angezeigt werden sollen. {cameraConfigs.length === 0 ? '(Aktuell: Auto-Erkennung)' : `(${cameraConfigs.length} konfiguriert)`}
+                            </Text>
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
+                                {allCameraEntities.map((cam) => {
+                                    const isActive = cameraConfigs.some(c => c.entity_id === cam.entity_id);
+                                    const config = cameraConfigs.find(c => c.entity_id === cam.entity_id);
+                                    return (
+                                        <Pressable
+                                            key={cam.entity_id}
+                                            onPress={() => isActive && config ? removeCamera(config.id) : addCamera(cam.entity_id)}
+                                            style={[
+                                                styles.manageChip,
+                                                isActive && styles.manageChipActive
+                                            ]}
+                                        >
+                                            <Text style={[styles.manageChipText, isActive && styles.manageChipTextActive]} numberOfLines={1}>
+                                                {cam.attributes.friendly_name || cam.entity_id}
+                                            </Text>
+                                        </Pressable>
+                                    );
+                                })}
+                            </ScrollView>
+                        </View>
+                    )}
 
                     <ScrollView style={styles.modalBody} contentContainerStyle={{ paddingBottom: 40 }}>
                         <View style={styles.cameraGrid}>
                             {cameras.length > 0 ? (
-                                cameras.map((cam) => {
+                                cameras.map((cam: any) => {
                                     const uri = getCameraUri(cam);
                                     return (
                                         <Pressable
                                             key={cam.entity_id}
-                                            onPress={() => setFullscreenCamera(cam)}
+                                            onPress={() => openFullscreen(cam)}
                                             style={({ pressed }) => [
                                                 styles.cameraCard,
                                                 pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }
@@ -85,12 +231,10 @@ export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
                                                         <Video size={32} color="#475569" />
                                                     </View>
                                                 )}
-                                                {/* Live indicator */}
                                                 <View style={styles.liveBadge}>
                                                     <View style={styles.liveDot} />
                                                     <Text style={styles.liveText}>LIVE</Text>
                                                 </View>
-                                                {/* Fullscreen hint */}
                                                 <View style={styles.fullscreenHint}>
                                                     <Maximize2 size={14} color="#fff" />
                                                 </View>
@@ -99,33 +243,38 @@ export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
                                     );
                                 })
                             ) : (
-                                <Text style={styles.emptyText}>Keine Kameras gefunden.</Text>
+                                <Text style={styles.emptyText}>
+                                    {cameraConfigs.length === 0
+                                        ? 'Keine Kameras gefunden.'
+                                        : 'Keine der konfigurierten Kameras ist online.'}
+                                </Text>
                             )}
                         </View>
                     </ScrollView>
                 </View>
             </View>
 
+            {/* Fullscreen Camera Modal */}
             <Modal
                 visible={!!fullscreenCamera}
                 animationType="fade"
                 transparent={false}
-                statusBarTranslucent
-                onRequestClose={() => setFullscreenCamera(null)}
+                supportedOrientations={['portrait', 'landscape', 'landscape-left', 'landscape-right']}
+                onRequestClose={closeFullscreen}
             >
-                <View style={styles.fullscreenOverlay}>
+                <View style={[styles.fullscreenOverlay, { width, height }]}>
                     {fullscreenCamera && getCameraUri(fullscreenCamera) ? (
                         <Image
                             source={{
                                 uri: getCameraUri(fullscreenCamera)!,
                                 headers: imageHeaders
                             }}
-                            style={styles.fullscreenImage}
+                            style={{ width, height }}
                             resizeMode="contain"
                         />
                     ) : (
                         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                            <Video size={48} color="#475569" />
+                            <ActivityIndicator size="large" color="#3B82F6" />
                             <Text style={{ color: '#64748B', marginTop: 12 }}>Lade Kamerabild...</Text>
                         </View>
                     )}
@@ -136,7 +285,7 @@ export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
                             {fullscreenCamera?.attributes.friendly_name}
                         </Text>
                         <Pressable
-                            onPress={() => setFullscreenCamera(null)}
+                            onPress={closeFullscreen}
                             style={styles.fullscreenClose}
                             hitSlop={12}
                         >
@@ -173,6 +322,31 @@ const styles = StyleSheet.create({
     modalSubtitle: { fontSize: 14, color: '#94A3B8', marginTop: 2 },
     closeBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' },
     modalBody: { flex: 1, padding: 20 },
+
+    // Manage Section
+    manageSection: {
+        padding: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(255,255,255,0.05)',
+        backgroundColor: 'rgba(59, 130, 246, 0.05)',
+    },
+    manageSectionTitle: { fontSize: 14, fontWeight: '700', color: '#fff', marginBottom: 4 },
+    manageSectionDesc: { fontSize: 12, color: '#94A3B8' },
+    manageChip: {
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255,255,255,0.06)',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.1)',
+        marginRight: 8,
+    },
+    manageChipActive: {
+        backgroundColor: 'rgba(59, 130, 246, 0.2)',
+        borderColor: '#3B82F6',
+    },
+    manageChipText: { fontSize: 13, color: '#94A3B8' },
+    manageChipTextActive: { color: '#3B82F6', fontWeight: '600' },
 
     cameraGrid: { gap: 16 },
     cameraCard: {
@@ -225,10 +399,6 @@ const styles = StyleSheet.create({
         backgroundColor: '#000',
         justifyContent: 'center',
         alignItems: 'center'
-    },
-    fullscreenImage: {
-        width: SCREEN_WIDTH,
-        height: SCREEN_HEIGHT,
     },
     fullscreenHeader: {
         position: 'absolute',
