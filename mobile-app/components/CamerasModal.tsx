@@ -1,11 +1,50 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
-import { View, Text, Modal, StyleSheet, Pressable, ScrollView, Image, useWindowDimensions, ActivityIndicator, TextInput, Alert, Platform } from 'react-native';
-import { X, Video, Maximize2, Settings, Pencil, Trash2, Plus, Check } from 'lucide-react-native';
+import { View, Text, Modal, StyleSheet, Pressable, ScrollView, Image, useWindowDimensions, ActivityIndicator, TextInput, Alert } from 'react-native';
+import { X, Video, Maximize2, Settings, Pencil, Trash2, Plus, Check, ChevronUp, ChevronDown } from 'lucide-react-native';
 import { useHomeAssistant } from '../contexts/HomeAssistantContext';
-import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { useHousehold } from '../hooks/useHousehold';
 import * as ScreenOrientation from 'expo-screen-orientation';
+
+// Double-buffered camera image: keeps current frame visible while next one loads
+const BufferedCameraImage = React.memo(({ uri, headers, style, resizeMode = 'cover' as any }: {
+    uri: string | null;
+    headers: any;
+    style: any;
+    resizeMode?: 'cover' | 'contain';
+}) => {
+    const [displayUri, setDisplayUri] = React.useState(uri);
+    const [nextUri, setNextUri] = React.useState<string | null>(null);
+
+    React.useEffect(() => {
+        if (uri && uri !== displayUri) {
+            setNextUri(uri);
+        }
+    }, [uri]);
+
+    return (
+        <View style={[style, { overflow: 'hidden' }]}>
+            {displayUri && (
+                <Image
+                    source={{ uri: displayUri, headers }}
+                    style={StyleSheet.absoluteFill}
+                    resizeMode={resizeMode}
+                />
+            )}
+            {nextUri && nextUri !== displayUri && (
+                <Image
+                    source={{ uri: nextUri, headers }}
+                    style={[StyleSheet.absoluteFill, { opacity: 0 }]}
+                    resizeMode={resizeMode}
+                    onLoad={() => {
+                        setDisplayUri(nextUri);
+                        setNextUri(null);
+                    }}
+                />
+            )}
+        </View>
+    );
+});
 
 interface CamerasModalProps {
     visible: boolean;
@@ -20,8 +59,7 @@ interface CameraConfig {
 }
 
 export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
-    const { entities, getEntityPictureUrl, authToken, haBaseUrl } = useHomeAssistant();
-    const { userRole } = useAuth();
+    const { entities, getEntityPictureUrl, authToken } = useHomeAssistant();
     const { householdId } = useHousehold();
     const [fullscreenCamera, setFullscreenCamera] = useState<any>(null);
     const [cameraConfigs, setCameraConfigs] = useState<CameraConfig[]>([]);
@@ -41,11 +79,15 @@ export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
     const loadCameraConfigs = async () => {
         if (!householdId) return;
         try {
-            const { data } = await supabase
+            const { data, error } = await supabase
                 .from('household_cameras')
                 .select('*')
                 .eq('household_id', householdId)
                 .order('sort_order', { ascending: true });
+            if (error) {
+                console.warn('Load camera configs error:', error.message);
+                return;
+            }
             if (data) setCameraConfigs(data);
         } catch (e) {
             console.warn('Failed to load camera configs:', e);
@@ -78,9 +120,8 @@ export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
         });
     }, [entities, cameraConfigs]);
 
-    // Auto-Refresh for "Live" View (snapshots in grid)
+    // Auto-Refresh for grid view
     const [refreshTrigger, setRefreshTrigger] = React.useState(Date.now());
-
     React.useEffect(() => {
         if (!visible || fullscreenCamera) return;
         const interval = setInterval(() => {
@@ -89,7 +130,7 @@ export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
         return () => clearInterval(interval);
     }, [visible, fullscreenCamera]);
 
-    // Faster refresh for fullscreen (750ms)
+    // Faster refresh for fullscreen
     const [fullscreenRefresh, setFullscreenRefresh] = React.useState(Date.now());
     React.useEffect(() => {
         if (!fullscreenCamera) return;
@@ -99,29 +140,19 @@ export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
         return () => clearInterval(interval);
     }, [fullscreenCamera]);
 
-    // Handle landscape orientation for fullscreen
+    // Orientation handling
     const openFullscreen = useCallback(async (cam: any) => {
         setFullscreenCamera(cam);
-        try {
-            await ScreenOrientation.unlockAsync();
-        } catch (e) {
-            console.warn('Could not unlock orientation:', e);
-        }
+        try { await ScreenOrientation.unlockAsync(); } catch (e) { }
     }, []);
 
     const closeFullscreen = useCallback(async () => {
         setFullscreenCamera(null);
-        try {
-            await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
-        } catch (e) {
-            console.warn('Could not lock orientation:', e);
-        }
+        try { await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP); } catch (e) { }
     }, []);
 
     useEffect(() => {
-        if (!visible && fullscreenCamera) {
-            closeFullscreen();
-        }
+        if (!visible && fullscreenCamera) closeFullscreen();
     }, [visible]);
 
     const getCameraUri = (cam: any) => {
@@ -129,74 +160,91 @@ export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
         return `${getEntityPictureUrl(cam.attributes.entity_picture)}${cam.attributes.entity_picture?.includes('?') ? '&' : '?'}t=${refreshTrigger}`;
     };
 
-    const imageHeaders = {
-        Authorization: `Bearer ${authToken || ''}`
-    };
-
     const getFullscreenUri = (cam: any) => {
         if (!cam?.attributes?.entity_picture) return null;
         return `${getEntityPictureUrl(cam.attributes.entity_picture)}${cam.attributes.entity_picture?.includes('?') ? '&' : '?'}t=${fullscreenRefresh}`;
     };
+
+    const imageHeaders = { Authorization: `Bearer ${authToken || ''}` };
 
     // All camera entities for management
     const allCameraEntities = useMemo(() => {
         return entities.filter(e => e.entity_id.startsWith('camera.'));
     }, [entities]);
 
+    // Available cameras (not yet configured)
+    const availableCameras = useMemo(() => {
+        return allCameraEntities.filter(cam => !cameraConfigs.some(c => c.entity_id === cam.entity_id));
+    }, [allCameraEntities, cameraConfigs]);
+
     // Camera management functions
     const addCamera = async (entityId: string) => {
         if (!householdId) {
-            Alert.alert('Fehler', 'Kein Haushalt gefunden. Bitte melde dich erneut an.');
+            Alert.alert('Fehler', 'Kein Haushalt gefunden.');
             return;
         }
-        if (cameraConfigs.some(c => c.entity_id === entityId)) return;
         try {
             const entity = entities.find(e => e.entity_id === entityId);
             const { error } = await supabase.from('household_cameras').insert({
                 household_id: householdId,
                 entity_id: entityId,
-                custom_name: entity?.attributes?.friendly_name || null,
+                custom_name: entity?.attributes?.friendly_name || entityId.replace('camera.', ''),
                 sort_order: cameraConfigs.length
             });
             if (error) {
-                console.error('Supabase insert error:', error);
-                Alert.alert('Fehler', 'Kamera konnte nicht hinzugefügt werden: ' + error.message);
+                Alert.alert('Fehler', error.message);
                 return;
             }
             await loadCameraConfigs();
         } catch (e: any) {
-            Alert.alert('Fehler', 'Kamera konnte nicht hinzugefügt werden: ' + e.message);
+            Alert.alert('Fehler', e.message);
         }
     };
 
-    const removeCamera = async (id: string) => {
-        try {
-            const { error } = await supabase.from('household_cameras').delete().eq('id', id);
-            if (error) {
-                Alert.alert('Fehler', 'Kamera konnte nicht entfernt werden: ' + error.message);
-                return;
+    const removeCamera = async (id: string, name: string) => {
+        Alert.alert('Kamera entfernen', `"${name}" wirklich entfernen?`, [
+            { text: 'Abbrechen', style: 'cancel' },
+            {
+                text: 'Entfernen', style: 'destructive', onPress: async () => {
+                    const { error } = await supabase.from('household_cameras').delete().eq('id', id);
+                    if (error) {
+                        Alert.alert('Fehler', error.message);
+                        return;
+                    }
+                    await loadCameraConfigs();
+                }
             }
-            await loadCameraConfigs();
-        } catch (e: any) {
-            Alert.alert('Fehler', 'Kamera konnte nicht entfernt werden: ' + e.message);
-        }
+        ]);
     };
 
     const renameCamera = async (id: string, newName: string) => {
-        try {
-            const { error } = await supabase.from('household_cameras')
-                .update({ custom_name: newName.trim() || null })
-                .eq('id', id);
-            if (error) {
-                Alert.alert('Fehler', 'Kamera konnte nicht umbenannt werden: ' + error.message);
-                return;
-            }
-            await loadCameraConfigs();
-            setEditingCamera(null);
-            setEditName('');
-        } catch (e: any) {
-            Alert.alert('Fehler', 'Kamera konnte nicht umbenannt werden: ' + e.message);
+        if (!newName.trim()) return;
+        const { error } = await supabase.from('household_cameras')
+            .update({ custom_name: newName.trim() })
+            .eq('id', id);
+        if (error) {
+            Alert.alert('Fehler', error.message);
+            return;
         }
+        await loadCameraConfigs();
+        setEditingCamera(null);
+        setEditName('');
+    };
+
+    const moveCamera = async (id: string, direction: 'up' | 'down') => {
+        const idx = cameraConfigs.findIndex(c => c.id === id);
+        if (idx < 0) return;
+        if (direction === 'up' && idx === 0) return;
+        if (direction === 'down' && idx === cameraConfigs.length - 1) return;
+
+        const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+        const current = cameraConfigs[idx];
+        const swap = cameraConfigs[swapIdx];
+
+        // Swap sort_order
+        await supabase.from('household_cameras').update({ sort_order: swap.sort_order }).eq('id', current.id);
+        await supabase.from('household_cameras').update({ sort_order: current.sort_order }).eq('id', swap.id);
+        await loadCameraConfigs();
     };
 
     const startEditing = (cfg: CameraConfig) => {
@@ -208,32 +256,34 @@ export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
         <Modal visible={visible} animationType="slide" transparent>
             <View style={styles.modalOverlay}>
                 <View style={styles.modalContent}>
+                    {/* Header */}
                     <View style={styles.modalHeader}>
                         <View>
                             <Text style={styles.modalTitle}>Kameras</Text>
                             <Text style={styles.modalSubtitle}>{cameras.length} Kameras online</Text>
                         </View>
                         <View style={{ flexDirection: 'row', gap: 8 }}>
-                            {userRole === 'admin' && (
-                                <Pressable onPress={() => setShowManage(!showManage)} style={[styles.closeBtn, showManage && { backgroundColor: 'rgba(59,130,246,0.3)' }]}>
-                                    <Settings size={20} color="#fff" />
-                                </Pressable>
-                            )}
-                            <Pressable onPress={onClose} style={styles.closeBtn}>
+                            <Pressable
+                                onPress={() => setShowManage(!showManage)}
+                                style={[styles.headerBtn, showManage && { backgroundColor: 'rgba(59,130,246,0.3)' }]}
+                            >
+                                <Settings size={20} color="#fff" />
+                            </Pressable>
+                            <Pressable onPress={onClose} style={styles.headerBtn}>
                                 <X size={24} color="#fff" />
                             </Pressable>
                         </View>
                     </View>
 
-                    {/* Admin: Camera Management */}
-                    {showManage && userRole === 'admin' && (
-                        <View style={styles.manageSection}>
+                    {/* Management Section (all users) */}
+                    {showManage && (
+                        <ScrollView style={styles.manageContainer} contentContainerStyle={{ paddingBottom: 16 }}>
                             <Text style={styles.manageSectionTitle}>Kameras verwalten</Text>
 
-                            {/* Configured cameras with edit/delete */}
-                            {cameraConfigs.length > 0 && (
-                                <View style={{ marginTop: 8, gap: 6 }}>
-                                    {cameraConfigs.map(cfg => {
+                            {/* Configured cameras list */}
+                            {cameraConfigs.length > 0 ? (
+                                <View style={{ gap: 8, marginTop: 8 }}>
+                                    {cameraConfigs.map((cfg, idx) => {
                                         const entity = entities.find(e => e.entity_id === cfg.entity_id);
                                         const isEditing = editingCamera === cfg.id;
                                         return (
@@ -258,14 +308,25 @@ export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
                                                     </View>
                                                 ) : (
                                                     <>
-                                                        <Text style={styles.manageRowText} numberOfLines={1}>
-                                                            {cfg.custom_name || entity?.attributes?.friendly_name || cfg.entity_id}
-                                                        </Text>
-                                                        <View style={{ flexDirection: 'row', gap: 12 }}>
-                                                            <Pressable onPress={() => startEditing(cfg)} hitSlop={8}>
-                                                                <Pencil size={16} color="#94A3B8" />
+                                                        <View style={{ flex: 1 }}>
+                                                            <Text style={styles.manageRowName} numberOfLines={1}>
+                                                                {cfg.custom_name || entity?.attributes?.friendly_name || cfg.entity_id}
+                                                            </Text>
+                                                            <Text style={styles.manageRowEntity} numberOfLines={1}>
+                                                                {cfg.entity_id}
+                                                            </Text>
+                                                        </View>
+                                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                                            <Pressable onPress={() => moveCamera(cfg.id, 'up')} hitSlop={6} disabled={idx === 0}>
+                                                                <ChevronUp size={18} color={idx === 0 ? '#334155' : '#94A3B8'} />
                                                             </Pressable>
-                                                            <Pressable onPress={() => removeCamera(cfg.id)} hitSlop={8}>
+                                                            <Pressable onPress={() => moveCamera(cfg.id, 'down')} hitSlop={6} disabled={idx === cameraConfigs.length - 1}>
+                                                                <ChevronDown size={18} color={idx === cameraConfigs.length - 1 ? '#334155' : '#94A3B8'} />
+                                                            </Pressable>
+                                                            <Pressable onPress={() => startEditing(cfg)} hitSlop={6}>
+                                                                <Pencil size={16} color="#3B82F6" />
+                                                            </Pressable>
+                                                            <Pressable onPress={() => removeCamera(cfg.id, cfg.custom_name || cfg.entity_id)} hitSlop={6}>
                                                                 <Trash2 size={16} color="#EF4444" />
                                                             </Pressable>
                                                         </View>
@@ -275,86 +336,94 @@ export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
                                         );
                                     })}
                                 </View>
+                            ) : (
+                                <Text style={styles.manageHint}>Noch keine Kameras konfiguriert. Füge unten eine hinzu.</Text>
                             )}
 
-                            {/* Add camera from available entities */}
-                            <Text style={[styles.manageSectionDesc, { marginTop: 12 }]}>Kamera hinzufügen:</Text>
-                            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 6 }}>
-                                {allCameraEntities
-                                    .filter(cam => !cameraConfigs.some(c => c.entity_id === cam.entity_id))
-                                    .map((cam) => (
-                                        <Pressable
-                                            key={cam.entity_id}
-                                            onPress={() => addCamera(cam.entity_id)}
-                                            style={styles.addChip}
-                                        >
-                                            <Plus size={12} color="#3B82F6" />
-                                            <Text style={styles.addChipText} numberOfLines={1}>
-                                                {cam.attributes.friendly_name || cam.entity_id}
-                                            </Text>
-                                        </Pressable>
-                                    ))
-                                }
-                                {allCameraEntities.filter(cam => !cameraConfigs.some(c => c.entity_id === cam.entity_id)).length === 0 && (
-                                    <Text style={styles.manageSectionDesc}>Alle Kameras wurden hinzugefügt.</Text>
-                                )}
-                            </ScrollView>
-                        </View>
-                    )}
-
-                    <ScrollView style={styles.modalBody} contentContainerStyle={{ paddingBottom: 40 }}>
-                        <View style={[styles.cameraGrid, isTablet && styles.cameraGridTablet]}>
-                            {cameras.length > 0 ? (
-                                cameras.map((cam: any) => {
-                                    const uri = getCameraUri(cam);
-                                    return (
-                                        <Pressable
-                                            key={cam.entity_id}
-                                            onPress={() => openFullscreen(cam)}
-                                            style={({ pressed }) => [
-                                                styles.cameraCard,
-                                                isTablet && { width: (width - 56) / 2 },
-                                                pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }
-                                            ]}
-                                        >
-                                            <Text style={styles.cameraTitle} numberOfLines={1}>{cam.attributes.friendly_name}</Text>
-                                            <View style={[styles.cameraPreview, isTablet && { height: 160 }]}>
-                                                {uri ? (
-                                                    <Image
-                                                        source={{ uri, headers: imageHeaders }}
-                                                        style={styles.cameraImage}
-                                                        resizeMode="cover"
-                                                    />
-                                                ) : (
-                                                    <View style={styles.cameraPlaceholder}>
-                                                        <Video size={32} color="#475569" />
-                                                    </View>
-                                                )}
-                                                <View style={styles.liveBadge}>
-                                                    <View style={styles.liveDot} />
-                                                    <Text style={styles.liveText}>LIVE</Text>
+                            {/* Add camera */}
+                            {availableCameras.length > 0 && (
+                                <View style={{ marginTop: 16 }}>
+                                    <Text style={styles.manageSectionSubtitle}>Kamera hinzufügen</Text>
+                                    <View style={{ gap: 6, marginTop: 8 }}>
+                                        {availableCameras.map(cam => (
+                                            <Pressable
+                                                key={cam.entity_id}
+                                                onPress={() => addCamera(cam.entity_id)}
+                                                style={styles.addRow}
+                                            >
+                                                <Plus size={16} color="#3B82F6" />
+                                                <View style={{ flex: 1 }}>
+                                                    <Text style={styles.addRowName} numberOfLines={1}>
+                                                        {cam.attributes.friendly_name || cam.entity_id}
+                                                    </Text>
+                                                    <Text style={styles.addRowEntity} numberOfLines={1}>{cam.entity_id}</Text>
                                                 </View>
-                                                <View style={styles.fullscreenHint}>
-                                                    <Maximize2 size={14} color="#fff" />
-                                                </View>
-                                            </View>
-                                        </Pressable>
-                                    );
-                                })
-                            ) : (
-                                <View style={{ alignItems: 'center', paddingTop: 40 }}>
-                                    <Video size={48} color="#334155" />
-                                    <Text style={styles.emptyText}>
-                                        {showManage ? 'Füge Kameras über das ⚙️ Menü hinzu.' : 'Keine Kameras verfügbar.'}
-                                    </Text>
+                                            </Pressable>
+                                        ))}
+                                    </View>
                                 </View>
                             )}
-                        </View>
-                    </ScrollView>
+                            {availableCameras.length === 0 && cameraConfigs.length > 0 && (
+                                <Text style={[styles.manageHint, { marginTop: 12 }]}>Alle verfügbaren Kameras wurden hinzugefügt.</Text>
+                            )}
+                        </ScrollView>
+                    )}
+
+                    {/* Camera Grid */}
+                    {!showManage && (
+                        <ScrollView style={styles.modalBody} contentContainerStyle={{ paddingBottom: 40 }}>
+                            <View style={[styles.cameraGrid, isTablet && styles.cameraGridTablet]}>
+                                {cameras.length > 0 ? (
+                                    cameras.map((cam: any) => {
+                                        const uri = getCameraUri(cam);
+                                        return (
+                                            <Pressable
+                                                key={cam.entity_id}
+                                                onPress={() => openFullscreen(cam)}
+                                                style={({ pressed }) => [
+                                                    styles.cameraCard,
+                                                    isTablet && { width: (width - 56) / 2 },
+                                                    pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }
+                                                ]}
+                                            >
+                                                <Text style={styles.cameraTitle} numberOfLines={1}>{cam.attributes.friendly_name}</Text>
+                                                <View style={[styles.cameraPreview, isTablet && { height: 160 }]}>
+                                                    {uri ? (
+                                                        <BufferedCameraImage
+                                                            uri={uri}
+                                                            headers={imageHeaders}
+                                                            style={{ width: '100%', height: '100%' }}
+                                                            resizeMode="cover"
+                                                        />
+                                                    ) : (
+                                                        <View style={styles.cameraPlaceholder}>
+                                                            <Video size={32} color="#475569" />
+                                                        </View>
+                                                    )}
+                                                    <View style={styles.liveBadge}>
+                                                        <View style={styles.liveDot} />
+                                                        <Text style={styles.liveText}>LIVE</Text>
+                                                    </View>
+                                                    <View style={styles.fullscreenHint}>
+                                                        <Maximize2 size={14} color="#fff" />
+                                                    </View>
+                                                </View>
+                                            </Pressable>
+                                        );
+                                    })
+                                ) : (
+                                    <View style={{ alignItems: 'center', paddingTop: 40 }}>
+                                        <Video size={48} color="#334155" />
+                                        <Text style={styles.emptyText}>Keine Kameras verfügbar. Tippe auf ⚙️ um Kameras hinzuzufügen.</Text>
+                                    </View>
+                                )}
+                            </View>
+                        </ScrollView>
+                    )}
                 </View>
             </View>
 
-            {/* Fullscreen Camera Modal */}
+            {/* Fullscreen Camera */}
             <Modal
                 visible={!!fullscreenCamera}
                 animationType="fade"
@@ -366,8 +435,9 @@ export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
                     {fullscreenCamera && (() => {
                         const fsUri = getFullscreenUri(fullscreenCamera);
                         return fsUri ? (
-                            <Image
-                                source={{ uri: fsUri, headers: imageHeaders }}
+                            <BufferedCameraImage
+                                uri={fsUri}
+                                headers={imageHeaders}
                                 style={{ width, height }}
                                 resizeMode="contain"
                             />
@@ -379,21 +449,15 @@ export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
                         );
                     })()}
 
-                    {/* Camera name overlay */}
                     <View style={styles.fullscreenHeader} pointerEvents="box-none">
                         <Text style={styles.fullscreenTitle}>
                             {fullscreenCamera?.attributes.friendly_name}
                         </Text>
-                        <Pressable
-                            onPress={closeFullscreen}
-                            style={styles.fullscreenClose}
-                            hitSlop={12}
-                        >
+                        <Pressable onPress={closeFullscreen} style={styles.fullscreenClose} hitSlop={12}>
                             <X size={24} color="#fff" />
                         </Pressable>
                     </View>
 
-                    {/* Live badge */}
                     <View style={styles.fullscreenLiveBadge} pointerEvents="none">
                         <View style={styles.liveDot} />
                         <Text style={styles.liveText}>LIVE</Text>
@@ -408,153 +472,77 @@ const styles = StyleSheet.create({
     modalOverlay: { flex: 1, backgroundColor: '#000' },
     modalContent: { flex: 1, backgroundColor: '#020617' },
     modalHeader: {
-        paddingVertical: 24,
-        paddingHorizontal: 20,
-        paddingTop: 60,
+        paddingVertical: 24, paddingHorizontal: 20, paddingTop: 60,
         backgroundColor: '#1E293B',
-        borderBottomLeftRadius: 32,
-        borderBottomRightRadius: 32,
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center'
+        borderBottomLeftRadius: 32, borderBottomRightRadius: 32,
+        flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'
     },
     modalTitle: { fontSize: 24, fontWeight: 'bold', color: '#fff' },
     modalSubtitle: { fontSize: 14, color: '#94A3B8', marginTop: 2 },
-    closeBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' },
+    headerBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' },
     modalBody: { flex: 1, padding: 20 },
 
-    // Manage Section
-    manageSection: {
-        padding: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: 'rgba(255,255,255,0.05)',
-        backgroundColor: 'rgba(59, 130, 246, 0.05)',
-    },
-    manageSectionTitle: { fontSize: 15, fontWeight: '700', color: '#fff', marginBottom: 4 },
-    manageSectionDesc: { fontSize: 12, color: '#94A3B8' },
+    // Management
+    manageContainer: { flex: 1, padding: 16 },
+    manageSectionTitle: { fontSize: 18, fontWeight: '700', color: '#fff' },
+    manageSectionSubtitle: { fontSize: 14, fontWeight: '600', color: '#94A3B8' },
+    manageHint: { fontSize: 13, color: '#64748B', fontStyle: 'italic', marginTop: 8 },
     manageRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        backgroundColor: 'rgba(255,255,255,0.05)',
-        paddingHorizontal: 12,
-        paddingVertical: 10,
-        borderRadius: 10,
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+        backgroundColor: 'rgba(255,255,255,0.05)', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12,
     },
-    manageRowText: { color: '#fff', fontSize: 14, flex: 1, marginRight: 12 },
+    manageRowName: { color: '#fff', fontSize: 15, fontWeight: '600' },
+    manageRowEntity: { color: '#64748B', fontSize: 11, marginTop: 2 },
     editInput: {
-        flex: 1,
-        color: '#fff',
-        fontSize: 14,
-        backgroundColor: 'rgba(255,255,255,0.1)',
-        borderRadius: 8,
-        paddingHorizontal: 10,
-        paddingVertical: 6,
-        borderWidth: 1,
-        borderColor: '#3B82F6',
+        flex: 1, color: '#fff', fontSize: 14,
+        backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 8,
+        paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: '#3B82F6',
     },
-    addChip: {
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 20,
-        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-        borderWidth: 1,
-        borderColor: 'rgba(59, 130, 246, 0.3)',
-        marginRight: 8,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
+    addRow: {
+        flexDirection: 'row', alignItems: 'center', gap: 10,
+        backgroundColor: 'rgba(59, 130, 246, 0.08)', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12,
+        borderWidth: 1, borderColor: 'rgba(59, 130, 246, 0.2)',
     },
-    addChipText: { fontSize: 13, color: '#3B82F6' },
+    addRowName: { color: '#E2E8F0', fontSize: 14, fontWeight: '500' },
+    addRowEntity: { color: '#64748B', fontSize: 11, marginTop: 1 },
 
+    // Camera Grid
     cameraGrid: { gap: 16 },
     cameraGridTablet: { flexDirection: 'row', flexWrap: 'wrap' },
     cameraCard: {
-        backgroundColor: '#1E293B',
-        borderRadius: 16,
-        overflow: 'hidden',
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.05)'
+        backgroundColor: '#1E293B', borderRadius: 16, overflow: 'hidden',
+        borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)'
     },
-    cameraTitle: {
-        padding: 12,
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#fff',
-        backgroundColor: 'rgba(0,0,0,0.2)'
-    },
-    cameraPreview: {
-        height: 200,
-        backgroundColor: '#0F172A',
-        alignItems: 'center',
-        justifyContent: 'center'
-    },
+    cameraTitle: { padding: 12, fontSize: 14, fontWeight: '600', color: '#fff', backgroundColor: 'rgba(0,0,0,0.2)' },
+    cameraPreview: { height: 200, backgroundColor: '#0F172A', alignItems: 'center', justifyContent: 'center' },
     cameraImage: { width: '100%', height: '100%' },
     cameraPlaceholder: { alignItems: 'center', justifyContent: 'center' },
     liveBadge: {
-        position: 'absolute',
-        top: 10, left: 10,
-        backgroundColor: 'rgba(239, 68, 68, 0.9)',
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 4,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6
+        position: 'absolute', top: 10, left: 10,
+        backgroundColor: 'rgba(239, 68, 68, 0.9)', paddingHorizontal: 8, paddingVertical: 4,
+        borderRadius: 4, flexDirection: 'row', alignItems: 'center', gap: 6
     },
     liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#fff' },
     liveText: { color: '#fff', fontSize: 10, fontWeight: 'bold' },
     fullscreenHint: {
-        position: 'absolute',
-        bottom: 10, right: 10,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        padding: 6,
-        borderRadius: 6
+        position: 'absolute', bottom: 10, right: 10,
+        backgroundColor: 'rgba(0,0,0,0.5)', padding: 6, borderRadius: 6
     },
     emptyText: { color: '#64748B', fontStyle: 'italic', textAlign: 'center', marginTop: 16 },
 
-    // Fullscreen styles
-    fullscreenOverlay: {
-        flex: 1,
-        backgroundColor: '#000',
-    },
+    // Fullscreen
+    fullscreenOverlay: { flex: 1, backgroundColor: '#000' },
     fullscreenHeader: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        paddingTop: 54,
-        paddingHorizontal: 20,
-        paddingBottom: 16,
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
+        position: 'absolute', top: 0, left: 0, right: 0,
+        paddingTop: 54, paddingHorizontal: 20, paddingBottom: 16,
+        flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
         backgroundColor: 'rgba(0,0,0,0.6)',
     },
-    fullscreenTitle: {
-        color: '#fff',
-        fontSize: 18,
-        fontWeight: '700',
-        flex: 1,
-    },
-    fullscreenClose: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        backgroundColor: 'rgba(255,255,255,0.15)',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
+    fullscreenTitle: { color: '#fff', fontSize: 18, fontWeight: '700', flex: 1 },
+    fullscreenClose: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
     fullscreenLiveBadge: {
-        position: 'absolute',
-        bottom: 40,
-        left: 20,
-        backgroundColor: 'rgba(239, 68, 68, 0.9)',
-        paddingHorizontal: 10,
-        paddingVertical: 5,
-        borderRadius: 6,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6
+        position: 'absolute', bottom: 40, left: 20,
+        backgroundColor: 'rgba(239, 68, 68, 0.9)', paddingHorizontal: 10, paddingVertical: 5,
+        borderRadius: 6, flexDirection: 'row', alignItems: 'center', gap: 6
     },
 });
