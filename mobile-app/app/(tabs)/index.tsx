@@ -1293,8 +1293,22 @@ export default function Dashboard() {
                         } else if (entityId.startsWith('script.')) {
                             callService('script', 'turn_on', entityId);
                         } else {
-                            // Fallback: try lock.unlock
                             callService('lock', 'unlock', entityId);
+                        }
+                    };
+
+                    // Toggle lock: lock if unlocked, unlock if locked
+                    const handleDoorToggle = (entityId: string) => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                        if (entityId.startsWith('lock.')) {
+                            const lockEntity = entities.find(e => e.entity_id === entityId);
+                            if (lockEntity?.state === 'unlocked') {
+                                callService('lock', 'lock', entityId);
+                            } else {
+                                callService('lock', 'unlock', entityId);
+                            }
+                        } else {
+                            handleDoorOpen(entityId);
                         }
                     };
 
@@ -1306,9 +1320,9 @@ export default function Dashboard() {
 
                     // Determine Wohnungstüre button color
                     const getApartBtnColor = () => {
-                        if (isApartDoorOpen) return '#F97316'; // Orange - door physically open
-                        if (isApartUnlocked) return '#EF4444'; // Red - unlocked
-                        return '#8B5CF6'; // Standard purple - locked
+                        if (isApartDoorOpen) return '#F97316';
+                        if (isApartUnlocked) return '#EF4444';
+                        return '#8B5CF6';
                     };
                     const apartBtnColor = getApartBtnColor();
 
@@ -1330,7 +1344,7 @@ export default function Dashboard() {
                             ) : null}
                             {cfgDoorApart ? (
                                 <DoorApartButton
-                                    onPress={() => handleDoorOpen(cfgDoorApart)}
+                                    onPress={() => handleDoorToggle(cfgDoorApart)}
                                     isUnlocked={isApartUnlocked}
                                     isDoorOpen={isApartDoorOpen}
                                     btnColor={apartBtnColor}
