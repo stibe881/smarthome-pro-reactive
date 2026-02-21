@@ -64,7 +64,7 @@ const SF_ICONS = [
 
 export function WidgetSettings({ visible, onClose }: WidgetSettingsProps) {
     const { colors } = useTheme();
-    const { entities } = useHomeAssistant();
+    const { entities, dashboardConfig, saveDashboardConfig } = useHomeAssistant();
     const insets = useSafeAreaInsets();
 
     // Main State
@@ -86,9 +86,20 @@ export function WidgetSettings({ visible, onClose }: WidgetSettingsProps) {
     }, [visible]);
 
     const loadSettings = async () => {
+        // Load from Supabase dashboardConfig first
+        if (dashboardConfig.widgetItems?.length > 0) {
+            const migratedItems = dashboardConfig.widgetItems.map((item: any) => ({
+                ...item,
+                actionType: item.actionType || 'none',
+                iconColor: item.iconColor || '#3B82F6',
+                confirm: item.confirm || false
+            }));
+            setItems(migratedItems);
+            return;
+        }
+        // Fallback: try loading from local storage (migration path)
         const data = await loadCookieFromWidget();
         if (data && data.items) {
-            // Migration: Add default fields if missing
             const migratedItems = data.items.map((item: any) => ({
                 ...item,
                 actionType: item.actionType || 'none',
@@ -162,17 +173,26 @@ export function WidgetSettings({ visible, onClose }: WidgetSettingsProps) {
     };
 
     const handleSaveWidget = async () => {
+        // Save to Supabase (profile-based, cross-device)
+        try {
+            const newConfig = { ...dashboardConfig, widgetItems: items };
+            await saveDashboardConfig(newConfig);
+        } catch (e) {
+            console.error('Failed to save widget config to Supabase:', e);
+        }
+
+        // Also sync to iOS native widget via UserDefaults
         const widgetData: WidgetData = {
             title: "HomePilot",
             subtitle: items.length > 0 ? `${items.length} Elemente` : "Leer",
             items: items,
             updatedAt: new Date().toISOString()
         };
-
         if (Platform.OS === 'ios') {
             await saveCookieToWidget(widgetData);
-            Alert.alert('Gespeichert', 'Widget aktualisiert.');
         }
+
+        Alert.alert('Gespeichert', 'Widget-Konfiguration gespeichert.');
         onClose();
     };
 
