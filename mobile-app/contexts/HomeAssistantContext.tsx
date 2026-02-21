@@ -582,16 +582,6 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
     };
 
     const handleStateChange = useCallback((newEntities: any[]) => {
-        // Sync Shopping Count for Background Task
-        const shoppingEntity = newEntities.find(e => e.entity_id === 'todo.google_keep_einkaufsliste');
-        if (shoppingEntity) {
-            // For todo entities, state is often the count of incomplete items. 
-            // However, check if it is a valid number string first.
-            const stateCnt = parseInt(shoppingEntity.state);
-            if (!isNaN(stateCnt)) {
-                AsyncStorage.setItem(SHOPPING_COUNT_KEY, stateCnt.toString());
-            }
-        }
 
         // MY_POSITION_MAPPING by entity_id for reliable matching
         const MY_POSITION_MAPPING: Record<string, string> = {
@@ -960,12 +950,25 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
     }, [entities, notificationSettings]); // Re-run when settings change
 
     // Sync Shopping List Count for Background Task
+    // HA todo entities don't have numeric state - we must fetch items and count
     useEffect(() => {
-        const list = entities.find(e => e.entity_id === 'todo.google_keep_einkaufsliste');
-        if (list && list.state) {
-            AsyncStorage.setItem(SHOPPING_COUNT_KEY, list.state).catch(e => console.warn('Failed to save shop count', e));
+        const syncShoppingCount = async () => {
+            try {
+                const items = await serviceRef.current?.fetchTodoItems('todo.google_keep_einkaufsliste');
+                if (items) {
+                    const count = items.filter((i: any) => i.status === 'needs_action').length;
+                    await AsyncStorage.setItem(SHOPPING_COUNT_KEY, count.toString());
+                    console.log(`🛒 Shopping count synced: ${count} items`);
+                }
+            } catch (e) {
+                console.warn('Failed to sync shopping count:', e);
+            }
+        };
+        // Sync when HA connects and entities load
+        if (entities.length > 0 && entities.find(e => e.entity_id === 'todo.google_keep_einkaufsliste')) {
+            syncShoppingCount();
         }
-    }, [entities]);
+    }, [entities.find(e => e.entity_id === 'todo.google_keep_einkaufsliste')?.state]);
 
     // Sync Supabase shopping locations → AsyncStorage for background task
     useEffect(() => {
