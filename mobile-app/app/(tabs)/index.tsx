@@ -1643,10 +1643,22 @@ export default function Dashboard() {
                         </View>
                         <ScrollView style={styles.modalBody}>
                             <View style={styles.modalGrid}>
+                                {/* Full-width "Alle Rollläden" tile */}
+                                <View style={{ width: '100%' }}>
+                                    <Tile
+                                        label="Alle Rollläden"
+                                        subtext={coversOpen > 0 ? `${coversOpen} offen` : 'Alle zu'}
+                                        icon={Blinds}
+                                        iconColor={colors.subtext}
+                                        activeColor={colors.accent}
+                                        isActive={coversOpen > 0}
+                                        onPress={handleAllCoversOpen}
+                                        onLongPress={handleAllCoversClose}
+                                    />
+                                </View>
                                 {covers.map(c => {
-                                    const isFullWidth = c.attributes.friendly_name === 'Alle Storen';
                                     return (
-                                        <View key={c.entity_id} style={{ width: isFullWidth ? '100%' : tileWidth }}>
+                                        <View key={c.entity_id} style={{ width: tileWidth }}>
                                             <Pressable
                                                 onPress={() => {
                                                     // Close covers modal first, then open shutter control modal
