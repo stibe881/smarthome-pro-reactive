@@ -1622,6 +1622,18 @@ export default function Dashboard() {
                         </View>
                         <ScrollView style={styles.modalBody}>
                             <View style={styles.modalGrid}>
+                                {/* Full-width "Alle Lichter" tile */}
+                                <View style={{ width: '100%' }}>
+                                    <Tile
+                                        label="Alle Lichter"
+                                        subtext={lightsOn > 0 ? `${lightsOn} an` : 'Alle aus'}
+                                        icon={Lightbulb}
+                                        iconColor={colors.subtext}
+                                        activeColor={colors.accent}
+                                        isActive={lightsOn > 0}
+                                        onPress={() => lightsOn > 0 ? handleAllLightsOff() : handleAllLightsOn()}
+                                    />
+                                </View>
                                 {lights.map(l => (
                                     <View key={l.entity_id} style={{ width: tileWidth }}>
                                         <Tile
