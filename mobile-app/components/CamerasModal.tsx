@@ -6,8 +6,7 @@ import { useHomeAssistant } from '../contexts/HomeAssistantContext';
 import { supabase } from '../lib/supabase';
 import { useHousehold } from '../hooks/useHousehold';
 import * as ScreenOrientation from 'expo-screen-orientation';
-
-// Direct camera image - no double-buffering, minimal delay
+// Direct camera image - stays mounted, old frame visible until new one loads
 const CameraImage = React.memo(({ uri, headers, style, resizeMode = 'cover' as any }: {
     uri: string | null;
     headers: any;
@@ -17,8 +16,7 @@ const CameraImage = React.memo(({ uri, headers, style, resizeMode = 'cover' as a
     if (!uri) return null;
     return (
         <Image
-            key={uri}
-            source={{ uri, headers, cache: 'reload' }}
+            source={{ uri, headers }}
             style={style}
             resizeMode={resizeMode}
             fadeDuration={0}
