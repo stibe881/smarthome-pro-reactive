@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Modal, StyleSheet, Pressable, ScrollView, ActivityIndicator, Image } from 'react-native';
+import { View, Text, Modal, StyleSheet, Pressable, ScrollView, ActivityIndicator, Image, Alert } from 'react-native';
 import { useHomeAssistant } from '../contexts/HomeAssistantContext';
 import {
     X, Play, Pause, Square, Home, Battery,
@@ -43,12 +43,30 @@ export default function RobiVacuumModal({
         callService('vacuum', action, entityId);
     };
 
-    const cleanRoom = (roomIds: number[]) => {
-        // Roborock specific command for segment cleaning
-        callService('vacuum', 'send_command', entityId, {
-            command: 'app_segment_clean',
-            params: roomIds
-        });
+    const cleanRoom = async (roomIds: number[]) => {
+        try {
+            // Try Roborock integration first (HA 2024.8+)
+            await callService('roborock', 'vacuum_clean_segment', entityId, {
+                segments: roomIds
+            });
+        } catch {
+            try {
+                // Fallback: Xiaomi Miio integration
+                await callService('xiaomi_miio', 'vacuum_clean_segment', entityId, {
+                    segments: roomIds
+                });
+            } catch {
+                try {
+                    // Fallback: Legacy send_command
+                    await callService('vacuum', 'send_command', entityId, {
+                        command: 'app_segment_clean',
+                        params: roomIds
+                    });
+                } catch (e: any) {
+                    Alert.alert('Fehler', 'Raum-Reinigung wird von diesem Saugroboter nicht unterstützt.');
+                }
+            }
+        }
         onClose();
     };
 
