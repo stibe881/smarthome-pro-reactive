@@ -161,41 +161,57 @@ export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
 
     // Camera management functions
     const addCamera = async (entityId: string) => {
-        if (!householdId) return;
+        if (!householdId) {
+            Alert.alert('Fehler', 'Kein Haushalt gefunden. Bitte melde dich erneut an.');
+            return;
+        }
         if (cameraConfigs.some(c => c.entity_id === entityId)) return;
         try {
             const entity = entities.find(e => e.entity_id === entityId);
-            await supabase.from('household_cameras').insert({
+            const { error } = await supabase.from('household_cameras').insert({
                 household_id: householdId,
                 entity_id: entityId,
                 custom_name: entity?.attributes?.friendly_name || null,
                 sort_order: cameraConfigs.length
             });
+            if (error) {
+                console.error('Supabase insert error:', error);
+                Alert.alert('Fehler', 'Kamera konnte nicht hinzugefügt werden: ' + error.message);
+                return;
+            }
             await loadCameraConfigs();
-        } catch (e) {
-            console.warn('Failed to add camera:', e);
+        } catch (e: any) {
+            Alert.alert('Fehler', 'Kamera konnte nicht hinzugefügt werden: ' + e.message);
         }
     };
 
     const removeCamera = async (id: string) => {
         try {
-            await supabase.from('household_cameras').delete().eq('id', id);
+            const { error } = await supabase.from('household_cameras').delete().eq('id', id);
+            if (error) {
+                Alert.alert('Fehler', 'Kamera konnte nicht entfernt werden: ' + error.message);
+                return;
+            }
             await loadCameraConfigs();
-        } catch (e) {
-            console.warn('Failed to remove camera:', e);
+        } catch (e: any) {
+            Alert.alert('Fehler', 'Kamera konnte nicht entfernt werden: ' + e.message);
         }
     };
 
     const renameCamera = async (id: string, newName: string) => {
         try {
-            await supabase.from('household_cameras')
+            const { error } = await supabase.from('household_cameras')
                 .update({ custom_name: newName.trim() || null })
                 .eq('id', id);
+            if (error) {
+                Alert.alert('Fehler', 'Kamera konnte nicht umbenannt werden: ' + error.message);
+                return;
+            }
             await loadCameraConfigs();
             setEditingCamera(null);
             setEditName('');
-        } catch (e) {
-            console.warn('Failed to rename camera:', e);
+        } catch (e: any) {
+            Alert.alert('Fehler', 'Kamera konnte nicht umbenannt werden: ' + e.message);
         }
     };
 
