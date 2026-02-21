@@ -132,15 +132,14 @@ if (Platform.OS !== 'web') TaskManager.defineTask(SHOPPING_TASK, async ({ data, 
             if (matchingShop) {
                 console.log(`🛒 At Shop: ${matchingShop}`);
 
-                // Check if we already notified for this shop recently (2h cooldown)
+                // Check if we already notified for this shop visit
+                // (entry is reset when leaving the shop area → re-entering triggers new notification)
                 const entryDataStr = await AsyncStorage.getItem(SHOP_ENTRY_KEY);
                 let entryData = entryDataStr ? JSON.parse(entryDataStr) : null;
-                const now = Date.now();
 
                 const alreadyNotified = entryData
                     && entryData.shop === matchingShop
-                    && entryData.notified === true
-                    && (now - entryData.timestamp) < 2 * 60 * 60 * 1000; // 2 hours cooldown
+                    && entryData.notified === true;
 
                 if (!alreadyNotified) {
                     // NOTIFY immediately!
@@ -158,7 +157,7 @@ if (Platform.OS !== 'web') TaskManager.defineTask(SHOPPING_TASK, async ({ data, 
 
                     // Mark as notified
                     await AsyncStorage.setItem(SHOP_ENTRY_KEY, JSON.stringify({
-                        shop: matchingShop, timestamp: now, notified: true
+                        shop: matchingShop, timestamp: Date.now(), notified: true
                     }));
                 } else {
                     console.log(`🛒 Already notified for ${matchingShop}, cooldown active`);
