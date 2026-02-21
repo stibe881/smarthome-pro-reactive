@@ -1777,6 +1777,7 @@ export default function Dashboard() {
             <RobiVacuumModal
                 visible={activeModal === 'robi'}
                 onClose={closeModal}
+                entityId={robi?.entity_id}
             />
 
             <CalendarModal
