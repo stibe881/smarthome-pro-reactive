@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
-import { View, Text, Modal, StyleSheet, Pressable, ScrollView, Image, useWindowDimensions, ActivityIndicator, TextInput, Alert, Switch } from 'react-native';
+import { View, Text, Modal, StyleSheet, Pressable, ScrollView, Image, useWindowDimensions, ActivityIndicator, TextInput, Alert, Switch, KeyboardAvoidingView, Platform } from 'react-native';
 import { X, Video, Maximize2, Settings, Pencil, Trash2, Plus, Check, ChevronUp, ChevronDown, Volume2, VolumeX } from 'lucide-react-native';
 import { useHomeAssistant } from '../contexts/HomeAssistantContext';
 import { supabase } from '../lib/supabase';
@@ -292,137 +292,162 @@ export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
 
                     {/* Management Section */}
                     {showManage ? (
-                        <ScrollView style={styles.manageContainer} contentContainerStyle={{ paddingBottom: 40 }}>
-                            <Text style={styles.manageSectionTitle}>Kameras verwalten</Text>
+                        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={120}>
+                            <ScrollView style={styles.manageContainer} contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
+                                <Text style={styles.manageSectionTitle}>Kameras verwalten</Text>
 
-                            {cameraConfigs.length > 0 ? (
-                                <View style={{ gap: 10, marginTop: 12 }}>
-                                    {cameraConfigs.map((cfg, idx) => {
-                                        const entity = entities.find(e => e.entity_id === cfg.entity_id);
-                                        const isEditing = editingCamera === cfg.id;
-                                        const isAddingExtra = addingExtraTo === cfg.id;
+                                {cameraConfigs.length > 0 ? (
+                                    <View style={{ gap: 10, marginTop: 12 }}>
+                                        {cameraConfigs.map((cfg, idx) => {
+                                            const entity = entities.find(e => e.entity_id === cfg.entity_id);
+                                            const isEditing = editingCamera === cfg.id;
+                                            const isAddingExtra = addingExtraTo === cfg.id;
 
-                                        return (
-                                            <View key={cfg.id} style={styles.manageCard}>
-                                                {/* Camera name & controls */}
-                                                {isEditing ? (
-                                                    <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-                                                        <TextInput
-                                                            value={editName}
-                                                            onChangeText={setEditName}
-                                                            style={styles.editInput}
-                                                            placeholder={entity?.attributes?.friendly_name || cfg.entity_id}
-                                                            placeholderTextColor="#64748B"
-                                                            autoFocus
-                                                            onSubmitEditing={() => renameCamera(cfg.id, editName)}
-                                                        />
-                                                        <Pressable onPress={() => renameCamera(cfg.id, editName)} hitSlop={8}>
-                                                            <Check size={18} color="#22C55E" />
-                                                        </Pressable>
-                                                        <Pressable onPress={() => { setEditingCamera(null); setEditName(''); }} hitSlop={8}>
-                                                            <X size={18} color="#94A3B8" />
-                                                        </Pressable>
-                                                    </View>
-                                                ) : (
-                                                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                                                        <View style={{ flex: 1 }}>
-                                                            <Text style={styles.manageRowName} numberOfLines={1}>
-                                                                {cfg.custom_name || entity?.attributes?.friendly_name || cfg.entity_id}
-                                                            </Text>
-                                                            <Text style={styles.manageRowEntity} numberOfLines={1}>{cfg.entity_id}</Text>
-                                                        </View>
-                                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                                                            <Pressable onPress={() => moveCamera(cfg.id, 'up')} hitSlop={6} disabled={idx === 0}>
-                                                                <ChevronUp size={18} color={idx === 0 ? '#334155' : '#94A3B8'} />
+                                            return (
+                                                <View key={cfg.id} style={styles.manageCard}>
+                                                    {/* Camera name & controls */}
+                                                    {isEditing ? (
+                                                        <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                                                            <TextInput
+                                                                value={editName}
+                                                                onChangeText={setEditName}
+                                                                style={styles.editInput}
+                                                                placeholder={entity?.attributes?.friendly_name || cfg.entity_id}
+                                                                placeholderTextColor="#64748B"
+                                                                autoFocus
+                                                                onSubmitEditing={() => renameCamera(cfg.id, editName)}
+                                                            />
+                                                            <Pressable onPress={() => renameCamera(cfg.id, editName)} hitSlop={8}>
+                                                                <Check size={18} color="#22C55E" />
                                                             </Pressable>
-                                                            <Pressable onPress={() => moveCamera(cfg.id, 'down')} hitSlop={6} disabled={idx === cameraConfigs.length - 1}>
-                                                                <ChevronDown size={18} color={idx === cameraConfigs.length - 1 ? '#334155' : '#94A3B8'} />
-                                                            </Pressable>
-                                                            <Pressable onPress={() => { setEditingCamera(cfg.id); setEditName(cfg.custom_name || ''); }} hitSlop={6}>
-                                                                <Pencil size={16} color="#3B82F6" />
-                                                            </Pressable>
-                                                            <Pressable onPress={() => removeCamera(cfg.id, cfg.custom_name || cfg.entity_id)} hitSlop={6}>
-                                                                <Trash2 size={16} color="#EF4444" />
+                                                            <Pressable onPress={() => { setEditingCamera(null); setEditName(''); }} hitSlop={8}>
+                                                                <X size={18} color="#94A3B8" />
                                                             </Pressable>
                                                         </View>
-                                                    </View>
-                                                )}
-
-                                                {/* Extra entities for this camera */}
-                                                {(cfg.extra_entities || []).length > 0 && (
-                                                    <View style={{ marginTop: 8, gap: 4 }}>
-                                                        <Text style={{ fontSize: 11, color: '#64748B', fontWeight: '600' }}>Zusätzliche Entitäten:</Text>
-                                                        {cfg.extra_entities.map(extra => (
-                                                            <View key={extra.entity_id} style={styles.extraRow}>
-                                                                <Text style={styles.extraLabel} numberOfLines={1}>{extra.label}</Text>
-                                                                <Text style={styles.extraEntityId} numberOfLines={1}>{extra.entity_id}</Text>
-                                                                <Pressable onPress={() => removeExtraEntity(cfg.id, extra.entity_id)} hitSlop={6}>
-                                                                    <Trash2 size={14} color="#EF4444" />
+                                                    ) : (
+                                                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                            <View style={{ flex: 1 }}>
+                                                                <Text style={styles.manageRowName} numberOfLines={1}>
+                                                                    {cfg.custom_name || entity?.attributes?.friendly_name || cfg.entity_id}
+                                                                </Text>
+                                                                <Text style={styles.manageRowEntity} numberOfLines={1}>{cfg.entity_id}</Text>
+                                                            </View>
+                                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                                                <Pressable onPress={() => moveCamera(cfg.id, 'up')} hitSlop={6} disabled={idx === 0}>
+                                                                    <ChevronUp size={18} color={idx === 0 ? '#334155' : '#94A3B8'} />
+                                                                </Pressable>
+                                                                <Pressable onPress={() => moveCamera(cfg.id, 'down')} hitSlop={6} disabled={idx === cameraConfigs.length - 1}>
+                                                                    <ChevronDown size={18} color={idx === cameraConfigs.length - 1 ? '#334155' : '#94A3B8'} />
+                                                                </Pressable>
+                                                                <Pressable onPress={() => { setEditingCamera(cfg.id); setEditName(cfg.custom_name || ''); }} hitSlop={6}>
+                                                                    <Pencil size={16} color="#3B82F6" />
+                                                                </Pressable>
+                                                                <Pressable onPress={() => removeCamera(cfg.id, cfg.custom_name || cfg.entity_id)} hitSlop={6}>
+                                                                    <Trash2 size={16} color="#EF4444" />
                                                                 </Pressable>
                                                             </View>
-                                                        ))}
-                                                    </View>
-                                                )}
+                                                        </View>
+                                                    )}
 
-                                                {/* Add extra entity */}
-                                                {isAddingExtra ? (
-                                                    <View style={{ marginTop: 8, gap: 6 }}>
-                                                        <TextInput
-                                                            value={extraEntityInput}
-                                                            onChangeText={setExtraEntityInput}
-                                                            style={styles.editInput}
-                                                            placeholder="Entity ID (z.B. switch.kamera_privat)"
-                                                            placeholderTextColor="#64748B"
-                                                            autoFocus
-                                                        />
-                                                        <TextInput
-                                                            value={extraLabelInput}
-                                                            onChangeText={setExtraLabelInput}
-                                                            style={styles.editInput}
-                                                            placeholder="Anzeigename (z.B. Privat-Modus)"
-                                                            placeholderTextColor="#64748B"
-                                                        />
-                                                        <View style={{ flexDirection: 'row', gap: 8, justifyContent: 'flex-end' }}>
+                                                    {/* Extra entities for this camera */}
+                                                    {(cfg.extra_entities || []).length > 0 && (
+                                                        <View style={{ marginTop: 8, gap: 4 }}>
+                                                            <Text style={{ fontSize: 11, color: '#64748B', fontWeight: '600' }}>Zusätzliche Entitäten:</Text>
+                                                            {cfg.extra_entities.map(extra => (
+                                                                <View key={extra.entity_id} style={styles.extraRow}>
+                                                                    <Text style={styles.extraLabel} numberOfLines={1}>{extra.label}</Text>
+                                                                    <Text style={styles.extraEntityId} numberOfLines={1}>{extra.entity_id}</Text>
+                                                                    <Pressable onPress={() => removeExtraEntity(cfg.id, extra.entity_id)} hitSlop={6}>
+                                                                        <Trash2 size={14} color="#EF4444" />
+                                                                    </Pressable>
+                                                                </View>
+                                                            ))}
+                                                        </View>
+                                                    )}
+
+                                                    {/* Add extra entity */}
+                                                    {isAddingExtra ? (
+                                                        <View style={{ marginTop: 8, gap: 6 }}>
+                                                            <TextInput
+                                                                value={extraEntityInput}
+                                                                onChangeText={setExtraEntityInput}
+                                                                style={styles.editInput}
+                                                                placeholder="Entität suchen..."
+                                                                placeholderTextColor="#64748B"
+                                                                autoFocus
+                                                            />
+                                                            {extraEntityInput.length >= 2 && (
+                                                                <View style={{ maxHeight: 200, gap: 4 }}>
+                                                                    <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled">
+                                                                        {entities
+                                                                            .filter(e => {
+                                                                                const q = extraEntityInput.toLowerCase();
+                                                                                return (e.entity_id.toLowerCase().includes(q) ||
+                                                                                    (e.attributes.friendly_name || '').toLowerCase().includes(q)) &&
+                                                                                    !(cfg.extra_entities || []).some((ex: ExtraEntity) => ex.entity_id === e.entity_id);
+                                                                            })
+                                                                            .slice(0, 15)
+                                                                            .map(e => (
+                                                                                <Pressable
+                                                                                    key={e.entity_id}
+                                                                                    onPress={() => {
+                                                                                        setExtraEntityInput(e.entity_id);
+                                                                                        setExtraLabelInput(e.attributes.friendly_name || e.entity_id);
+                                                                                        // Auto-add
+                                                                                        const newExtra: ExtraEntity = {
+                                                                                            entity_id: e.entity_id,
+                                                                                            label: e.attributes.friendly_name || e.entity_id
+                                                                                        };
+                                                                                        const updated = [...(cfg.extra_entities || []), newExtra];
+                                                                                        supabase.from('household_cameras').update({ extra_entities: updated }).eq('id', cfg.id)
+                                                                                            .then(() => { loadCameraConfigs(); setAddingExtraTo(null); setExtraEntityInput(''); setExtraLabelInput(''); });
+                                                                                    }}
+                                                                                    style={styles.searchResultRow}
+                                                                                >
+                                                                                    <Text style={styles.searchResultName} numberOfLines={1}>{e.attributes.friendly_name || e.entity_id}</Text>
+                                                                                    <Text style={styles.searchResultEntity} numberOfLines={1}>{e.entity_id}</Text>
+                                                                                </Pressable>
+                                                                            ))}
+                                                                    </ScrollView>
+                                                                </View>
+                                                            )}
                                                             <Pressable onPress={() => { setAddingExtraTo(null); setExtraEntityInput(''); setExtraLabelInput(''); }} style={styles.btnSmall}>
                                                                 <Text style={{ color: '#94A3B8', fontSize: 12 }}>Abbrechen</Text>
                                                             </Pressable>
-                                                            <Pressable onPress={() => addExtraEntity(cfg.id)} style={[styles.btnSmall, { backgroundColor: 'rgba(59,130,246,0.2)' }]}>
-                                                                <Text style={{ color: '#3B82F6', fontSize: 12, fontWeight: '600' }}>Hinzufügen</Text>
-                                                            </Pressable>
                                                         </View>
-                                                    </View>
-                                                ) : (
-                                                    <Pressable onPress={() => setAddingExtraTo(cfg.id)} style={{ marginTop: 6, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                                                        <Plus size={14} color="#3B82F6" />
-                                                        <Text style={{ fontSize: 12, color: '#3B82F6' }}>Entität hinzufügen</Text>
-                                                    </Pressable>
-                                                )}
-                                            </View>
-                                        );
-                                    })}
-                                </View>
-                            ) : (
-                                <Text style={styles.manageHint}>Noch keine Kameras konfiguriert. Füge unten eine hinzu.</Text>
-                            )}
-
-                            {/* Add camera from HA entities */}
-                            {availableCameras.length > 0 && (
-                                <View style={{ marginTop: 20 }}>
-                                    <Text style={styles.manageSectionSubtitle}>Kamera hinzufügen</Text>
-                                    <View style={{ gap: 6, marginTop: 8 }}>
-                                        {availableCameras.map(cam => (
-                                            <Pressable key={cam.entity_id} onPress={() => addCamera(cam.entity_id)} style={styles.addRow}>
-                                                <Plus size={16} color="#3B82F6" />
-                                                <View style={{ flex: 1 }}>
-                                                    <Text style={styles.addRowName} numberOfLines={1}>{cam.attributes.friendly_name || cam.entity_id}</Text>
-                                                    <Text style={styles.addRowEntity} numberOfLines={1}>{cam.entity_id}</Text>
+                                                    ) : (
+                                                        <Pressable onPress={() => setAddingExtraTo(cfg.id)} style={{ marginTop: 6, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                                            <Plus size={14} color="#3B82F6" />
+                                                            <Text style={{ fontSize: 12, color: '#3B82F6' }}>Entität hinzufügen</Text>
+                                                        </Pressable>
+                                                    )}
                                                 </View>
-                                            </Pressable>
-                                        ))}
+                                            );
+                                        })}
                                     </View>
-                                </View>
-                            )}
-                        </ScrollView>
+                                ) : (
+                                    <Text style={styles.manageHint}>Noch keine Kameras konfiguriert. Füge unten eine hinzu.</Text>
+                                )}
+
+                                {/* Add camera from HA entities */}
+                                {availableCameras.length > 0 && (
+                                    <View style={{ marginTop: 20 }}>
+                                        <Text style={styles.manageSectionSubtitle}>Kamera hinzufügen</Text>
+                                        <View style={{ gap: 6, marginTop: 8 }}>
+                                            {availableCameras.map(cam => (
+                                                <Pressable key={cam.entity_id} onPress={() => addCamera(cam.entity_id)} style={styles.addRow}>
+                                                    <Plus size={16} color="#3B82F6" />
+                                                    <View style={{ flex: 1 }}>
+                                                        <Text style={styles.addRowName} numberOfLines={1}>{cam.attributes.friendly_name || cam.entity_id}</Text>
+                                                        <Text style={styles.addRowEntity} numberOfLines={1}>{cam.entity_id}</Text>
+                                                    </View>
+                                                </Pressable>
+                                            ))}
+                                        </View>
+                                    </View>
+                                )}
+                            </ScrollView>
+                        </KeyboardAvoidingView>
                     ) : (
                         /* Camera Grid */
                         <ScrollView style={styles.modalBody} contentContainerStyle={{ paddingBottom: 40 }}>
@@ -650,4 +675,12 @@ const styles = StyleSheet.create({
     extraControlLabel: { color: '#94A3B8', fontSize: 12, fontWeight: '600' },
     extraControlDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#475569' },
     extraControlDotActive: { backgroundColor: '#22C55E' },
+
+    // Search results
+    searchResultRow: {
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+        backgroundColor: 'rgba(255,255,255,0.04)', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8, marginBottom: 4,
+    },
+    searchResultName: { color: '#E2E8F0', fontSize: 13, fontWeight: '500', flex: 1 },
+    searchResultEntity: { color: '#64748B', fontSize: 10, marginLeft: 8 },
 });
