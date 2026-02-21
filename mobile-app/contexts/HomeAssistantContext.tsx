@@ -1070,9 +1070,16 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
 
             await Location.startLocationUpdatesAsync(SHOPPING_TASK, {
                 accuracy: Location.Accuracy.High,
-                distanceInterval: 50, // Update every 50 meters (was 100 - too infrequent)
-                deferredUpdatesInterval: 30000, // Minimum 30 seconds between updates (on Android)
-                showsBackgroundLocationIndicator: false,
+                distanceInterval: 50,
+                deferredUpdatesInterval: 30000,
+                showsBackgroundLocationIndicator: true, // Shows blue bar → iOS keeps updates alive
+                pausesUpdatesAutomatically: false, // Prevent iOS from pausing background updates
+                activityType: Location.ActivityType.OtherNavigation, // Tells iOS we need continuous updates
+                foregroundService: { // Android: required for background location
+                    notificationTitle: 'Einkaufs-Erinnerung',
+                    notificationBody: 'Standort wird im Hintergrund geprüft',
+                    notificationColor: '#3B82F6',
+                },
             });
             console.log("🛒 Shopping Geofencing (Background Task) started");
         } catch (e: any) {
