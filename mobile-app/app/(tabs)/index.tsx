@@ -1238,7 +1238,7 @@ export default function Dashboard() {
                             const badgeColor = hasItems ? colors.warning : colors.accent;
                             const badgeBg = hasItems ? colors.warning + '26' : colors.accent + '26';
                             return (
-                                <Pressable onPress={() => setShowShoppingList(true)} style={[styles.tempBadge, { backgroundColor: badgeBg, borderColor: hasItems ? badgeColor : 'transparent', borderWidth: hasItems ? 1 : 0 }]}>
+                                <Pressable onPress={() => setShowShoppingList(true)} onLongPress={debugShoppingLogic} style={[styles.tempBadge, { backgroundColor: badgeBg, borderColor: hasItems ? badgeColor : 'transparent', borderWidth: hasItems ? 1 : 0 }]}>
                                     <ShoppingCart size={14} color={badgeColor} />
                                     {hasItems && (
                                         <Text style={[styles.tempText, { color: badgeColor }]}>{shoppingList.state}</Text>
