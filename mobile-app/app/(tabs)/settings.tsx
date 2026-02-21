@@ -21,6 +21,18 @@ import { WidgetSettings } from '../../components/WidgetSettings';
 import { Activity, ShieldCheck, Zap, Blinds, AlertTriangle, Baby, Plus, Settings as SettingsIcon, LayoutGrid } from 'lucide-react-native';
 import { useKidsMode, KIDS_GENDER_THEMES, KidsGender } from '../../contexts/KidsContext';
 import { supabase } from '../../lib/supabase';
+import { setAlternateAppIcon, getAppIconName, supportsAlternateIcons } from 'expo-alternate-app-icons';
+
+// App Icon color variants
+const APP_ICON_VARIANTS = [
+    { key: null, label: 'Original', color: '#3B82F6', preview: require('../../assets/icon.png') },
+    { key: 'pink', label: 'Pink', color: '#FF1493', preview: require('../../assets/icons/icon-pink.png') },
+    { key: 'blue', label: 'Blau', color: '#2563EB', preview: require('../../assets/icons/icon-blue.png') },
+    { key: 'green', label: 'Grün', color: '#00B450', preview: require('../../assets/icons/icon-green.png') },
+    { key: 'black', label: 'Schwarz', color: '#1E1E28', preview: require('../../assets/icons/icon-black.png') },
+    { key: 'orange', label: 'Orange', color: '#FF8C00', preview: require('../../assets/icons/icon-orange.png') },
+    { key: 'pride', label: 'Pride 🌈', color: 'rainbow', preview: require('../../assets/icons/icon-pride.png') },
+];
 
 // Icon mapping for dynamic notification types
 const DYNAMIC_ICON_MAP: Record<string, any> = {
@@ -1046,6 +1058,8 @@ export default function Settings() {
         isConnecting
     } = useHomeAssistant();
     const { theme, setTheme, colors, autoTheme, setAutoTheme } = useTheme();
+    const { isKidsMode } = useKidsMode();
+    const router = useRouter();
 
     const [haUrl, setHaUrl] = useState('');
     const [haToken, setHaToken] = useState('');
@@ -1062,6 +1076,28 @@ export default function Settings() {
     const [shoppingLocationsVisible, setShoppingLocationsVisible] = useState(false);
     const [widgetSettingsVisible, setWidgetSettingsVisible] = useState(false);
     const [isDesignExpanded, setIsDesignExpanded] = useState(false);
+    const [currentAppIcon, setCurrentAppIcon] = useState<string | null>(null);
+
+    // Load current app icon on mount
+    useEffect(() => {
+        if (Platform.OS !== 'web') {
+            try {
+                const name = getAppIconName();
+                setCurrentAppIcon(name);
+            } catch (e) {
+                console.warn('Could not get app icon name:', e);
+            }
+        }
+    }, []);
+
+    const handleChangeAppIcon = async (iconKey: string | null) => {
+        try {
+            await setAlternateAppIcon(iconKey);
+            setCurrentAppIcon(iconKey);
+        } catch (e: any) {
+            Alert.alert('Fehler', 'Icon konnte nicht geändert werden: ' + e.message);
+        }
+    };
 
     // Entity Configuration Settings
     const [weatherMainEntity, setWeatherMainEntity] = useState('weather.zell_lu');
@@ -1473,6 +1509,68 @@ export default function Settings() {
                                                 })}
                                             </ScrollView>
                                         </View>
+                                    </View>
+                                )}
+
+                                {/* App Icon Selector */}
+                                {Platform.OS !== 'web' && (
+                                    <View style={{ marginTop: 20 }}>
+                                        <Text style={{ color: colors.subtext, fontSize: 12, fontWeight: '600', marginBottom: 12, letterSpacing: 0.5 }}>APP ICON</Text>
+                                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -4, paddingHorizontal: 4 }}>
+                                            {APP_ICON_VARIANTS.map((variant) => {
+                                                const isActive = currentAppIcon === variant.key;
+                                                return (
+                                                    <Pressable
+                                                        key={variant.key ?? 'default'}
+                                                        onPress={() => handleChangeAppIcon(variant.key)}
+                                                        style={{
+                                                            marginRight: 12,
+                                                            alignItems: 'center',
+                                                            gap: 6,
+                                                        }}
+                                                    >
+                                                        <View style={{
+                                                            width: 64,
+                                                            height: 64,
+                                                            borderRadius: 16,
+                                                            overflow: 'hidden',
+                                                            borderWidth: isActive ? 3 : 1,
+                                                            borderColor: isActive ? colors.accent : colors.border,
+                                                            shadowColor: isActive ? colors.accent : '#000',
+                                                            shadowOffset: { width: 0, height: 2 },
+                                                            shadowOpacity: isActive ? 0.4 : 0.1,
+                                                            shadowRadius: 4,
+                                                            elevation: isActive ? 6 : 2,
+                                                        }}>
+                                                            <Image
+                                                                source={variant.preview}
+                                                                style={{ width: '100%', height: '100%' }}
+                                                            />
+                                                        </View>
+                                                        <Text style={{
+                                                            color: isActive ? colors.accent : colors.subtext,
+                                                            fontSize: 11,
+                                                            fontWeight: isActive ? '700' : '500',
+                                                        }}>{variant.label}</Text>
+                                                        {isActive && (
+                                                            <View style={{
+                                                                position: 'absolute',
+                                                                top: -2,
+                                                                right: -2,
+                                                                backgroundColor: colors.accent,
+                                                                borderRadius: 10,
+                                                                padding: 2,
+                                                            }}>
+                                                                <CheckCircle size={12} color="#FFF" />
+                                                            </View>
+                                                        )}
+                                                    </Pressable>
+                                                );
+                                            })}
+                                        </ScrollView>
+                                        <Text style={{ color: colors.subtext, fontSize: 11, marginTop: 8, fontStyle: 'italic' }}>
+                                            Änderungen werden erst im nächsten Build sichtbar.
+                                        </Text>
                                     </View>
                                 )}
                             </>)}
