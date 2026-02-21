@@ -6,7 +6,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { useHousehold } from '../hooks/useHousehold';
 import * as ScreenOrientation from 'expo-screen-orientation';
-import { WebView } from 'react-native-webview';
 
 interface CamerasModalProps {
     visible: boolean;
@@ -83,12 +82,22 @@ export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
     const [refreshTrigger, setRefreshTrigger] = React.useState(Date.now());
 
     React.useEffect(() => {
-        if (!visible || fullscreenCamera) return; // Don't refresh grid when fullscreen is open
+        if (!visible || fullscreenCamera) return;
         const interval = setInterval(() => {
             setRefreshTrigger(Date.now());
         }, 1500);
         return () => clearInterval(interval);
     }, [visible, fullscreenCamera]);
+
+    // Faster refresh for fullscreen (750ms)
+    const [fullscreenRefresh, setFullscreenRefresh] = React.useState(Date.now());
+    React.useEffect(() => {
+        if (!fullscreenCamera) return;
+        const interval = setInterval(() => {
+            setFullscreenRefresh(Date.now());
+        }, 750);
+        return () => clearInterval(interval);
+    }, [fullscreenCamera]);
 
     // Handle landscape orientation for fullscreen
     const openFullscreen = useCallback(async (cam: any) => {
@@ -124,34 +133,9 @@ export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
         Authorization: `Bearer ${authToken || ''}`
     };
 
-    // Build MJPEG stream HTML for WebView (real-time fullscreen)
-    const getStreamHtml = (entityId: string) => {
-        if (!haBaseUrl || !authToken) return '';
-        const streamUrl = `${haBaseUrl}/api/camera_proxy_stream/${entityId}`;
-        return `
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-                <style>
-                    * { margin: 0; padding: 0; }
-                    body { background: #000; overflow: hidden; display: flex; align-items: center; justify-content: center; width: 100vw; height: 100vh; }
-                    img { max-width: 100vw; max-height: 100vh; object-fit: contain; }
-                </style>
-            </head>
-            <body>
-                <img src="${streamUrl}" />
-                <script>
-                    // Inject auth header via fetch for the stream
-                    var img = document.querySelector('img');
-                    img.onerror = function() {
-                        // Fallback: try with token in URL
-                        img.src = "${streamUrl}?token=${authToken}";
-                    };
-                </script>
-            </body>
-            </html>
-        `;
+    const getFullscreenUri = (cam: any) => {
+        if (!cam?.attributes?.entity_picture) return null;
+        return `${getEntityPictureUrl(cam.attributes.entity_picture)}${cam.attributes.entity_picture?.includes('?') ? '&' : '?'}t=${fullscreenRefresh}`;
     };
 
     // All camera entities for management
@@ -370,7 +354,7 @@ export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
                 </View>
             </View>
 
-            {/* Fullscreen Camera Modal with MJPEG Stream */}
+            {/* Fullscreen Camera Modal */}
             <Modal
                 visible={!!fullscreenCamera}
                 animationType="fade"
@@ -379,31 +363,21 @@ export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
                 onRequestClose={closeFullscreen}
             >
                 <View style={[styles.fullscreenOverlay, { width, height }]}>
-                    {fullscreenCamera && haBaseUrl && authToken ? (
-                        <WebView
-                            source={{
-                                html: getStreamHtml(fullscreenCamera.entity_id),
-                            }}
-                            style={{ width, height, backgroundColor: '#000' }}
-                            scrollEnabled={false}
-                            bounces={false}
-                            javaScriptEnabled={true}
-                            originWhitelist={['*']}
-                            onHttpError={() => console.warn('WebView HTTP error')}
-                            injectedJavaScript={`
-                                // Inject auth via fetch if needed
-                                document.querySelector('img').addEventListener('error', function() {
-                                    this.src = '${haBaseUrl}/api/camera_proxy_stream/${fullscreenCamera?.entity_id}?token=${authToken}';
-                                });
-                                true;
-                            `}
-                        />
-                    ) : (
-                        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                            <ActivityIndicator size="large" color="#3B82F6" />
-                            <Text style={{ color: '#64748B', marginTop: 12 }}>Lade Kamerabild...</Text>
-                        </View>
-                    )}
+                    {fullscreenCamera && (() => {
+                        const fsUri = getFullscreenUri(fullscreenCamera);
+                        return fsUri ? (
+                            <Image
+                                source={{ uri: fsUri, headers: imageHeaders }}
+                                style={{ width, height }}
+                                resizeMode="contain"
+                            />
+                        ) : (
+                            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                                <ActivityIndicator size="large" color="#3B82F6" />
+                                <Text style={{ color: '#64748B', marginTop: 12 }}>Lade Kamerabild...</Text>
+                            </View>
+                        );
+                    })()}
 
                     {/* Camera name overlay */}
                     <View style={styles.fullscreenHeader} pointerEvents="box-none">
