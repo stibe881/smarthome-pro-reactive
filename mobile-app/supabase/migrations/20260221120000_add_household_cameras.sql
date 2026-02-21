@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS public.household_cameras (
     entity_id TEXT NOT NULL,
     custom_name TEXT,
     sort_order INTEGER DEFAULT 0,
+    extra_entities JSONB DEFAULT '[]'::jsonb,
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now(),
     UNIQUE(household_id, entity_id)
