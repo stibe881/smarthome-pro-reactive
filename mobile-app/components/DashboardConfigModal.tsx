@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { View, Text, Pressable, ScrollView, Modal, StyleSheet, ActivityIndicator, Alert, TextInput } from 'react-native';
-import { X, Plus, Trash2, Lightbulb, Blinds, Bot, Shield, Search, Pencil, Check, ChevronUp, ChevronDown } from 'lucide-react-native';
+import { X, Plus, Trash2, Lightbulb, Blinds, Bot, Shield, Search, Pencil, Check, ChevronUp, ChevronDown, Zap } from 'lucide-react-native';
 import { useHomeAssistant, EntityState } from '../contexts/HomeAssistantContext';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -9,13 +9,14 @@ interface DashboardConfigModalProps {
     onClose: () => void;
 }
 
-type SectionType = 'lights' | 'covers' | 'vacuum' | 'alarm';
+type SectionType = 'lights' | 'covers' | 'vacuum' | 'alarm' | 'homescreenShortcuts';
 
-const TABS: { key: SectionType; label: string; icon: any; domain: string; single?: boolean }[] = [
+const TABS: { key: SectionType; label: string; icon: any; domain: string; single?: boolean; allEntities?: boolean }[] = [
     { key: 'lights', label: 'Lichter', icon: Lightbulb, domain: 'light.' },
     { key: 'covers', label: 'Rollläden', icon: Blinds, domain: 'cover.' },
     { key: 'vacuum', label: 'Saugroboter', icon: Bot, domain: 'vacuum.', single: true },
     { key: 'alarm', label: 'Alarmanlage', icon: Shield, domain: 'alarm_control_panel.', single: true },
+    { key: 'homescreenShortcuts', label: 'Shortcuts', icon: Zap, domain: '', allEntities: true },
 ];
 
 export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalProps) => {
@@ -29,10 +30,10 @@ export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalP
 
     const activeTab = TABS.find(t => t.key === activeSection)!;
 
-    // Filter available entities by domain
+    // Filter available entities by domain (or show all if allEntities)
     const availableEntities = useMemo(() => {
         return entities
-            .filter(e => e.entity_id.startsWith(activeTab.domain))
+            .filter(e => activeTab.allEntities ? true : e.entity_id.startsWith(activeTab.domain))
             .filter(e => e.entity_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 (e.attributes.friendly_name || '').toLowerCase().includes(searchQuery.toLowerCase()))
             .sort((a, b) => (a.attributes.friendly_name || a.entity_id).localeCompare(b.attributes.friendly_name || b.entity_id));

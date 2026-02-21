@@ -1411,56 +1411,61 @@ export default function Dashboard() {
                     </ScrollView>
                 </View>
 
-                {/* Main Lights Shortcuts */}
-                <View style={styles.section}>
-                    <View style={{ flexDirection: 'row', gap: 12 }}>
-                        {['light.kuche', 'light.essbereich', 'light.wohnzimmer'].map(id => {
-                            const light = entities.find(e => e.entity_id === id);
-                            // Fallback if entity not found, just don't render or render placeholder
-                            if (!light) return null;
+                {/* Main Shortcuts (configurable by admin) */}
+                {(dashboardConfig.homescreenShortcuts?.length > 0) && (
+                    <View style={styles.section}>
+                        <View style={{ flexDirection: 'row', gap: 12 }}>
+                            {(dashboardConfig.homescreenShortcuts || []).map((shortcut: any) => {
+                                const entity = entities.find((e: any) => e.entity_id === shortcut.id);
+                                if (!entity) return null;
 
-                            // Custom labels
-                            let label = 'Unbekannt';
-                            if (id === 'light.kuche') label = 'Küche';
-                            if (id === 'light.essbereich') label = 'Essbereich';
-                            if (id === 'light.wohnzimmer') label = 'Wohnzimmer';
+                                const isOn = entity.state === 'on';
+                                const domain = shortcut.id.split('.')[0];
+                                const label = shortcut.name || entity.attributes.friendly_name || shortcut.id;
 
-                            const isOn = light.state === 'on';
+                                const handleToggle = () => {
+                                    if (isOn) {
+                                        callService(domain, 'turn_off', shortcut.id);
+                                    } else {
+                                        callService(domain, 'turn_on', shortcut.id);
+                                    }
+                                };
 
-                            return (
-                                <View key={id} style={{ flex: 1 }}>
-                                    <Pressable
-                                        onPress={() => toggleLight(id)}
-                                        style={[
-                                            styles.tile,
-                                            { backgroundColor: colors.card, borderColor: colors.border },
-                                            {
-                                                minHeight: 60,
-                                                padding: 12,
-                                                justifyContent: 'center',
-                                                marginBottom: 0
-                                            },
-                                            isOn && { backgroundColor: colors.accent + '26', borderColor: colors.accent + '80' }
-                                        ]}
-                                    >
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                                            <View style={[
-                                                styles.tileIcon,
-                                                { width: 32, height: 32, backgroundColor: colors.background },
-                                                isOn && { backgroundColor: colors.accent }
-                                            ]}>
-                                                <Lightbulb size={18} color={isOn ? "#FFF" : colors.subtext} />
+                                return (
+                                    <View key={shortcut.id} style={{ flex: 1 }}>
+                                        <Pressable
+                                            onPress={handleToggle}
+                                            style={[
+                                                styles.tile,
+                                                { backgroundColor: colors.card, borderColor: colors.border },
+                                                {
+                                                    minHeight: 60,
+                                                    padding: 12,
+                                                    justifyContent: 'center',
+                                                    marginBottom: 0
+                                                },
+                                                isOn && { backgroundColor: colors.accent + '26', borderColor: colors.accent + '80' }
+                                            ]}
+                                        >
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                                                <View style={[
+                                                    styles.tileIcon,
+                                                    { width: 32, height: 32, backgroundColor: colors.background },
+                                                    isOn && { backgroundColor: colors.accent }
+                                                ]}>
+                                                    <Lightbulb size={18} color={isOn ? "#FFF" : colors.subtext} />
+                                                </View>
+                                                <View style={{ flex: 1 }}>
+                                                    <Text style={[styles.tileName, { marginTop: 0, fontSize: 13, color: colors.text }, isOn && { color: '#FFF' }]} numberOfLines={1}>{label}</Text>
+                                                </View>
                                             </View>
-                                            <View style={{ flex: 1 }}>
-                                                <Text style={[styles.tileName, { marginTop: 0, fontSize: 13, color: colors.text }, isOn && { color: '#FFF' }]} numberOfLines={1}>{label}</Text>
-                                            </View>
-                                        </View>
-                                    </Pressable>
-                                </View>
-                            );
-                        })}
+                                        </Pressable>
+                                    </View>
+                                );
+                            })}
+                        </View>
                     </View>
-                </View>
+                )}
 
 
 
