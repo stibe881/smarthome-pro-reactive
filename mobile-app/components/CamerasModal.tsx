@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, Modal, StyleSheet, Pressable, ScrollView, Image, Dimensions, StatusBar } from 'react-native';
+import { View, Text, Modal, StyleSheet, Pressable, ScrollView, Image, Dimensions } from 'react-native';
 import { X, Video, Maximize2 } from 'lucide-react-native';
 import { useHomeAssistant } from '../contexts/HomeAssistantContext';
 
@@ -106,20 +106,15 @@ export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
                 </View>
             </View>
 
-            {/* Fullscreen Camera Modal */}
             <Modal
                 visible={!!fullscreenCamera}
                 animationType="fade"
-                transparent
+                transparent={false}
                 statusBarTranslucent
                 onRequestClose={() => setFullscreenCamera(null)}
             >
-                <StatusBar hidden />
-                <Pressable
-                    style={styles.fullscreenOverlay}
-                    onPress={() => setFullscreenCamera(null)}
-                >
-                    {fullscreenCamera && getCameraUri(fullscreenCamera) && (
+                <View style={styles.fullscreenOverlay}>
+                    {fullscreenCamera && getCameraUri(fullscreenCamera) ? (
                         <Image
                             source={{
                                 uri: getCameraUri(fullscreenCamera)!,
@@ -128,6 +123,11 @@ export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
                             style={styles.fullscreenImage}
                             resizeMode="contain"
                         />
+                    ) : (
+                        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                            <Video size={48} color="#475569" />
+                            <Text style={{ color: '#64748B', marginTop: 12 }}>Lade Kamerabild...</Text>
+                        </View>
                     )}
 
                     {/* Camera name overlay */}
@@ -149,7 +149,7 @@ export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
                         <View style={styles.liveDot} />
                         <Text style={styles.liveText}>LIVE</Text>
                     </View>
-                </Pressable>
+                </View>
             </Modal>
         </Modal>
     );
