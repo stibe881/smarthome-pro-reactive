@@ -966,6 +966,41 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
         }
     }, [entities]);
 
+    // Sync Supabase shopping locations → AsyncStorage for background task
+    useEffect(() => {
+        const syncShopLocations = async () => {
+            if (!user) return;
+            try {
+                // Get household ID
+                const { data: memberData } = await supabase
+                    .from('family_members')
+                    .select('household_id')
+                    .eq('user_id', user.id)
+                    .single();
+
+                if (!memberData?.household_id) return;
+
+                const { data: shops } = await supabase
+                    .from('shopping_locations')
+                    .select('name, lat, lng')
+                    .eq('household_id', memberData.household_id);
+
+                if (shops && shops.length > 0) {
+                    await AsyncStorage.setItem(SHOPS_STORAGE_KEY, JSON.stringify(shops));
+                    console.log(`🛒 Synced ${shops.length} shop locations from Supabase to AsyncStorage`);
+                } else {
+                    // No custom shops → remove key so DEFAULT_SHOPS are used
+                    await AsyncStorage.removeItem(SHOPS_STORAGE_KEY);
+                    console.log('🛒 No custom shops in Supabase, using DEFAULT_SHOPS');
+                }
+            } catch (e) {
+                console.warn('🛒 Shop location sync failed:', e);
+            }
+        };
+
+        syncShopLocations();
+    }, [user]);
+
     // Geofencing Logic
     const checkGeofencingStatus = async () => {
         if (Platform.OS === 'web') return;
@@ -1488,36 +1523,52 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
                 // 2. Check Stored Count
                 const countStr = await AsyncStorage.getItem(SHOPPING_COUNT_KEY);
 
-                // 3. Get Location & Reverse Geocode
+                // 3. Get Location
                 const loc = await Location.getCurrentPositionAsync({});
-                const addresses = await Location.reverseGeocodeAsync({
-                    latitude: loc.coords.latitude,
-                    longitude: loc.coords.longitude
-                });
+                const { latitude, longitude } = loc.coords;
 
-                let match = 'NO MATCH';
+                // 4. GPS Proximity Check (same as background task)
+                const gpsMatch = await findNearbyShop(latitude, longitude);
+
+                // 5. Reverse Geocode Fallback
+                const addresses = await Location.reverseGeocodeAsync({ latitude, longitude });
+                let geocodeMatch = 'NONE';
                 let shopData = '';
 
                 if (addresses.length > 0) {
                     const addr = addresses[0];
                     const name = (addr.name || '').toLowerCase();
                     const street = (addr.street || '').toLowerCase();
-                    const city = (addr.city || '').toLowerCase();
 
                     shopData = `Name: ${addr.name}\nStreet: ${addr.street}\nCity: ${addr.city}`;
 
                     const matchingShop = TARGET_SHOPS.find(shop =>
                         name.includes(shop) || street.includes(shop)
                     );
+                    if (matchingShop) geocodeMatch = matchingShop;
+                }
 
-                    if (matchingShop) match = `YES (${matchingShop})`;
+                // 6. Load shop list info
+                const shopList = await getShopList();
+                const storedRaw = await AsyncStorage.getItem(SHOPS_STORAGE_KEY);
+                const shopSource = storedRaw ? 'Supabase' : 'DEFAULT_SHOPS';
+
+                // 7. Check if SHOPPING_TASK is registered
+                let taskRegistered = 'N/A';
+                if (Platform.OS !== 'web') {
+                    const registered = await TaskManager.isTaskRegisteredAsync(SHOPPING_TASK);
+                    taskRegistered = registered ? 'YES ✅' : 'NO ❌';
                 }
 
                 Alert.alert(
                     "🛒 Shopping Debug",
-                    `List Count (Stored): ${countStr || 'NULL'}\n\n` +
-                    `Permissions: FG=${status}, BG=${bgStatus}\n\n` +
-                    `Location: ${match}\n` +
+                    `List Count: ${countStr || 'NULL (0)'}\n` +
+                    `Permissions: FG=${status}, BG=${bgStatus}\n` +
+                    `Task Running: ${taskRegistered}\n\n` +
+                    `📍 GPS Match: ${gpsMatch || 'NONE'}\n` +
+                    `📍 Geocode Match: ${geocodeMatch}\n\n` +
+                    `Shop List: ${shopList.length} Standorte (${shopSource})\n` +
+                    `Coords: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}\n` +
                     `----------------\n` +
                     shopData
                 );
