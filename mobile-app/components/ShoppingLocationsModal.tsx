@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { View, Text, Pressable, ScrollView, Modal, TextInput, Alert, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { X, Plus, MapPin, Trash2, Navigation, Store } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
@@ -49,6 +50,15 @@ export const ShoppingLocationsModal = ({ visible, onClose }: Props) => {
 
             if (error) throw error;
             setShops(data || []);
+
+            // Sync to AsyncStorage for background task
+            if (data && data.length > 0) {
+                const forStorage = data.map((s: any) => ({ name: s.name, lat: s.lat, lng: s.lng }));
+                await AsyncStorage.setItem('@smarthome_shopping_locations', JSON.stringify(forStorage));
+                console.log(`🛒 Synced ${data.length} shops to AsyncStorage`);
+            } else {
+                await AsyncStorage.removeItem('@smarthome_shopping_locations');
+            }
         } catch (e: any) {
             console.error('Error loading shops:', e);
             Alert.alert('Fehler', 'Konnte Einkaufsstandorte nicht laden.');
