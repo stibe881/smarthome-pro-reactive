@@ -21,13 +21,24 @@ import { WidgetSettings } from '../../components/WidgetSettings';
 import { Activity, ShieldCheck, Zap, Blinds, AlertTriangle, Baby, Plus, Settings as SettingsIcon, LayoutGrid } from 'lucide-react-native';
 import { useKidsMode, KIDS_GENDER_THEMES, KidsGender } from '../../contexts/KidsContext';
 import { supabase } from '../../lib/supabase';
-import { setAlternateAppIcon, getAppIconName, supportsAlternateIcons } from 'expo-alternate-app-icons';
+
+// Defensive import for native module (not available in Expo Go)
+let setAlternateAppIcon: (name: string | null) => Promise<void> = async () => { };
+let getAppIconName: () => string | null = () => null;
+let supportsAlternateIcons: boolean = false;
+try {
+    const mod = require('expo-alternate-app-icons');
+    setAlternateAppIcon = mod.setAlternateAppIcon;
+    getAppIconName = mod.getAppIconName;
+    supportsAlternateIcons = mod.supportsAlternateIcons ?? false;
+} catch (e) {
+    console.warn('expo-alternate-app-icons not available (Expo Go?)');
+}
 
 // App Icon color variants
 const APP_ICON_VARIANTS = [
     { key: null, label: 'Original', color: '#3B82F6', preview: require('../../assets/icon.png') },
     { key: 'pink', label: 'Pink', color: '#FF1493', preview: require('../../assets/icons/icon-pink.png') },
-    { key: 'blue', label: 'Blau', color: '#2563EB', preview: require('../../assets/icons/icon-blue.png') },
     { key: 'green', label: 'Grün', color: '#00B450', preview: require('../../assets/icons/icon-green.png') },
     { key: 'black', label: 'Schwarz', color: '#1E1E28', preview: require('../../assets/icons/icon-black.png') },
     { key: 'orange', label: 'Orange', color: '#FF8C00', preview: require('../../assets/icons/icon-orange.png') },
