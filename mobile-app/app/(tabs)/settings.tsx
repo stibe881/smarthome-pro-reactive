@@ -1676,7 +1676,7 @@ export default function Settings() {
                             <SettingsRow
                                 icon={<LayoutGrid size={20} color={colors.accent} />}
                                 iconColor={colors.accent}
-                                label="Widgets (Homescreen)"
+                                label="Widgets"
                                 showChevron
                                 onPress={() => setWidgetSettingsVisible(true)}
                                 colors={colors}
