@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, Pressable, ActivityIndicator, KeyboardAvoidingView, ScrollView, Platform } from 'react-native';
 import { useAuth } from '../../contexts/AuthContext';
 import { House, LogIn, Mail, Lock, AlertTriangle, ScanFace, UserPlus } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -73,133 +73,144 @@ export default function LoginScreen() {
     return (
         <SafeAreaView style={styles.container}>
             <Stack.Screen options={{ headerShown: false }} />
-            <View style={styles.content}>
-                {/* Logo */}
-                <View style={styles.logoContainer}>
-                    <View style={styles.logoCircle}>
-                        <House stroke="white" size={32} />
-                    </View>
-                    <Text style={styles.title}>
-                        SMARTHOME <Text style={styles.titleHighlight}>PRO</Text>
-                    </Text>
-                    <Text style={styles.subtitle}>Powered by HA</Text>
-                </View>
-
-                {/* Form */}
-                <View style={styles.formCard}>
-                    <Text style={styles.cardTitle}>
-                        {isRegisterMode ? 'Registrieren' : 'Willkommen'}
-                    </Text>
-                    <Text style={styles.cardSubtitle}>
-                        {isRegisterMode ? 'Erstelle ein neues Konto' : 'Melde dich an'}
-                    </Text>
-
-                    <View style={styles.formGroup}>
-                        <View style={styles.inputContainer}>
-                            <Text style={styles.label}>EMAIL</Text>
-                            <View style={styles.inputWrapper}>
-                                <Mail stroke="#94a3b8" size={20} />
-                                <TextInput
-                                    value={email}
-                                    onChangeText={setEmail}
-                                    placeholder="name@beispiel.de"
-                                    placeholderTextColor="#64748b"
-                                    autoCapitalize="none"
-                                    keyboardType="email-address"
-                                    style={styles.input}
-                                />
+            <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                style={{ flex: 1 }}
+            >
+                <ScrollView
+                    contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 24 }}
+                    keyboardShouldPersistTaps="handled"
+                    bounces={false}
+                >
+                    <View style={styles.content}>
+                        {/* Logo */}
+                        <View style={styles.logoContainer}>
+                            <View style={styles.logoCircle}>
+                                <House stroke="white" size={32} />
                             </View>
+                            <Text style={styles.title}>
+                                SMARTHOME <Text style={styles.titleHighlight}>PRO</Text>
+                            </Text>
+                            <Text style={styles.subtitle}>Powered by HA</Text>
                         </View>
 
-                        <View style={styles.inputContainer}>
-                            <Text style={styles.label}>PASSWORT</Text>
-                            <View style={styles.inputWrapper}>
-                                <Lock stroke="#94a3b8" size={20} />
-                                <TextInput
-                                    value={password}
-                                    onChangeText={setPassword}
-                                    placeholder="••••••••"
-                                    placeholderTextColor="#64748b"
-                                    secureTextEntry
-                                    style={styles.input}
-                                />
-                            </View>
-                        </View>
+                        {/* Form */}
+                        <View style={styles.formCard}>
+                            <Text style={styles.cardTitle}>
+                                {isRegisterMode ? 'Registrieren' : 'Willkommen'}
+                            </Text>
+                            <Text style={styles.cardSubtitle}>
+                                {isRegisterMode ? 'Erstelle ein neues Konto' : 'Melde dich an'}
+                            </Text>
 
-                        {isRegisterMode && (
-                            <View style={styles.inputContainer}>
-                                <Text style={styles.label}>PASSWORT BESTÄTIGEN</Text>
-                                <View style={styles.inputWrapper}>
-                                    <Lock stroke="#94a3b8" size={20} />
-                                    <TextInput
-                                        value={confirmPassword}
-                                        onChangeText={setConfirmPassword}
-                                        placeholder="••••••••"
-                                        placeholderTextColor="#64748b"
-                                        secureTextEntry
-                                        style={styles.input}
-                                    />
+                            <View style={styles.formGroup}>
+                                <View style={styles.inputContainer}>
+                                    <Text style={styles.label}>EMAIL</Text>
+                                    <View style={styles.inputWrapper}>
+                                        <Mail stroke="#94a3b8" size={20} />
+                                        <TextInput
+                                            value={email}
+                                            onChangeText={setEmail}
+                                            placeholder="name@beispiel.de"
+                                            placeholderTextColor="#64748b"
+                                            autoCapitalize="none"
+                                            keyboardType="email-address"
+                                            style={styles.input}
+                                        />
+                                    </View>
                                 </View>
+
+                                <View style={styles.inputContainer}>
+                                    <Text style={styles.label}>PASSWORT</Text>
+                                    <View style={styles.inputWrapper}>
+                                        <Lock stroke="#94a3b8" size={20} />
+                                        <TextInput
+                                            value={password}
+                                            onChangeText={setPassword}
+                                            placeholder="••••••••"
+                                            placeholderTextColor="#64748b"
+                                            secureTextEntry
+                                            style={styles.input}
+                                        />
+                                    </View>
+                                </View>
+
+                                {isRegisterMode && (
+                                    <View style={styles.inputContainer}>
+                                        <Text style={styles.label}>PASSWORT BESTÄTIGEN</Text>
+                                        <View style={styles.inputWrapper}>
+                                            <Lock stroke="#94a3b8" size={20} />
+                                            <TextInput
+                                                value={confirmPassword}
+                                                onChangeText={setConfirmPassword}
+                                                placeholder="••••••••"
+                                                placeholderTextColor="#64748b"
+                                                secureTextEntry
+                                                style={styles.input}
+                                            />
+                                        </View>
+                                    </View>
+                                )}
+
+                                {error ? (
+                                    <View style={styles.errorBox}>
+                                        <AlertTriangle stroke="#f87171" size={20} />
+                                        <Text style={styles.errorText}>{error}</Text>
+                                    </View>
+                                ) : null}
+
+                                <Pressable
+                                    onPress={handleSubmit}
+                                    disabled={loading}
+                                    style={[
+                                        styles.button,
+                                        loading ? styles.buttonDisabled : styles.buttonActive
+                                    ]}
+                                >
+                                    {loading ? (
+                                        <ActivityIndicator color="white" />
+                                    ) : isRegisterMode ? (
+                                        <UserPlus stroke="white" size={24} />
+                                    ) : (
+                                        <LogIn stroke="white" size={24} />
+                                    )}
+                                    <Text style={[styles.buttonText, loading && styles.buttonTextDisabled]}>
+                                        {loading ? 'BITTE WARTEN...' : isRegisterMode ? 'REGISTRIEREN' : 'ANMELDEN'}
+                                    </Text>
+                                </Pressable>
+
+                                {!isRegisterMode && (
+                                    <Pressable onPress={() => setShowForgotPassword(true)} style={{ alignItems: 'center' }}>
+                                        <Text style={{ color: '#94A3B8', fontSize: 14 }}>Passwort vergessen?</Text>
+                                    </Pressable>
+                                )}
+
+                                {!isRegisterMode && isBiometricsEnabled && (
+                                    <Pressable
+                                        onPress={handleBiometricLogin}
+                                        style={styles.biometricButton}
+                                    >
+                                        <ScanFace stroke="#3B82F6" size={32} />
+                                        <Text style={styles.biometricText}>Or use Face ID</Text>
+                                    </Pressable>
+                                )}
+
+                                {/* Toggle between Login and Register */}
+                                <Pressable onPress={toggleMode} style={styles.toggleButton}>
+                                    <Text style={styles.toggleText}>
+                                        {isRegisterMode
+                                            ? 'Bereits ein Konto? '
+                                            : 'Noch kein Konto? '}
+                                        <Text style={styles.toggleHighlight}>
+                                            {isRegisterMode ? 'Anmelden' : 'Registrieren'}
+                                        </Text>
+                                    </Text>
+                                </Pressable>
                             </View>
-                        )}
-
-                        {error ? (
-                            <View style={styles.errorBox}>
-                                <AlertTriangle stroke="#f87171" size={20} />
-                                <Text style={styles.errorText}>{error}</Text>
-                            </View>
-                        ) : null}
-
-                        <Pressable
-                            onPress={handleSubmit}
-                            disabled={loading}
-                            style={[
-                                styles.button,
-                                loading ? styles.buttonDisabled : styles.buttonActive
-                            ]}
-                        >
-                            {loading ? (
-                                <ActivityIndicator color="white" />
-                            ) : isRegisterMode ? (
-                                <UserPlus stroke="white" size={24} />
-                            ) : (
-                                <LogIn stroke="white" size={24} />
-                            )}
-                            <Text style={[styles.buttonText, loading && styles.buttonTextDisabled]}>
-                                {loading ? 'BITTE WARTEN...' : isRegisterMode ? 'REGISTRIEREN' : 'ANMELDEN'}
-                            </Text>
-                        </Pressable>
-
-                        {!isRegisterMode && (
-                            <Pressable onPress={() => setShowForgotPassword(true)} style={{ alignItems: 'center' }}>
-                                <Text style={{ color: '#94A3B8', fontSize: 14 }}>Passwort vergessen?</Text>
-                            </Pressable>
-                        )}
-
-                        {!isRegisterMode && isBiometricsEnabled && (
-                            <Pressable
-                                onPress={handleBiometricLogin}
-                                style={styles.biometricButton}
-                            >
-                                <ScanFace stroke="#3B82F6" size={32} />
-                                <Text style={styles.biometricText}>Or use Face ID</Text>
-                            </Pressable>
-                        )}
-
-                        {/* Toggle between Login and Register */}
-                        <Pressable onPress={toggleMode} style={styles.toggleButton}>
-                            <Text style={styles.toggleText}>
-                                {isRegisterMode
-                                    ? 'Bereits ein Konto? '
-                                    : 'Noch kein Konto? '}
-                                <Text style={styles.toggleHighlight}>
-                                    {isRegisterMode ? 'Anmelden' : 'Registrieren'}
-                                </Text>
-                            </Text>
-                        </Pressable>
+                        </View>
                     </View>
-                </View>
-            </View>
+                </ScrollView>
+            </KeyboardAvoidingView>
 
             <ForgotPasswordModal
                 visible={showForgotPassword}
@@ -215,8 +226,6 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#000',
-        justifyContent: 'center',
-        padding: 24,
     },
     content: {
         width: '100%',
