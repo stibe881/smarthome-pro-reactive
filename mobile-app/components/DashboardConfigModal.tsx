@@ -448,8 +448,8 @@ const s = StyleSheet.create({
     headerClose: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
 
     // Tab Pills
-    tabPills: { flexDirection: 'row', gap: 8, paddingHorizontal: 20, paddingVertical: 14 },
-    pill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 20, borderWidth: 1 },
+    tabPills: { flexDirection: 'row', gap: 8, paddingHorizontal: 20, paddingVertical: 8 },
+    pill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 5, borderRadius: 20, borderWidth: 1 },
     pillText: { fontSize: 13, fontWeight: '600' },
 
     // Main scroll
