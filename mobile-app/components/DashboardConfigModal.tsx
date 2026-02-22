@@ -33,13 +33,8 @@ export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalP
     const availableEntities = useMemo(() => {
         let filtered = entities;
         if (activeSection === 'vacuum') {
-            // Vacuum tab: show vacuums, sensors, and cameras
-            filtered = entities.filter(e =>
-                e.entity_id.startsWith('vacuum.') ||
-                e.entity_id.startsWith('sensor.') ||
-                e.entity_id.startsWith('camera.') ||
-                e.entity_id.startsWith('image.')
-            );
+            // Vacuum tab: show all entities (vacuum, sensor, camera, image + any for dock)
+            // No domain filter needed
         } else if (activeTab.allEntities) {
             // Keep all
         } else {
@@ -66,23 +61,44 @@ export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalP
     const handleAdd = async (entity: EntityState) => {
         const name = entity.attributes.friendly_name || entity.entity_id;
 
-        // Vacuum tab: detect sensor/camera sub-assignments
+        // Vacuum tab: detect sensor/camera sub-assignments or dock entities
         if (activeSection === 'vacuum') {
-            if (entity.entity_id.startsWith('sensor.')) {
-                setIsSaving(true);
-                try {
-                    await saveDashboardConfig({ ...dashboardConfig, vacuumBatterySensor: entity.entity_id });
-                } catch (e) {
-                    Alert.alert('Fehler', 'Konfiguration konnte nicht gespeichert werden.');
-                } finally {
-                    setIsSaving(false);
+            if (entity.entity_id.startsWith('vacuum.')) {
+                // Vacuum entity → main vacuum (handled below by single-select logic)
+            } else {
+                // Check if it should go to battery sensor or map camera (only if not yet set)
+                if (entity.entity_id.startsWith('sensor.') && !dashboardConfig.vacuumBatterySensor) {
+                    setIsSaving(true);
+                    try {
+                        await saveDashboardConfig({ ...dashboardConfig, vacuumBatterySensor: entity.entity_id });
+                    } catch (e) {
+                        Alert.alert('Fehler', 'Konfiguration konnte nicht gespeichert werden.');
+                    } finally {
+                        setIsSaving(false);
+                    }
+                    return;
                 }
-                return;
-            }
-            if (entity.entity_id.startsWith('camera.') || entity.entity_id.startsWith('image.')) {
+                if ((entity.entity_id.startsWith('camera.') || entity.entity_id.startsWith('image.')) && !dashboardConfig.vacuumMapCamera) {
+                    setIsSaving(true);
+                    try {
+                        await saveDashboardConfig({ ...dashboardConfig, vacuumMapCamera: entity.entity_id });
+                    } catch (e) {
+                        Alert.alert('Fehler', 'Konfiguration konnte nicht gespeichert werden.');
+                    } finally {
+                        setIsSaving(false);
+                    }
+                    return;
+                }
+
+                // Otherwise → add to dock entities
+                const currentDock = (dashboardConfig.vacuumDockEntities || []) as string[];
+                if (currentDock.includes(entity.entity_id)) {
+                    Alert.alert('Hinweis', 'Diese Entität ist bereits zugeordnet.');
+                    return;
+                }
                 setIsSaving(true);
                 try {
-                    await saveDashboardConfig({ ...dashboardConfig, vacuumMapCamera: entity.entity_id });
+                    await saveDashboardConfig({ ...dashboardConfig, vacuumDockEntities: [...currentDock, entity.entity_id] });
                 } catch (e) {
                     Alert.alert('Fehler', 'Konfiguration konnte nicht gespeichert werden.');
                 } finally {
@@ -326,6 +342,37 @@ export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalP
                             ) : (
                                 <Text style={[styles.emptyText, { color: colors.subtext }]}>
                                     Keine Karten-Kamera ausgewählt. Wähle unten eine camera.* aus.
+                                </Text>
+                            )}
+
+                            {/* Dock Station Entities (multi-select) */}
+                            <Text style={[styles.sectionTitle, { color: colors.subtext, marginTop: 16 }]}>DOCKINGSTATION-ENTITÄTEN</Text>
+                            {(dashboardConfig.vacuumDockEntities || []).length > 0 ? (
+                                (dashboardConfig.vacuumDockEntities as string[]).map((dockId: string) => {
+                                    const dockEntity = entities.find(e => e.entity_id === dockId);
+                                    return (
+                                        <View key={dockId} style={[styles.mappedItem, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                                            <View style={{ flex: 1 }}>
+                                                <Text style={[styles.mappedName, { color: colors.text }]}>
+                                                    {dockEntity?.attributes?.friendly_name || dockId}
+                                                </Text>
+                                                <Text style={[styles.mappedId, { color: colors.subtext }]}>{dockId}</Text>
+                                            </View>
+                                            <Pressable onPress={async () => {
+                                                setIsSaving(true);
+                                                try {
+                                                    const updated = (dashboardConfig.vacuumDockEntities as string[]).filter((id: string) => id !== dockId);
+                                                    await saveDashboardConfig({ ...dashboardConfig, vacuumDockEntities: updated });
+                                                } catch { } finally { setIsSaving(false); }
+                                            }} style={styles.removeBtn}>
+                                                <Trash2 size={18} color="#EF4444" />
+                                            </Pressable>
+                                        </View>
+                                    );
+                                })
+                            ) : (
+                                <Text style={[styles.emptyText, { color: colors.subtext }]}>
+                                    Keine Dockingstation-Entitäten ausgewählt. Wähle unten beliebige Entities aus.
                                 </Text>
                             )}
                         </View>

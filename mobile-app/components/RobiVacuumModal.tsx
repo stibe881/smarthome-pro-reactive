@@ -1,28 +1,30 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, Modal, StyleSheet, Pressable, ScrollView, ActivityIndicator, Image, Alert } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, Modal, StyleSheet, Pressable, ScrollView, Image, Alert } from 'react-native';
 import { useHomeAssistant } from '../contexts/HomeAssistantContext';
 import {
-    X, Play, Pause, Square, Home, Battery,
+    X, Play, Pause, Home,
     Bath, Armchair, Monitor, Refrigerator, BedDouble,
     Gamepad2, User, Utensils, DoorOpen, Footprints,
-    ArrowRight, Brush, Wind
+    ArrowRight, Brush, Wind, Dock, Gauge
 } from 'lucide-react-native';
 
 const ROOMS = [
     { id: 1, name: 'Bad', icon: Bath },
-    { id: 2, name: 'Gäste WC', icon: Wind },
-    { id: 3, name: 'Wohnzimmer', icon: Armchair },
-    { id: 4, name: 'Reduit', icon: Brush },
     { id: 5, name: 'Büro', icon: Monitor },
+    { id: 12, name: 'Eingang', icon: DoorOpen },
+    { id: 11, name: 'Essen', icon: Utensils },
+    { id: 13, name: 'Gang', icon: ArrowRight },
+    { id: 2, name: 'Gäste WC', icon: Wind },
     { id: 6, name: 'Küche', icon: Refrigerator },
-    { id: 7, name: 'Schlafzimmer', icon: BedDouble },
-    { id: 8, name: 'Vorraum', icon: Footprints },
     { id: 9, name: 'Levin', icon: Gamepad2 },
     { id: 10, name: 'Lina', icon: User },
-    { id: 11, name: 'Essen', icon: Utensils },
-    { id: 12, name: 'Eingang', icon: DoorOpen },
-    { id: 13, name: 'Gang', icon: ArrowRight },
+    { id: 4, name: 'Reduit', icon: Brush },
+    { id: 7, name: 'Schlafzimmer', icon: BedDouble },
+    { id: 8, name: 'Vorraum', icon: Footprints },
+    { id: 3, name: 'Wohnzimmer', icon: Armchair },
 ];
+
+type TabKey = 'cleaning' | 'dock';
 
 export default function RobiVacuumModal({
     visible,
@@ -34,7 +36,7 @@ export default function RobiVacuumModal({
     entityId?: string;
 }) {
     const { entities, callService, getEntityPictureUrl, dashboardConfig } = useHomeAssistant();
-    const [loading, setLoading] = useState(false);
+    const [activeTab, setActiveTab] = useState<TabKey>('cleaning');
 
     const vacuum = entities.find(e => e.entity_id === entityId);
 
@@ -48,30 +50,25 @@ export default function RobiVacuumModal({
         ? entities.find(e => e.entity_id === dashboardConfig.vacuumBatterySensor)
         : null;
 
+    // Dock station entities (multi-select from config)
+    const dockEntities = ((dashboardConfig.vacuumDockEntities || []) as string[])
+        .map((id: string) => entities.find(e => e.entity_id === id))
+        .filter(Boolean) as any[];
+
     const handleAction = (action: string) => {
         callService('vacuum', action, entityId);
     };
 
     const cleanRoom = async (roomIds: number[]) => {
         try {
-            // Try Roborock integration first (HA 2024.8+)
-            await callService('roborock', 'vacuum_clean_segment', entityId, {
-                segments: roomIds
-            });
+            await callService('roborock', 'vacuum_clean_segment', entityId, { segments: roomIds });
         } catch {
             try {
-                // Fallback: Xiaomi Miio integration
-                await callService('xiaomi_miio', 'vacuum_clean_segment', entityId, {
-                    segments: roomIds
-                });
+                await callService('xiaomi_miio', 'vacuum_clean_segment', entityId, { segments: roomIds });
             } catch {
                 try {
-                    // Fallback: Legacy send_command
-                    await callService('vacuum', 'send_command', entityId, {
-                        command: 'app_segment_clean',
-                        params: roomIds
-                    });
-                } catch (e: any) {
+                    await callService('vacuum', 'send_command', entityId, { command: 'app_segment_clean', params: roomIds });
+                } catch {
                     Alert.alert('Fehler', 'Raum-Reinigung wird von diesem Saugroboter nicht unterstützt.');
                 }
             }
@@ -83,6 +80,82 @@ export default function RobiVacuumModal({
 
     const batteryLevel = batterySensor?.state ?? vacuum.attributes?.battery_level ?? '?';
     const status = vacuum.attributes?.status || vacuum.state || 'Unbekannt';
+
+    const renderCleaningTab = () => (
+        <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: 40 }}>
+            {mapCamera && (
+                <View style={styles.mapContainer}>
+                    <Image
+                        source={{ uri: getEntityPictureUrl(mapCamera.attributes.entity_picture) }}
+                        style={styles.mapImage}
+                        resizeMode="contain"
+                    />
+                </View>
+            )}
+
+            <View style={styles.controlsRow}>
+                <Pressable onPress={() => handleAction('start')} style={[styles.controlBtn, { backgroundColor: '#3B82F6' }]}>
+                    <Play size={24} color="#fff" fill="#fff" />
+                </Pressable>
+                <Pressable onPress={() => handleAction('pause')} style={[styles.controlBtn, { backgroundColor: '#F59E0B' }]}>
+                    <Pause size={24} color="#fff" fill="#fff" />
+                </Pressable>
+                <Pressable onPress={() => handleAction('return_to_base')} style={[styles.controlBtn, { backgroundColor: '#10B981' }]}>
+                    <Home size={24} color="#fff" />
+                </Pressable>
+            </View>
+
+            <Text style={styles.sectionTitle}>RAUM REINIGEN</Text>
+            <View style={styles.grid}>
+                {ROOMS.map((room) => {
+                    const Icon = room.icon;
+                    return (
+                        <Pressable key={room.id} style={styles.roomBtn} onPress={() => cleanRoom([room.id])}>
+                            <View style={styles.roomIcon}>
+                                <Icon size={24} color="#fff" />
+                            </View>
+                            <Text style={styles.roomName}>{room.name}</Text>
+                        </Pressable>
+                    );
+                })}
+            </View>
+        </ScrollView>
+    );
+
+    const renderDockTab = () => (
+        <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: 40 }}>
+            {dockEntities.length === 0 ? (
+                <View style={styles.emptyDock}>
+                    <Dock size={48} color="#334155" />
+                    <Text style={styles.emptyDockText}>Keine Dockingstation-Entitäten konfiguriert.</Text>
+                    <Text style={styles.emptyDockHint}>
+                        Gehe zu Einstellungen → Dashboard anpassen → Saugroboter und füge Dockingstation-Entitäten hinzu.
+                    </Text>
+                </View>
+            ) : (
+                <>
+                    <Text style={styles.sectionTitle}>DOCKINGSTATION</Text>
+                    {dockEntities.map((entity: any) => {
+                        const unit = entity.attributes?.unit_of_measurement || '';
+                        const friendlyName = entity.attributes?.friendly_name || entity.entity_id;
+                        const stateValue = `${entity.state}${unit ? ' ' + unit : ''}`;
+
+                        return (
+                            <View key={entity.entity_id} style={styles.dockInfoCard}>
+                                <View style={[styles.dockInfoIcon, { backgroundColor: '#3B82F620' }]}>
+                                    <Gauge size={20} color="#3B82F6" />
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={styles.dockInfoLabel}>{friendlyName}</Text>
+                                    <Text style={styles.dockInfoValue}>{stateValue}</Text>
+                                </View>
+                            </View>
+                        );
+                    })}
+                </>
+            )}
+        </ScrollView>
+    );
 
     return (
         <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -98,52 +171,25 @@ export default function RobiVacuumModal({
                     </Pressable>
                 </View>
 
-                <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: 40 }}>
+                {/* Tab Bar */}
+                <View style={styles.tabBar}>
+                    <Pressable
+                        style={[styles.tab, activeTab === 'cleaning' && styles.tabActive]}
+                        onPress={() => setActiveTab('cleaning')}
+                    >
+                        <Play size={16} color={activeTab === 'cleaning' ? '#3B82F6' : '#64748B'} />
+                        <Text style={[styles.tabText, activeTab === 'cleaning' && styles.tabTextActive]}>Reinigung</Text>
+                    </Pressable>
+                    <Pressable
+                        style={[styles.tab, activeTab === 'dock' && styles.tabActive]}
+                        onPress={() => setActiveTab('dock')}
+                    >
+                        <Dock size={16} color={activeTab === 'dock' ? '#3B82F6' : '#64748B'} />
+                        <Text style={[styles.tabText, activeTab === 'dock' && styles.tabTextActive]}>Dockingstation</Text>
+                    </Pressable>
+                </View>
 
-                    {/* Map View */}
-                    {mapCamera && (
-                        <View style={styles.mapContainer}>
-                            <Image
-                                source={{ uri: getEntityPictureUrl(mapCamera.attributes.entity_picture) }}
-                                style={styles.mapImage}
-                                resizeMode="contain"
-                            />
-                        </View>
-                    )}
-
-                    {/* Quick Actions */}
-                    <View style={styles.controlsRow}>
-                        <Pressable onPress={() => handleAction('start')} style={[styles.controlBtn, { backgroundColor: '#3B82F6' }]}>
-                            <Play size={24} color="#fff" fill="#fff" />
-                        </Pressable>
-                        <Pressable onPress={() => handleAction('pause')} style={[styles.controlBtn, { backgroundColor: '#F59E0B' }]}>
-                            <Pause size={24} color="#fff" fill="#fff" />
-                        </Pressable>
-                        <Pressable onPress={() => handleAction('return_to_base')} style={[styles.controlBtn, { backgroundColor: '#10B981' }]}>
-                            <Home size={24} color="#fff" />
-                        </Pressable>
-                    </View>
-
-                    {/* Rooms Grid */}
-                    <Text style={styles.sectionTitle}>RAUM REINIGEN</Text>
-                    <View style={styles.grid}>
-                        {ROOMS.map((room) => {
-                            const Icon = room.icon;
-                            return (
-                                <Pressable
-                                    key={room.id}
-                                    style={styles.roomBtn}
-                                    onPress={() => cleanRoom([room.id])}
-                                >
-                                    <View style={styles.roomIcon}>
-                                        <Icon size={24} color="#fff" />
-                                    </View>
-                                    <Text style={styles.roomName}>{room.name}</Text>
-                                </Pressable>
-                            );
-                        })}
-                    </View>
-                </ScrollView>
+                {activeTab === 'cleaning' ? renderCleaningTab() : renderDockTab()}
             </View>
         </Modal>
     );
@@ -155,17 +201,16 @@ const styles = StyleSheet.create({
     headerTitle: { color: '#fff', fontSize: 24, fontWeight: 'bold' },
     headerSubtitle: { color: '#94A3B8', fontSize: 14, marginTop: 4 },
     closeButton: { padding: 8, backgroundColor: '#1E293B', borderRadius: 12 },
+
+    tabBar: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#1E293B' },
+    tab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14 },
+    tabActive: { borderBottomWidth: 2, borderBottomColor: '#3B82F6' },
+    tabText: { color: '#64748B', fontSize: 14, fontWeight: '600' },
+    tabTextActive: { color: '#3B82F6' },
+
     content: { flex: 1, padding: 20 },
 
-    mapContainer: {
-        height: 250,
-        backgroundColor: '#0F172A',
-        borderRadius: 20,
-        marginBottom: 24,
-        overflow: 'hidden',
-        borderWidth: 1,
-        borderColor: '#1E293B'
-    },
+    mapContainer: { height: 250, backgroundColor: '#0F172A', borderRadius: 20, marginBottom: 24, overflow: 'hidden', borderWidth: 1, borderColor: '#1E293B' },
     mapImage: { width: '100%', height: '100%' },
 
     controlsRow: { flexDirection: 'row', justifyContent: 'center', gap: 20, marginBottom: 32 },
@@ -175,5 +220,13 @@ const styles = StyleSheet.create({
     grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
     roomBtn: { width: '31%', aspectRatio: 1, backgroundColor: '#1E293B', borderRadius: 16, alignItems: 'center', justifyContent: 'center', padding: 8, borderWidth: 1, borderColor: '#334155' },
     roomIcon: { marginBottom: 8 },
-    roomName: { color: '#E2E8F0', fontSize: 12, fontWeight: '600', textAlign: 'center' }
+    roomName: { color: '#E2E8F0', fontSize: 12, fontWeight: '600', textAlign: 'center' },
+
+    dockInfoCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0F172A', borderRadius: 14, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: '#1E293B', gap: 14 },
+    dockInfoIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+    dockInfoLabel: { color: '#94A3B8', fontSize: 12, fontWeight: '600', marginBottom: 2 },
+    dockInfoValue: { color: '#E2E8F0', fontSize: 16, fontWeight: '700' },
+    emptyDock: { alignItems: 'center', justifyContent: 'center', paddingVertical: 60, gap: 12 },
+    emptyDockText: { color: '#64748B', fontSize: 16, fontWeight: '600' },
+    emptyDockHint: { color: '#475569', fontSize: 13, textAlign: 'center', paddingHorizontal: 40, lineHeight: 20 },
 });
