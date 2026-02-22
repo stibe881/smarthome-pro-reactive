@@ -34,7 +34,7 @@ try {
     getAppIconName = mod.getAppIconName;
     supportsAlternateIcons = mod.supportsAlternateIcons ?? false;
 } catch (e) {
-    console.warn('expo-alternate-app-icons not available (Expo Go?)');
+    // Silently ignore – not available in Expo Go or on web
 }
 
 // App Icon color variants

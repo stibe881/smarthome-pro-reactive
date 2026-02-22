@@ -66,6 +66,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }, []);
 
     const checkBiometricsSupport = async () => {
+        if (Platform.OS === 'web') return;
         const compatible = await LocalAuthentication.hasHardwareAsync();
         const enrolled = await LocalAuthentication.isEnrolledAsync();
         setIsBiometricsSupported(compatible && enrolled);
@@ -117,6 +118,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     };
 
     const authenticateWithBiometrics = async (): Promise<boolean> => {
+        if (Platform.OS === 'web') return false;
         try {
             const result = await LocalAuthentication.authenticateAsync({
                 promptMessage: 'Login mit Face ID / Touch ID',
@@ -201,7 +203,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         if (!user) return;
 
         try {
-            // 1. Read file using new expo-file-system File API
+            // 1. Read file using new expo-file-system File API (native only)
+            if (Platform.OS === 'web') throw new Error('Profilbild-Upload ist nur auf dem Handy verfügbar.');
             const file = new FileSystem.File(uri);
             const arrayBuffer = await file.arrayBuffer();
 
@@ -241,6 +244,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     // Push Notification Token Registration
     const registerForPushNotificationsAsync = async () => {
+        if (Platform.OS === 'web') return undefined;
         let token;
         if (Platform.OS === 'android') {
             await Notifications.setNotificationChannelAsync('default', {

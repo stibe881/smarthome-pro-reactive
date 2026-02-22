@@ -743,27 +743,30 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
             }
         });
 
-        // Define notification handler
-        Notifications.setNotificationHandler({
-            handleNotification: async () => ({
-                shouldShowAlert: true,
-                shouldPlaySound: true,
-                shouldSetBadge: false,
-                shouldShowBanner: true,
-                shouldShowList: true
-            }),
-        });
+        // Define notification handler (native only)
+        let doorbellPushSub: any = null;
+        if (Platform.OS !== 'web') {
+            Notifications.setNotificationHandler({
+                handleNotification: async () => ({
+                    shouldShowAlert: true,
+                    shouldPlaySound: true,
+                    shouldSetBadge: false,
+                    shouldShowBanner: true,
+                    shouldShowList: true
+                }),
+            });
 
-        // Listen for foreground push notifications to trigger Doorbell Popup
-        const doorbellPushSub = Notifications.addNotificationReceivedListener(notification => {
-            const data = notification.request.content.data;
-            const categoryKey = data?.category_key || '';
-            if (categoryKey === 'doorbell' && !isDoorbellRinging) {
-                console.log('🔔 DOORBELL PUSH received in foreground! Showing Popup.');
-                setIsDoorbellRinging(true);
-                setTimeout(() => setIsDoorbellRinging(false), 120000);
-            }
-        });
+            // Listen for foreground push notifications to trigger Doorbell Popup
+            doorbellPushSub = Notifications.addNotificationReceivedListener(notification => {
+                const data = notification.request.content.data;
+                const categoryKey = data?.category_key || '';
+                if (categoryKey === 'doorbell' && !isDoorbellRinging) {
+                    console.log('🔔 DOORBELL PUSH received in foreground! Showing Popup.');
+                    setIsDoorbellRinging(true);
+                    setTimeout(() => setIsDoorbellRinging(false), 120000);
+                }
+            });
+        }
 
         // Register Action Category
         if (Platform.OS !== 'web') {
@@ -874,7 +877,7 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
         return () => {
             serviceRef.current?.disconnect();
             subscription.unsubscribe();
-            doorbellPushSub.remove();
+            doorbellPushSub?.remove();
         };
     }, []);
 
