@@ -30,14 +30,25 @@ export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalP
 
     const activeTab = TABS.find(t => t.key === activeSection)!;
 
-    // Filter available entities by domain (or show all if allEntities)
     const availableEntities = useMemo(() => {
-        return entities
-            .filter(e => activeTab.allEntities ? true : e.entity_id.startsWith(activeTab.domain))
+        let filtered = entities;
+        if (activeSection === 'vacuum') {
+            // Vacuum tab: show vacuums, sensors, and cameras
+            filtered = entities.filter(e =>
+                e.entity_id.startsWith('vacuum.') ||
+                e.entity_id.startsWith('sensor.') ||
+                e.entity_id.startsWith('camera.')
+            );
+        } else if (activeTab.allEntities) {
+            // Keep all
+        } else {
+            filtered = entities.filter(e => e.entity_id.startsWith(activeTab.domain));
+        }
+        return filtered
             .filter(e => e.entity_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 (e.attributes.friendly_name || '').toLowerCase().includes(searchQuery.toLowerCase()))
             .sort((a, b) => (a.attributes.friendly_name || a.entity_id).localeCompare(b.attributes.friendly_name || b.entity_id));
-    }, [entities, activeTab, searchQuery]);
+    }, [entities, activeTab, activeSection, searchQuery]);
 
     // Current config for the section
     const currentMapped = useMemo(() => {
@@ -53,6 +64,32 @@ export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalP
 
     const handleAdd = async (entity: EntityState) => {
         const name = entity.attributes.friendly_name || entity.entity_id;
+
+        // Vacuum tab: detect sensor/camera sub-assignments
+        if (activeSection === 'vacuum') {
+            if (entity.entity_id.startsWith('sensor.')) {
+                setIsSaving(true);
+                try {
+                    await saveDashboardConfig({ ...dashboardConfig, vacuumBatterySensor: entity.entity_id });
+                } catch (e) {
+                    Alert.alert('Fehler', 'Konfiguration konnte nicht gespeichert werden.');
+                } finally {
+                    setIsSaving(false);
+                }
+                return;
+            }
+            if (entity.entity_id.startsWith('camera.')) {
+                setIsSaving(true);
+                try {
+                    await saveDashboardConfig({ ...dashboardConfig, vacuumMapCamera: entity.entity_id });
+                } catch (e) {
+                    Alert.alert('Fehler', 'Konfiguration konnte nicht gespeichert werden.');
+                } finally {
+                    setIsSaving(false);
+                }
+                return;
+            }
+        }
 
         if (activeTab.single) {
             // Single-select: replace the value
@@ -239,6 +276,59 @@ export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalP
                             ))
                         )}
                     </ScrollView>
+
+                    {/* Vacuum Sub-Config: Battery Sensor & Map Camera */}
+                    {activeSection === 'vacuum' && dashboardConfig.vacuum && (
+                        <View style={{ marginTop: 16 }}>
+                            {/* Battery Sensor */}
+                            <Text style={[styles.sectionTitle, { color: colors.subtext }]}>AKKU-SENSOR</Text>
+                            {dashboardConfig.vacuumBatterySensor ? (
+                                <View style={[styles.mappedItem, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={[styles.mappedName, { color: colors.text }]}>
+                                            {entities.find(e => e.entity_id === dashboardConfig.vacuumBatterySensor)?.attributes?.friendly_name || dashboardConfig.vacuumBatterySensor}
+                                        </Text>
+                                        <Text style={[styles.mappedId, { color: colors.subtext }]}>{dashboardConfig.vacuumBatterySensor}</Text>
+                                    </View>
+                                    <Pressable onPress={async () => {
+                                        setIsSaving(true);
+                                        try { await saveDashboardConfig({ ...dashboardConfig, vacuumBatterySensor: null }); }
+                                        catch { } finally { setIsSaving(false); }
+                                    }} style={styles.removeBtn}>
+                                        <Trash2 size={18} color="#EF4444" />
+                                    </Pressable>
+                                </View>
+                            ) : (
+                                <Text style={[styles.emptyText, { color: colors.subtext }]}>
+                                    Kein Akku-Sensor ausgewählt. Wähle unten einen sensor.* aus.
+                                </Text>
+                            )}
+
+                            {/* Map Camera */}
+                            <Text style={[styles.sectionTitle, { color: colors.subtext, marginTop: 16 }]}>KARTEN-KAMERA</Text>
+                            {dashboardConfig.vacuumMapCamera ? (
+                                <View style={[styles.mappedItem, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={[styles.mappedName, { color: colors.text }]}>
+                                            {entities.find(e => e.entity_id === dashboardConfig.vacuumMapCamera)?.attributes?.friendly_name || dashboardConfig.vacuumMapCamera}
+                                        </Text>
+                                        <Text style={[styles.mappedId, { color: colors.subtext }]}>{dashboardConfig.vacuumMapCamera}</Text>
+                                    </View>
+                                    <Pressable onPress={async () => {
+                                        setIsSaving(true);
+                                        try { await saveDashboardConfig({ ...dashboardConfig, vacuumMapCamera: null }); }
+                                        catch { } finally { setIsSaving(false); }
+                                    }} style={styles.removeBtn}>
+                                        <Trash2 size={18} color="#EF4444" />
+                                    </Pressable>
+                                </View>
+                            ) : (
+                                <Text style={[styles.emptyText, { color: colors.subtext }]}>
+                                    Keine Karten-Kamera ausgewählt. Wähle unten eine camera.* aus.
+                                </Text>
+                            )}
+                        </View>
+                    )}
 
                     {/* Search & Available Entities */}
                     <View style={styles.searchSection}>

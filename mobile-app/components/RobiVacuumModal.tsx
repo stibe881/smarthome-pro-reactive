@@ -33,11 +33,20 @@ export default function RobiVacuumModal({
     onClose: () => void;
     entityId?: string;
 }) {
-    const { entities, callService, getEntityPictureUrl } = useHomeAssistant();
+    const { entities, callService, getEntityPictureUrl, dashboardConfig } = useHomeAssistant();
     const [loading, setLoading] = useState(false);
 
     const vacuum = entities.find(e => e.entity_id === entityId);
-    const mapCamera = entities.find(e => e.entity_id === 'camera.robi_map');
+
+    // Use configured camera entity, fallback to auto-detect
+    const mapCamera = dashboardConfig.vacuumMapCamera
+        ? entities.find(e => e.entity_id === dashboardConfig.vacuumMapCamera)
+        : entities.find(e => e.entity_id.startsWith('camera.') && (e.entity_id.includes('map') || e.entity_id.includes('robi')));
+
+    // Use configured battery sensor, fallback to vacuum attribute
+    const batterySensor = dashboardConfig.vacuumBatterySensor
+        ? entities.find(e => e.entity_id === dashboardConfig.vacuumBatterySensor)
+        : null;
 
     const handleAction = (action: string) => {
         callService('vacuum', action, entityId);
@@ -72,7 +81,7 @@ export default function RobiVacuumModal({
 
     if (!vacuum) return null;
 
-    const batteryLevel = vacuum.attributes?.battery_level ?? '?';
+    const batteryLevel = batterySensor?.state ?? vacuum.attributes?.battery_level ?? '?';
     const status = vacuum.attributes?.status || vacuum.state || 'Unbekannt';
 
     return (
