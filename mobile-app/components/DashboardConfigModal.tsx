@@ -207,7 +207,7 @@ export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalP
                                     { backgroundColor: active ? colors.accent : colors.card, borderColor: active ? colors.accent : colors.border }
                                 ]}
                             >
-                                <Icon size={16} color={active ? '#fff' : colors.subtext} />
+                                <Icon size={14} color={active ? '#fff' : colors.subtext} />
                                 <Text style={[s.pillText, { color: active ? '#fff' : colors.subtext }]}>{tab.label}</Text>
                             </Pressable>
                         );
@@ -448,9 +448,9 @@ const s = StyleSheet.create({
     headerClose: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
 
     // Tab Pills
-    tabPills: { flexDirection: 'row', gap: 8, paddingHorizontal: 20, paddingVertical: 8 },
-    pill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 5, borderRadius: 20, borderWidth: 1 },
-    pillText: { fontSize: 13, fontWeight: '600' },
+    tabPills: { flexDirection: 'row', gap: 6, paddingHorizontal: 16, paddingVertical: 6 },
+    pill: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 3, borderRadius: 14, borderWidth: 1 },
+    pillText: { fontSize: 12, fontWeight: '600' },
 
     // Main scroll
     mainScroll: { flex: 1, paddingHorizontal: 20 },
