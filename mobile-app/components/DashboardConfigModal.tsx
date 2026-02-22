@@ -348,8 +348,9 @@ export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalP
                             {/* Dock Station Entities (multi-select) */}
                             <Text style={[styles.sectionTitle, { color: colors.subtext, marginTop: 16 }]}>DOCKINGSTATION-ENTITÄTEN</Text>
                             {(dashboardConfig.vacuumDockEntities || []).length > 0 ? (
-                                (dashboardConfig.vacuumDockEntities as string[]).map((dockId: string) => {
+                                (dashboardConfig.vacuumDockEntities as string[]).map((dockId: string, idx: number) => {
                                     const dockEntity = entities.find(e => e.entity_id === dockId);
+                                    const dockList = dashboardConfig.vacuumDockEntities as string[];
                                     return (
                                         <View key={dockId} style={[styles.mappedItem, { backgroundColor: colors.card, borderColor: colors.border }]}>
                                             <View style={{ flex: 1 }}>
@@ -358,10 +359,32 @@ export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalP
                                                 </Text>
                                                 <Text style={[styles.mappedId, { color: colors.subtext }]}>{dockId}</Text>
                                             </View>
+                                            <View style={styles.reorderBtns}>
+                                                <Pressable onPress={async () => {
+                                                    if (idx === 0) return;
+                                                    const arr = [...dockList];
+                                                    [arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]];
+                                                    setIsSaving(true);
+                                                    try { await saveDashboardConfig({ ...dashboardConfig, vacuumDockEntities: arr }); }
+                                                    catch { } finally { setIsSaving(false); }
+                                                }} style={styles.arrowBtn}>
+                                                    <ChevronUp size={16} color={colors.subtext} />
+                                                </Pressable>
+                                                <Pressable onPress={async () => {
+                                                    if (idx === dockList.length - 1) return;
+                                                    const arr = [...dockList];
+                                                    [arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]];
+                                                    setIsSaving(true);
+                                                    try { await saveDashboardConfig({ ...dashboardConfig, vacuumDockEntities: arr }); }
+                                                    catch { } finally { setIsSaving(false); }
+                                                }} style={styles.arrowBtn}>
+                                                    <ChevronDown size={16} color={colors.subtext} />
+                                                </Pressable>
+                                            </View>
                                             <Pressable onPress={async () => {
                                                 setIsSaving(true);
                                                 try {
-                                                    const updated = (dashboardConfig.vacuumDockEntities as string[]).filter((id: string) => id !== dockId);
+                                                    const updated = dockList.filter((id: string) => id !== dockId);
                                                     await saveDashboardConfig({ ...dashboardConfig, vacuumDockEntities: updated });
                                                 } catch { } finally { setIsSaving(false); }
                                             }} style={styles.removeBtn}>
