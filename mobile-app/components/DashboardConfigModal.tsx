@@ -194,7 +194,7 @@ export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalP
                 </View>
 
                 {/* Tab Pills */}
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.tabPills}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={s.tabPills}>
                     {TABS.map(tab => {
                         const Icon = tab.icon;
                         const active = activeSection === tab.key;
