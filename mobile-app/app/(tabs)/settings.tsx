@@ -66,23 +66,6 @@ const DYNAMIC_ICON_MAP: Record<string, any> = {
 
 import { CloudLightning, House as HomeLucide, Thermometer, Droplets } from 'lucide-react-native';
 
-// Display group mapping: notification type name -> display group
-const NOTIF_DISPLAY_GROUPS: Record<string, string> = {
-    'Waschmaschine': 'Haushalt',
-    'Einkaufsliste': 'Haushalt',
-    'Geschirrspüler': 'Haushalt',
-    'Trockner': 'Haushalt',
-    'Baby weint': 'Babyphone',
-    'Türen UG': 'Security Center',
-    'Temp. und Feuchtigkeit Rack': 'Security Center',
-    'Haustüre wurde geöffnet': 'Security Center',
-    'Geburtstage': 'Geburtstage',
-    'Wetterwarnung': 'Wetter',
-    'Türklingel': 'Türklingel',
-    'Akkustand Ring': 'Akku',
-    'Guten Morgen': 'Tagesablauf',
-};
-
 interface DynamicNotifType {
     id: string;
     name: string;
@@ -90,6 +73,7 @@ interface DynamicNotifType {
     icon: string;
     color: string;
     category_key: string;
+    display_group: string | null;
     is_active: boolean;
 }
 
@@ -116,7 +100,7 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
         if (dynamicTypes.length === 0) return [];
         const groups: Record<string, DynamicNotifType[]> = {};
         for (const dtype of dynamicTypes) {
-            const group = NOTIF_DISPLAY_GROUPS[dtype.name] || 'Babyphone';
+            const group = dtype.display_group || 'Andere';
             if (!groups[group]) groups[group] = [];
             groups[group].push(dtype);
         }
@@ -155,7 +139,7 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
             // Fetch active notification types
             const { data: types, error: typesError } = await supabase
                 .from('notification_types')
-                .select('id, name, description, icon, color, category_key, is_active')
+                .select('id, name, description, icon, color, category_key, display_group, is_active')
                 .eq('is_active', true)
                 .order('created_at', { ascending: true });
 

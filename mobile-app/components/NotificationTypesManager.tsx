@@ -42,6 +42,17 @@ const SOUND_OPTIONS = [
     { value: null, label: 'Stumm' },
 ];
 
+const DISPLAY_GROUP_OPTIONS = [
+    'Akku',
+    'Babyphone',
+    'Geburtstage',
+    'Haushalt',
+    'Security Center',
+    'Tagesablauf',
+    'Türklingel',
+    'Wetter',
+];
+
 interface NotificationType {
     id: string;
     household_id: string;
@@ -50,6 +61,7 @@ interface NotificationType {
     icon: string;
     color: string;
     category_key: string;
+    display_group: string | null;
     is_active: boolean;
     is_critical: boolean;
     sound: string | null;
@@ -79,6 +91,7 @@ export const NotificationTypesManager = ({ visible, onClose }: { visible: boolea
     const [editorCategoryKey, setEditorCategoryKey] = useState('');
     const [editorIsCritical, setEditorIsCritical] = useState(false);
     const [editorSound, setEditorSound] = useState<string | null>('default');
+    const [editorDisplayGroup, setEditorDisplayGroup] = useState('Haushalt');
     const [saving, setSaving] = useState(false);
     const [playingSound, setPlayingSound] = useState<string | null>(null);
 
@@ -117,6 +130,7 @@ export const NotificationTypesManager = ({ visible, onClose }: { visible: boolea
             setEditorCategoryKey(type.category_key);
             setEditorIsCritical(type.is_critical || false);
             setEditorSound(type.sound ?? 'default');
+            setEditorDisplayGroup(type.display_group || 'Haushalt');
         } else {
             setEditingType(null);
             setEditorName('');
@@ -126,6 +140,7 @@ export const NotificationTypesManager = ({ visible, onClose }: { visible: boolea
             setEditorCategoryKey('');
             setEditorIsCritical(false);
             setEditorSound('default');
+            setEditorDisplayGroup('Haushalt');
         }
         setShowEditor(true);
     };
@@ -200,6 +215,7 @@ export const NotificationTypesManager = ({ visible, onClose }: { visible: boolea
                 icon: editorIcon,
                 color: editorColor,
                 category_key: categoryKey,
+                display_group: editorDisplayGroup,
                 is_critical: editorIsCritical,
                 sound: editorSound,
             };
@@ -432,6 +448,31 @@ export const NotificationTypesManager = ({ visible, onClose }: { visible: boolea
                             />
                             <Text style={[s.hint, { color: colors.subtext }]}>
                                 Wird in der HA-Automation als category_key verwendet
+                            </Text>
+
+                            <Text style={[s.label, { color: colors.subtext }]}>Kategorie *</Text>
+                            <View style={s.iconGrid}>
+                                {DISPLAY_GROUP_OPTIONS.map(g => {
+                                    const isSelected = editorDisplayGroup === g;
+                                    return (
+                                        <Pressable
+                                            key={g}
+                                            onPress={() => setEditorDisplayGroup(g)}
+                                            style={[
+                                                s.iconOption,
+                                                { backgroundColor: colors.card, borderColor: isSelected ? colors.accent : colors.border },
+                                                isSelected && { borderWidth: 2 }
+                                            ]}
+                                        >
+                                            <Text style={[s.iconOptionLabel, { color: isSelected ? colors.text : colors.subtext }]}>
+                                                {g}
+                                            </Text>
+                                        </Pressable>
+                                    );
+                                })}
+                            </View>
+                            <Text style={[s.hint, { color: colors.subtext }]}>
+                                Bestimmt unter welcher Gruppe die Benachrichtigung in den Einstellungen angezeigt wird
                             </Text>
 
                             <Text style={[s.label, { color: colors.subtext }]}>Icon</Text>
