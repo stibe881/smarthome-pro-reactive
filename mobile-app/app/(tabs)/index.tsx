@@ -1173,13 +1173,35 @@ export default function Dashboard() {
                 <View style={styles.header}>
                     <View>
                         <Text style={[styles.greeting, { color: colors.text }]}>{getGreeting()}</Text>
-                        <Text style={[styles.dateText, { color: colors.subtext }]}>
-                            {new Date().toLocaleDateString('de-DE', {
-                                weekday: 'long',
-                                day: 'numeric',
-                                month: 'long'
-                            })}
-                        </Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                            <Text style={[styles.dateText, { color: colors.subtext, marginTop: 0 }]}>
+                                {new Date().toLocaleDateString('de-DE', {
+                                    weekday: 'long',
+                                    day: 'numeric',
+                                    month: 'long'
+                                })}
+                            </Text>
+                            {!isTablet && weatherComposite && (
+                                <Pressable
+                                    onPress={() => setShowWeatherForecast(true)}
+                                    style={[
+                                        styles.tempBadge,
+                                        isWeatherWarning
+                                            ? { backgroundColor: colors.error + '33', borderWidth: 1, borderColor: colors.error }
+                                            : { backgroundColor: colors.success + '26', borderWidth: 0 }
+                                    ]}
+                                >
+                                    <WeatherIcon size={14} color={isWeatherWarning ? colors.error : colors.success} />
+                                    <Text
+                                        style={[styles.tempText, isWeatherWarning ? { color: colors.error } : { color: colors.success }]}
+                                        numberOfLines={1}
+                                        ellipsizeMode="tail"
+                                    >
+                                        {weatherComposite.attributes.temperature}° {getWeatherText(weatherComposite.state)}
+                                    </Text>
+                                </Pressable>
+                            )}
+                        </View>
                     </View>
                     {isTablet && (
                         <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
@@ -1188,7 +1210,7 @@ export default function Dashboard() {
                     )}
 
                     <View style={styles.headerRight}>
-                        {weatherComposite && (
+                        {isTablet && weatherComposite && (
                             <Pressable
                                 onPress={() => setShowWeatherForecast(true)}
                                 style={[
@@ -1200,12 +1222,12 @@ export default function Dashboard() {
                             >
                                 <WeatherIcon size={14} color={isWeatherWarning ? colors.error : colors.success} />
                                 <Text
-                                    style={[styles.tempText, isWeatherWarning ? { color: colors.error } : { color: colors.success }, { maxWidth: width < 380 ? undefined : 70 }]}
+                                    style={[styles.tempText, isWeatherWarning ? { color: colors.error } : { color: colors.success }]}
                                     numberOfLines={1}
                                     ellipsizeMode="tail"
                                 >
                                     {weatherComposite.attributes.temperature}°
-                                    {width >= 380 && <Text style={{ fontWeight: '400', opacity: 0.8 }}> {getWeatherText(weatherComposite.state)}</Text>}
+                                    <Text style={{ fontWeight: '400', opacity: 0.8 }}> {getWeatherText(weatherComposite.state)}</Text>
                                 </Text>
                             </Pressable>
                         )}

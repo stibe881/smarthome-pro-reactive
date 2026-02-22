@@ -1011,30 +1011,39 @@ const EntitySelector = ({ label, value, entities, onSelect, colors }: { label: s
     );
 };
 
-interface SettingsRowProps {
-    icon: React.ReactNode;
-    iconColor: string;
-    label: string;
-    value?: string;
-    onPress?: () => void;
-    showChevron?: boolean;
-    isLast?: boolean;
-    colors: any;
-}
+// Collapsible section – defined at module scope to preserve expand/collapse state across re-renders
+const SettingsSection = ({ title, children, colors, defaultExpanded = false }: any) => {
+    const [expanded, setExpanded] = useState(defaultExpanded);
+    return (
+        <View style={styles.section}>
+            <Pressable
+                onPress={() => setExpanded(!expanded)}
+                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 4 }}
+            >
+                <Text style={[styles.sectionTitle, { color: colors.subtext, marginBottom: 0 }]}>{title}</Text>
+                <ChevronRight
+                    size={18}
+                    color={colors.subtext}
+                    style={{ transform: [{ rotate: expanded ? '90deg' : '0deg' }] }}
+                />
+            </Pressable>
+            {expanded && (
+                <View style={[styles.sectionContent, { backgroundColor: colors.card, borderColor: colors.border, marginTop: 10 }]}>
+                    {children}
+                </View>
+            )}
+        </View>
+    );
+};
 
-const SettingsRow = ({
-    icon,
-    iconColor,
-    label,
-    value,
-    onPress,
-    showChevron = false,
-    isLast = false,
-    colors
-}: SettingsRowProps) => (
+const SettingsRow = ({ icon, label, value, onPress, showChevron, isLast, iconColor, colors }: any) => (
     <Pressable
         onPress={onPress}
-        style={[styles.row, !isLast && { borderBottomWidth: 1, borderBottomColor: colors.border }, { backgroundColor: colors.card }]}
+        style={({ pressed }) => [
+            styles.row,
+            !isLast && styles.rowBorder,
+            { backgroundColor: pressed ? colors.background : 'transparent' }
+        ]}
     >
         <View style={[styles.iconContainer, { backgroundColor: iconColor + '20' }]}>
             {icon}
@@ -1043,7 +1052,7 @@ const SettingsRow = ({
             <Text style={[styles.rowLabel, { color: colors.text }]}>{label}</Text>
             {value && <Text style={[styles.rowValue, { color: colors.subtext }]}>{value}</Text>}
         </View>
-        {showChevron && <ChevronRight size={16} color={colors.subtext} />}
+        {showChevron && <ChevronRight size={20} color={colors.subtext} />}
     </Pressable>
 );
 
@@ -1260,50 +1269,7 @@ export default function Settings() {
 
 
 
-    // --- Components ---
-    const SettingsSection = ({ title, children, colors, defaultExpanded = false }: any) => {
-        const [expanded, setExpanded] = useState(defaultExpanded);
-        return (
-            <View style={styles.section}>
-                <Pressable
-                    onPress={() => setExpanded(!expanded)}
-                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 4 }}
-                >
-                    <Text style={[styles.sectionTitle, { color: colors.subtext, marginBottom: 0 }]}>{title}</Text>
-                    <ChevronRight
-                        size={18}
-                        color={colors.subtext}
-                        style={{ transform: [{ rotate: expanded ? '90deg' : '0deg' }] }}
-                    />
-                </Pressable>
-                {expanded && (
-                    <View style={[styles.sectionContent, { backgroundColor: colors.card, borderColor: colors.border, marginTop: 10 }]}>
-                        {children}
-                    </View>
-                )}
-            </View>
-        );
-    };
-
-    const SettingsRow = ({ icon, label, value, onPress, showChevron, isLast, iconColor, colors }: any) => (
-        <Pressable
-            onPress={onPress}
-            style={({ pressed }) => [
-                styles.row,
-                !isLast && styles.rowBorder,
-                { backgroundColor: pressed ? colors.background : 'transparent' }
-            ]}
-        >
-            <View style={[styles.iconContainer, { backgroundColor: iconColor + '20' }]}>
-                {icon}
-            </View>
-            <View style={styles.rowContent}>
-                <Text style={[styles.rowLabel, { color: colors.text }]}>{label}</Text>
-                {value && <Text style={[styles.rowValue, { color: colors.subtext }]}>{value}</Text>}
-            </View>
-            {showChevron && <ChevronRight size={20} color={colors.subtext} />}
-        </Pressable>
-    );
+    // SettingsSection & SettingsRow are now defined at module scope (above) to prevent auto-collapse
 
     const ThemeCard = ({ itemTheme }: { itemTheme: ThemeType }) => {
         const isActive = theme === itemTheme;
@@ -1699,30 +1665,65 @@ export default function Settings() {
                             />
                         </SettingsSection>
 
-                        {/* App Settings */}
-                        <SettingsSection title="App" colors={colors}>
-                            <SettingsRow
-                                icon={<Zap size={20} color={colors.accent} />}
-                                iconColor={colors.accent}
-                                label="Automationen"
-                                showChevron
+                        {/* Automationen – standalone card like HA */}
+                        <View style={styles.section}>
+                            <Pressable
                                 onPress={() => setAutomationsModalVisible(true)}
-                                colors={colors}
-                            />
+                                style={[styles.sectionContent, {
+                                    backgroundColor: colors.card,
+                                    borderColor: colors.border,
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    padding: 16,
+                                    justifyContent: 'space-between'
+                                }]}
+                            >
+                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                    <View style={[styles.iconContainer, { backgroundColor: colors.accent + '20' }]}>
+                                        <Zap size={20} color={colors.accent} />
+                                    </View>
+                                    <Text style={[styles.rowLabel, { color: colors.text }]}>Automationen</Text>
+                                </View>
+                                <ChevronRight size={20} color={colors.subtext} />
+                            </Pressable>
+                        </View>
+
+                        {/* Benachrichtigungen – standalone card like HA */}
+                        <View style={styles.section}>
+                            <Pressable
+                                onPress={() => setNotificationModalVisible(true)}
+                                style={[styles.sectionContent, {
+                                    backgroundColor: colors.card,
+                                    borderColor: colors.border,
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    padding: 16,
+                                    justifyContent: 'space-between'
+                                }]}
+                            >
+                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                    <View style={[styles.iconContainer, { backgroundColor: (notificationSettings.enabled ? colors.accent : colors.subtext) + '20' }]}>
+                                        <Bell size={20} color={notificationSettings.enabled ? colors.accent : colors.subtext} />
+                                    </View>
+                                    <View>
+                                        <Text style={[styles.rowLabel, { color: colors.text }]}>Benachrichtigungen</Text>
+                                        <Text style={[styles.rowValue, { color: notificationSettings.enabled ? colors.success : colors.subtext, marginTop: 2 }]}>
+                                            {notificationSettings.enabled ? 'Aktiv' : 'Inaktiv'}
+                                        </Text>
+                                    </View>
+                                </View>
+                                <ChevronRight size={20} color={colors.subtext} />
+                            </Pressable>
+                        </View>
+
+                        {/* Weitere App-Einstellungen */}
+                        <SettingsSection title="Weiteres" colors={colors}>
                             <SettingsRow
                                 icon={<LayoutGrid size={20} color={colors.accent} />}
                                 iconColor={colors.accent}
                                 label="Widgets"
                                 showChevron
                                 onPress={() => setWidgetSettingsVisible(true)}
-                                colors={colors}
-                            />
-                            <SettingsRow
-                                icon={<Bell size={20} color={notificationSettings.enabled ? colors.accent : colors.subtext} />}
-                                iconColor={notificationSettings.enabled ? colors.accent : colors.subtext}
-                                label="Benachrichtigungen"
-                                showChevron
-                                onPress={() => setNotificationModalVisible(true)}
                                 colors={colors}
                             />
                             {userRole === 'admin' && (

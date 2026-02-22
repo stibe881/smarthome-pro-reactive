@@ -15,19 +15,25 @@ export default function WeatherForecastModal({ visible, onClose, weatherEntity, 
     const { fetchWeatherForecast } = useHomeAssistant();
     const { colors } = useTheme();
     const [forecast, setForecast] = useState<any[]>([]);
+    const [hourlyForecast, setHourlyForecast] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
 
     // Fetch forecast when modal opens
     useEffect(() => {
         if (visible && weatherEntity?.entity_id) {
             setLoading(true);
-            fetchWeatherForecast(weatherEntity.entity_id, 'daily')
-                .then((data) => {
-                    setForecast(data || []);
+            Promise.all([
+                fetchWeatherForecast(weatherEntity.entity_id, 'daily'),
+                fetchWeatherForecast(weatherEntity.entity_id, 'hourly').catch(() => []),
+            ])
+                .then(([dailyData, hourlyData]) => {
+                    setForecast(dailyData || []);
+                    setHourlyForecast(hourlyData || []);
                 })
                 .catch((err) => {
                     console.error('Failed to fetch forecast:', err);
                     setForecast([]);
+                    setHourlyForecast([]);
                 })
                 .finally(() => setLoading(false));
         }
@@ -61,6 +67,18 @@ export default function WeatherForecastModal({ visible, onClose, weatherEntity, 
         const date = new Date(dateStr);
         return date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
     };
+
+    const getHourLabel = (dateStr: string) => {
+        const date = new Date(dateStr);
+        return date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+    };
+
+    // Filter hourly forecast to today only
+    const todayHourly = hourlyForecast.filter(h => {
+        const d = new Date(h.datetime);
+        const now = new Date();
+        return d.getDate() === now.getDate() && d.getMonth() === now.getMonth() && d >= now;
+    });
 
     const getConditionText = (state: string) => {
         const mapping: Record<string, string> = {
@@ -171,6 +189,33 @@ export default function WeatherForecastModal({ visible, onClose, weatherEntity, 
                                 );
                             })()}
                         </View>
+
+                        {/* Hourly Forecast (compact, horizontal scroll) */}
+                        {todayHourly.length > 0 && (
+                            <>
+                                <Text style={[styles.sectionTitle, { color: colors.text }]}>Heute</Text>
+                                <ScrollView
+                                    horizontal
+                                    showsHorizontalScrollIndicator={false}
+                                    style={{ marginBottom: 24 }}
+                                    contentContainerStyle={{ gap: 10 }}
+                                >
+                                    {todayHourly.map((hour: any, idx: number) => {
+                                        const HIcon = getIcon(hour.condition);
+                                        return (
+                                            <View key={idx} style={[styles.hourlyCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                                                <Text style={[styles.hourlyTime, { color: colors.subtext }]}>{getHourLabel(hour.datetime)}</Text>
+                                                <HIcon size={22} color={colors.accent} />
+                                                <Text style={[styles.hourlyTemp, { color: colors.text }]}>{Math.round(hour.temperature)}°</Text>
+                                                {hour.precipitation_probability != null && (
+                                                    <Text style={[styles.hourlyRain, { color: colors.subtext }]}>{hour.precipitation_probability}%</Text>
+                                                )}
+                                            </View>
+                                        );
+                                    })}
+                                </ScrollView>
+                            </>
+                        )}
 
                         <Text style={[styles.sectionTitle, { color: colors.text }]}>7-Tage Vorschau</Text>
 
@@ -285,5 +330,18 @@ const styles = StyleSheet.create({
         marginBottom: 24
     },
     warningTitle: { color: '#EF4444', fontWeight: 'bold', fontSize: 14, marginBottom: 4, letterSpacing: 1 },
-    warningText: { color: '#FECACA', fontSize: 13, lineHeight: 18 }
+    warningText: { color: '#FECACA', fontSize: 13, lineHeight: 18 },
+
+    hourlyCard: {
+        alignItems: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: 14,
+        borderRadius: 16,
+        borderWidth: 1,
+        gap: 6,
+        minWidth: 72,
+    },
+    hourlyTime: { fontSize: 12, fontWeight: '600' },
+    hourlyTemp: { fontSize: 16, fontWeight: '700' },
+    hourlyRain: { fontSize: 11, opacity: 0.7 }
 });

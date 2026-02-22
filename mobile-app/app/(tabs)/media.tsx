@@ -15,12 +15,11 @@ import { spotifyApi, SpotifyDevice } from '../../services/spotifyApi';
 import { OptimisticVolumeSlider } from '../../components/OptimisticVolumeSlider';
 
 import { MEDIA_PLAYER_CONFIG } from '../../config/mediaPlayers';
-import { PLAYER_TYPES_KEY, PlayerType } from '../../components/MediaPlayerSelectionModal';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { PlayerType } from '../../components/MediaPlayerSelectionModal';
 import { MediaPlayerSelectionModal } from '../../components/MediaPlayerSelectionModal';
 
 export default function Media() {
-    const { entities, isConnected, isConnecting, callService, getEntityPictureUrl, browseMedia } = useHomeAssistant();
+    const { entities, isConnected, isConnecting, callService, getEntityPictureUrl, browseMedia, dashboardConfig } = useHomeAssistant();
     const { colors } = useTheme();
     const { userRole } = useAuth();
     const { width } = useWindowDimensions();
@@ -69,37 +68,23 @@ export default function Media() {
     const [playerTypes, setPlayerTypes] = useState<Record<string, PlayerType>>({});
     const [showSelectionModal, setShowSelectionModal] = useState(false);
 
-    // Initial Load
+    // Sync from dashboardConfig (Supabase tenant storage)
     useEffect(() => {
-        loadVisiblePlayers();
-    }, []);
-
-    const loadVisiblePlayers = async () => {
-        try {
-            const [visibleStored, namesStored, typesStored] = await Promise.all([
-                AsyncStorage.getItem('@smarthome_visible_media_players'),
-                AsyncStorage.getItem('@smarthome_media_player_names'),
-                AsyncStorage.getItem(PLAYER_TYPES_KEY),
-            ]);
-
-            if (visibleStored) {
-                setVisiblePlayers(JSON.parse(visibleStored));
-            } else {
-                const whitelist = Object.keys(MEDIA_PLAYER_CONFIG);
-                setVisiblePlayers(whitelist);
-            }
-
-            if (namesStored) {
-                setCustomNames(JSON.parse(namesStored));
-            }
-
-            if (typesStored) {
-                setPlayerTypes(JSON.parse(typesStored));
-            }
-        } catch (e) {
-            console.warn('Failed to load visible players', e);
+        const config = dashboardConfig?.mediaPlayerConfig;
+        if (config?.visiblePlayers) {
+            setVisiblePlayers(config.visiblePlayers);
+        } else {
+            // Fallback: use hardcoded whitelist
+            const whitelist = Object.keys(MEDIA_PLAYER_CONFIG);
+            setVisiblePlayers(whitelist);
         }
-    };
+        if (config?.customNames) {
+            setCustomNames(config.customNames);
+        }
+        if (config?.playerTypes) {
+            setPlayerTypes(config.playerTypes);
+        }
+    }, [dashboardConfig?.mediaPlayerConfig]);
 
     useEffect(() => {
         if (response?.type === 'success') {
@@ -928,7 +913,6 @@ export default function Media() {
             <MediaPlayerSelectionModal
                 visible={showSelectionModal}
                 onClose={() => setShowSelectionModal(false)}
-                onUpdateSelection={loadVisiblePlayers}
             />
         </View>
     );

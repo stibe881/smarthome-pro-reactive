@@ -31,8 +31,8 @@ export const THEME_DISPLAY_NAMES: Record<ThemeType, string> = {
     cozy: 'Cozy',
     fresh: 'Fresh',
     elegant: 'Elegant',
-    rose: 'Rose (Dark)',
-    blossom: 'Blossom (Light)',
+    rose: 'Dark Pink',
+    blossom: 'Light Pink',
 };
 
 // Theme categories
@@ -141,32 +141,32 @@ export const THEMES: Record<ThemeType, ThemeColors> = {
         backgroundImage: require('../assets/themes/light_elegant.png'),
     },
     rose: {
-        background: '#2a0a10', // Dark Wine
-        card: '#3d0f1b',       // Deep Rose
-        text: '#fce7f3',       // Light Pink
-        subtext: '#db2777',    // Pink 600
-        accent: '#ec4899',     // Pink 500
-        border: '#831843',     // Pink 900
-        success: '#f472b6',
+        background: '#1a0011',     // Very dark magenta-black
+        card: '#2d0020',           // Deep magenta
+        text: '#ffe0f0',           // Light pink white
+        subtext: '#FF69B4',        // Hot Pink
+        accent: '#FF1493',         // Deep Pink (knalliges pink)
+        border: '#5c0040',         // Dark magenta border
+        success: '#FF69B4',
         error: '#ef4444',
         warning: '#f59e0b',
-        tint: '#ec4899',
-        tabBar: '#2a0a10',
-        backgroundImage: require('../assets/themes/luxury.png'), // Reuse luxury for now or null
+        tint: '#FF1493',
+        tabBar: '#1a0011',
+        backgroundImage: require('../assets/themes/dark-pink.png'),
     },
     blossom: {
-        background: '#fff1f2', // Rose 50
-        card: '#ffffff',
-        text: '#881337',       // Rose 900
-        subtext: '#9f1239',    // Rose 800
-        accent: '#be185d',     // Rose 700
-        border: '#fda4af',     // Rose 300
+        background: '#FFF0F5',     // Lavender Blush
+        card: '#FFFFFF',
+        text: '#99004d',           // Deep pink text
+        subtext: '#CC0066',        // Vivid pink
+        accent: '#FF1493',         // Deep Pink (knalliges pink)
+        border: '#FFB6C1',         // Light Pink border
         success: '#10b981',
         error: '#ef4444',
         warning: '#f59e0b',
-        tint: '#be185d',
-        tabBar: '#fff1f2',
-        backgroundImage: require('../assets/themes/light_elegant.png'), // Reuse elegant for now
+        tint: '#FF1493',
+        tabBar: '#FFF0F5',
+        backgroundImage: require('../assets/themes/light-pink.png'),
     },
 };
 

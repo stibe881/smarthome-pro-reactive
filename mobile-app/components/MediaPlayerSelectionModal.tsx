@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, Modal, StyleSheet, Pressable, ScrollView, ActivityIndicator, Switch, TextInput } from 'react-native';
 import { X, Speaker, Tv, Users as UsersIcon, Pencil, Check } from 'lucide-react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useHomeAssistant } from '../contexts/HomeAssistantContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { MEDIA_PLAYER_CONFIG } from '../config/mediaPlayers';
@@ -14,8 +13,7 @@ interface MediaPlayerSelectionModalProps {
     onUpdateSelection?: () => void;
 }
 
-const VISIBLE_PLAYERS_KEY = '@smarthome_visible_media_players';
-const CUSTOM_NAMES_KEY = '@smarthome_media_player_names';
+// Keep exported keys for backward compatibility during migration
 export const PLAYER_TYPES_KEY = '@smarthome_media_player_types';
 
 const TYPE_OPTIONS: { value: PlayerType; label: string; icon: any; color: string }[] = [
@@ -25,7 +23,7 @@ const TYPE_OPTIONS: { value: PlayerType; label: string; icon: any; color: string
 ];
 
 export function MediaPlayerSelectionModal({ visible, onClose, onUpdateSelection }: MediaPlayerSelectionModalProps) {
-    const { entities } = useHomeAssistant();
+    const { entities, dashboardConfig, saveDashboardConfig } = useHomeAssistant();
     const { colors } = useTheme();
     const [visiblePlayers, setVisiblePlayers] = useState<string[]>([]);
     const [loading, setLoading] = useState(true);
@@ -42,25 +40,22 @@ export function MediaPlayerSelectionModal({ visible, onClose, onUpdateSelection 
 
     const loadData = async () => {
         try {
-            const [visibleStored, namesStored, typesStored] = await Promise.all([
-                AsyncStorage.getItem(VISIBLE_PLAYERS_KEY),
-                AsyncStorage.getItem(CUSTOM_NAMES_KEY),
-                AsyncStorage.getItem(PLAYER_TYPES_KEY),
-            ]);
+            const config = dashboardConfig?.mediaPlayerConfig;
 
-            if (visibleStored) {
-                setVisiblePlayers(JSON.parse(visibleStored));
+            if (config?.visiblePlayers) {
+                setVisiblePlayers(config.visiblePlayers);
             } else {
+                // Default: show all available players
                 const allPlayers = entities.filter(e => e.entity_id.startsWith('media_player.'));
                 setVisiblePlayers(allPlayers.map(e => e.entity_id));
             }
 
-            if (namesStored) {
-                setCustomNames(JSON.parse(namesStored));
+            if (config?.customNames) {
+                setCustomNames(config.customNames);
             }
 
-            if (typesStored) {
-                setPlayerTypes(JSON.parse(typesStored));
+            if (config?.playerTypes) {
+                setPlayerTypes(config.playerTypes);
             } else {
                 // Migrate from hardcoded config as initial defaults
                 const migrated: Record<string, PlayerType> = {};
@@ -72,7 +67,6 @@ export function MediaPlayerSelectionModal({ visible, onClose, onUpdateSelection 
                     }
                 }
                 setPlayerTypes(migrated);
-                await AsyncStorage.setItem(PLAYER_TYPES_KEY, JSON.stringify(migrated));
             }
         } catch (e) {
             console.warn('Failed to load player data', e);
@@ -81,17 +75,32 @@ export function MediaPlayerSelectionModal({ visible, onClose, onUpdateSelection 
         }
     };
 
+    // Helper to persist current state to Supabase dashboardConfig
+    const persistConfig = async (
+        newVisible?: string[],
+        newNames?: Record<string, string>,
+        newTypes?: Record<string, PlayerType>
+    ) => {
+        const mediaPlayerConfig = {
+            visiblePlayers: newVisible ?? visiblePlayers,
+            customNames: newNames ?? customNames,
+            playerTypes: newTypes ?? playerTypes,
+        };
+        const updatedConfig = { ...dashboardConfig, mediaPlayerConfig };
+        await saveDashboardConfig(updatedConfig);
+    };
+
     const saveCustomName = async (entityId: string, newName: string) => {
         const updatedNames = { ...customNames, [entityId]: newName };
         setCustomNames(updatedNames);
-        await AsyncStorage.setItem(CUSTOM_NAMES_KEY, JSON.stringify(updatedNames));
         setEditingId(null);
+        await persistConfig(undefined, updatedNames, undefined);
         if (onUpdateSelection) onUpdateSelection();
     };
 
     const saveVisiblePlayers = async (newVisible: string[]) => {
         setVisiblePlayers(newVisible);
-        await AsyncStorage.setItem(VISIBLE_PLAYERS_KEY, JSON.stringify(newVisible));
+        await persistConfig(newVisible, undefined, undefined);
         if (onUpdateSelection) onUpdateSelection();
     };
 
@@ -106,7 +115,7 @@ export function MediaPlayerSelectionModal({ visible, onClose, onUpdateSelection 
     const setPlayerType = async (entityId: string, type: PlayerType) => {
         const updated = { ...playerTypes, [entityId]: type };
         setPlayerTypes(updated);
-        await AsyncStorage.setItem(PLAYER_TYPES_KEY, JSON.stringify(updated));
+        await persistConfig(undefined, undefined, updated);
         if (onUpdateSelection) onUpdateSelection();
     };
 
