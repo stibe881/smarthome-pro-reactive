@@ -1261,14 +1261,29 @@ export default function Settings() {
 
 
     // --- Components ---
-    const SettingsSection = ({ title, children, colors }: any) => (
-        <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.subtext }]}>{title}</Text>
-            <View style={[styles.sectionContent, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                {children}
+    const SettingsSection = ({ title, children, colors, defaultExpanded = false }: any) => {
+        const [expanded, setExpanded] = useState(defaultExpanded);
+        return (
+            <View style={styles.section}>
+                <Pressable
+                    onPress={() => setExpanded(!expanded)}
+                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 4 }}
+                >
+                    <Text style={[styles.sectionTitle, { color: colors.subtext, marginBottom: 0 }]}>{title}</Text>
+                    <ChevronRight
+                        size={18}
+                        color={colors.subtext}
+                        style={{ transform: [{ rotate: expanded ? '90deg' : '0deg' }] }}
+                    />
+                </Pressable>
+                {expanded && (
+                    <View style={[styles.sectionContent, { backgroundColor: colors.card, borderColor: colors.border, marginTop: 10 }]}>
+                        {children}
+                    </View>
+                )}
             </View>
-        </View>
-    );
+        );
+    };
 
     const SettingsRow = ({ icon, label, value, onPress, showChevron, isLast, iconColor, colors }: any) => (
         <Pressable
