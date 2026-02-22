@@ -138,7 +138,18 @@ export default function RobiVacuumModal({
                     {dockEntities.map((entity: any) => {
                         const unit = entity.attributes?.unit_of_measurement || '';
                         const friendlyName = entity.attributes?.friendly_name || entity.entity_id;
-                        const stateValue = `${entity.state}${unit ? ' ' + unit : ''}`;
+
+                        // Translate binary_sensor states to human-readable German
+                        let displayState = entity.state;
+                        if (entity.entity_id.startsWith('binary_sensor.')) {
+                            const dc = entity.attributes?.device_class;
+                            if (dc === 'problem') displayState = entity.state === 'off' ? 'OK' : 'Problem';
+                            else if (dc === 'moisture') displayState = entity.state === 'off' ? 'Trocken' : 'Feucht';
+                            else if (dc === 'connectivity') displayState = entity.state === 'on' ? 'Verbunden' : 'Getrennt';
+                            else if (dc === 'plug' || dc === 'power') displayState = entity.state === 'on' ? 'Eingesteckt' : 'Nicht eingesteckt';
+                            else displayState = entity.state === 'on' ? 'An' : 'Aus';
+                        }
+                        const stateValue = `${displayState}${unit ? ' ' + unit : ''}`;
 
                         return (
                             <View key={entity.entity_id} style={styles.dockInfoCard}>
