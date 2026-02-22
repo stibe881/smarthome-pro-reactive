@@ -296,7 +296,7 @@ export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalP
 
                     {/* Vacuum Sub-Config: Battery Sensor & Map Camera */}
                     {activeSection === 'vacuum' && dashboardConfig.vacuum && (
-                        <View style={{ marginTop: 16 }}>
+                        <ScrollView style={{ marginTop: 16, maxHeight: 200 }} nestedScrollEnabled>
                             {/* Battery Sensor */}
                             <Text style={[styles.sectionTitle, { color: colors.subtext }]}>AKKU-SENSOR</Text>
                             {dashboardConfig.vacuumBatterySensor ? (
@@ -375,7 +375,7 @@ export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalP
                                     Keine Dockingstation-Entitäten ausgewählt. Wähle unten beliebige Entities aus.
                                 </Text>
                             )}
-                        </View>
+                        </ScrollView>
                     )}
 
                     {/* Search & Available Entities */}
