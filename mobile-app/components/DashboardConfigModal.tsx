@@ -37,7 +37,8 @@ export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalP
             filtered = entities.filter(e =>
                 e.entity_id.startsWith('vacuum.') ||
                 e.entity_id.startsWith('sensor.') ||
-                e.entity_id.startsWith('camera.')
+                e.entity_id.startsWith('camera.') ||
+                e.entity_id.startsWith('image.')
             );
         } else if (activeTab.allEntities) {
             // Keep all
@@ -78,7 +79,7 @@ export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalP
                 }
                 return;
             }
-            if (entity.entity_id.startsWith('camera.')) {
+            if (entity.entity_id.startsWith('camera.') || entity.entity_id.startsWith('image.')) {
                 setIsSaving(true);
                 try {
                     await saveDashboardConfig({ ...dashboardConfig, vacuumMapCamera: entity.entity_id });
