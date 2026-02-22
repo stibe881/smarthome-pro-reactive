@@ -14,7 +14,7 @@ interface AuthContextType {
     isLoading: boolean;
     avatarUrl: string | null;
     updateProfilePicture: (uri: string) => Promise<void>;
-    userRole: 'admin' | 'user' | null;
+    userRole: 'admin' | 'user' | 'guest' | null;
     isBiometricsSupported: boolean;
     isBiometricsEnabled: boolean;
     toggleBiometrics: () => Promise<void>;
@@ -53,7 +53,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
     const [session, setSession] = useState<Session | null>(null);
     const [isLoading, setIsLoading] = useState(true);
-    const [userRole, setUserRole] = useState<'admin' | 'user' | null>(null);
+    const [userRole, setUserRole] = useState<'admin' | 'user' | 'guest' | null>(null);
     const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
     const [mustChangePassword, setMustChangePassword] = useState(false);
     const [needsSetup, setNeedsSetup] = useState(false);
@@ -160,6 +160,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     // Function to fetch user role
     const fetchUserRole = async (userId: string) => {
+        // Check family_members first for guest role
+        const { data: memberData } = await supabase
+            .from('family_members')
+            .select('role')
+            .eq('user_id', userId)
+            .single();
+
+        if (memberData?.role === 'guest') {
+            setUserRole('guest');
+            return;
+        }
+
+        // Fall back to user_roles for admin/user
         const { data, error } = await supabase
             .from('user_roles')
             .select('role')
@@ -172,7 +185,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             return;
         }
 
-        setUserRole((data?.role as 'admin' | 'user') || 'user');
+        setUserRole((data?.role as 'admin' | 'user' | 'guest') || 'user');
     };
 
     const loadAvatar = async (userId: string) => {

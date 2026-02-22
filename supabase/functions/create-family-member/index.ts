@@ -73,7 +73,11 @@ Deno.serve(async (req) => {
     }
 
     // Parse request body
-    const { email, password: initialPassword } = await req.json()
+    const { email, password: initialPassword, role: requestedRole } = await req.json()
+
+    // Validate role (default to 'member')
+    const validRoles = ['member', 'guest']
+    const role = validRoles.includes(requestedRole) ? requestedRole : 'member'
 
     if (!email || !initialPassword) {
       return new Response(
@@ -141,7 +145,7 @@ Deno.serve(async (req) => {
       .upsert({
         user_id: userId,
         email: email,
-        role: 'member',
+        role: role,
         invited_by: callingUser.id,
         household_id: memberData.household_id
       }, { onConflict: 'user_id' })
@@ -152,6 +156,27 @@ Deno.serve(async (req) => {
         JSON.stringify({ error: 'Fehler beim Hinzufügen zur Familie: ' + memberError.message }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
+    }
+
+    // Set user_roles entry
+    const userRoleValue = role === 'guest' ? 'guest' : 'user'
+    await adminClient
+      .from('user_roles')
+      .upsert({
+        user_id: userId,
+        role: userRoleValue
+      }, { onConflict: 'user_id' })
+
+    // If guest, create empty guest_permissions entry
+    if (role === 'guest') {
+      await adminClient
+        .from('guest_permissions')
+        .upsert({
+          guest_user_id: userId,
+          household_id: memberData.household_id,
+          entity_ids: [],
+          is_active: true
+        }, { onConflict: 'guest_user_id,household_id' })
     }
 
     return new Response(

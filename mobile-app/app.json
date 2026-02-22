@@ -16,7 +16,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.stibe88.mobileapp",
       "appleTeamId": "QF59FHQ44R",
-      "buildNumber": "91",
+      "buildNumber": "92",
       "entitlements": {
         "com.apple.security.application-groups": [
           "group.com.stibe88.mobileapp"
@@ -90,7 +90,8 @@
             "ios": "./assets/icons/icon-pride.png"
           }
         ]
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "extra": {
       "router": {},

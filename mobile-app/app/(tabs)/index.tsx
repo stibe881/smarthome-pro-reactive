@@ -16,6 +16,7 @@ import CamerasModal from '../../components/CamerasModal';
 import { ConnectionWizard } from '../../components/ConnectionWizard';
 import { useKidsMode, KIDS_GENDER_THEMES } from '../../contexts/KidsContext';
 import { KidsDashboard } from '../../components/KidsDashboard';
+import { GuestDashboard } from '../../components/GuestDashboard';
 // LinearGradient removed to fix compatibility issue
 
 // =====================================================
@@ -1030,6 +1031,11 @@ export default function Dashboard() {
         );
     }
 
+
+    // Guest users get a restricted dashboard
+    if (userRole === 'guest') {
+        return <GuestDashboard />;
+    }
 
     if (isKidsModeActive) {
         if (config.rooms.length === 0) {

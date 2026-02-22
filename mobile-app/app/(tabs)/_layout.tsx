@@ -3,21 +3,24 @@ import { LayoutGrid, DoorOpen, PlayCircle, Users, Settings } from 'lucide-react-
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useKidsMode } from '../../contexts/KidsContext';
+import { useAuth } from '../../contexts/AuthContext';
 import ResponsiveTabBar from '../../components/ResponsiveTabBar';
 
 export default function TabLayout() {
     const insets = useSafeAreaInsets();
     const { colors } = useTheme();
     const { isKidsModeActive } = useKidsMode();
+    const { userRole } = useAuth();
+    const isGuest = userRole === 'guest';
 
     return (
         <Tabs
-            tabBar={props => isKidsModeActive ? null : <ResponsiveTabBar {...props} />}
+            tabBar={props => (isKidsModeActive || isGuest) ? null : <ResponsiveTabBar {...props} />}
             screenOptions={{
                 headerShown: false,
                 tabBarActiveTintColor: colors.accent,
                 tabBarInactiveTintColor: colors.subtext,
-                tabBarStyle: isKidsModeActive ? { display: 'none' } : undefined,
+                tabBarStyle: (isKidsModeActive || isGuest) ? { display: 'none' } : undefined,
             }}
         >
             <Tabs.Screen
@@ -32,6 +35,7 @@ export default function TabLayout() {
                 options={{
                     title: 'Räume',
                     tabBarIcon: ({ color }) => <DoorOpen size={24} stroke={color} />,
+                    href: isGuest ? null : undefined,
                 }}
             />
             <Tabs.Screen
@@ -39,6 +43,7 @@ export default function TabLayout() {
                 options={{
                     title: 'Medien',
                     tabBarIcon: ({ color }) => <PlayCircle size={24} stroke={color} />,
+                    href: isGuest ? null : undefined,
                 }}
             />
             <Tabs.Screen
@@ -46,6 +51,7 @@ export default function TabLayout() {
                 options={{
                     title: 'Optionen',
                     tabBarIcon: ({ color }) => <Settings size={24} stroke={color} />,
+                    href: isGuest ? null : undefined,
                 }}
             />
         </Tabs>

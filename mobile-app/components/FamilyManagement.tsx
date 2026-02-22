@@ -2,10 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, Pressable, ActivityIndicator, TextInput, Modal, Alert, KeyboardAvoidingView, Platform, StyleSheet, Switch, Image } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { Users, UserPlus, Mail, Crown, X, Send, Lock, Eye, EyeOff, Trash2, Key, Shield, ShieldOff, MoreVertical, Camera } from 'lucide-react-native';
+import { Users, UserPlus, Mail, Crown, X, Send, Lock, Eye, EyeOff, Trash2, Key, Shield, ShieldOff, MoreVertical, Camera, UserCheck } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
+import { GuestPermissionsModal } from './GuestPermissionsModal';
 
 interface FamilyMember {
     id: string;
@@ -38,6 +39,7 @@ export const FamilyManagement = ({ colors }: FamilyManagementProps) => {
     const [invitePassword, setInvitePassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [isInviting, setIsInviting] = useState(false);
+    const [inviteRole, setInviteRole] = useState<'member' | 'guest'>('member');
 
     // Administrative Modals
     const [selectedMember, setSelectedMember] = useState<FamilyMember | null>(null);
@@ -45,6 +47,7 @@ export const FamilyManagement = ({ colors }: FamilyManagementProps) => {
     const [newMemberPassword, setNewMemberPassword] = useState('');
     const [isAdminActionLoading, setIsAdminActionLoading] = useState(false);
     const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+    const [showGuestPermissions, setShowGuestPermissions] = useState(false);
 
     useEffect(() => {
         loadFamilyData();
@@ -98,7 +101,7 @@ export const FamilyManagement = ({ colors }: FamilyManagementProps) => {
         try {
             console.log('[FamilyManagement] Invoking create-family-member...');
             const { data, error } = await supabase.functions.invoke('create-family-member', {
-                body: { email: inviteEmail.trim(), password: invitePassword },
+                body: { email: inviteEmail.trim(), password: invitePassword, role: inviteRole },
             });
 
             console.log('[FamilyManagement] Response data:', JSON.stringify(data));
@@ -129,6 +132,7 @@ export const FamilyManagement = ({ colors }: FamilyManagementProps) => {
             setShowInviteModal(false);
             setInviteEmail('');
             setInvitePassword('');
+            setInviteRole('member');
             loadFamilyData();
         } catch (error: any) {
             console.error('[FamilyManagement] Catch error:', error);
@@ -291,6 +295,8 @@ export const FamilyManagement = ({ colors }: FamilyManagementProps) => {
                             <View style={styles.roleRow}>
                                 {member.role === 'admin' ? (
                                     <View style={styles.adminBadge}><Crown size={10} color="#FBBF24" /><Text style={styles.adminText}>Admin</Text></View>
+                                ) : member.role === 'guest' ? (
+                                    <View style={[styles.adminBadge, { backgroundColor: 'rgba(139, 92, 246, 0.15)' }]}><UserCheck size={10} color="#8B5CF6" /><Text style={[styles.adminText, { color: '#8B5CF6' }]}>Gast</Text></View>
                                 ) : <Text style={[styles.memberRole, { color: colors.subtext }]}>Mitglied</Text>}
                                 {member.email === user?.email && <Text style={[styles.meTag, { color: colors.subtext }]}>• Du</Text>}
                                 {member.is_active === false && <Text style={[styles.meTag, { color: colors.error }]}>• Deaktiviert</Text>}
@@ -336,7 +342,7 @@ export const FamilyManagement = ({ colors }: FamilyManagementProps) => {
                                     </View>
                                 </Pressable>
                                 <Text style={[styles.selectedEmail, { color: colors.text }]}>{selectedMember.email}</Text>
-                                <Text style={[styles.memberRole, { color: colors.subtext }]}>{selectedMember.role === 'admin' ? 'Administrator' : 'Familienmitglied'}</Text>
+                                <Text style={[styles.memberRole, { color: colors.subtext }]}>{selectedMember.role === 'admin' ? 'Administrator' : selectedMember.role === 'guest' ? 'Gast' : 'Familienmitglied'}</Text>
                             </View>
 
                             <View style={[styles.adminSection, { borderTopColor: colors.border }]}>
@@ -370,6 +376,22 @@ export const FamilyManagement = ({ colors }: FamilyManagementProps) => {
                                 </Pressable>
                             </View>
 
+                            {/* Guest Permissions Button */}
+                            {selectedMember.role === 'guest' && (
+                                <View style={[styles.adminSection, { borderTopColor: colors.border }]}>
+                                    <Pressable
+                                        onPress={() => {
+                                            setShowAdminModal(false);
+                                            setTimeout(() => setShowGuestPermissions(true), 350);
+                                        }}
+                                        style={[styles.actionBtn, { backgroundColor: '#8B5CF6' }]}
+                                    >
+                                        <Shield size={18} color="#fff" />
+                                        <Text style={styles.actionBtnText}>Gast-Berechtigungen verwalten</Text>
+                                    </Pressable>
+                                </View>
+                            )}
+
                             <View style={[styles.adminSection, { borderTopColor: colors.border, marginTop: 20 }]}>
                                 <Pressable onPress={handleRemoveMember} disabled={isAdminActionLoading} style={[styles.actionBtn, { backgroundColor: '#ef4444', opacity: 0.9 }]}>
                                     <Trash2 size={18} color="#fff" />
@@ -380,6 +402,17 @@ export const FamilyManagement = ({ colors }: FamilyManagementProps) => {
                     )}
                 </View>
             </Modal>
+
+            {/* Guest Permissions Modal */}
+            {selectedMember && selectedMember.role === 'guest' && (
+                <GuestPermissionsModal
+                    visible={showGuestPermissions}
+                    onClose={() => setShowGuestPermissions(false)}
+                    guestUserId={selectedMember.user_id}
+                    guestEmail={selectedMember.email}
+                    colors={colors}
+                />
+            )}
 
             {/* Invite Modal (same as before) */}
             <Modal visible={showInviteModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowInviteModal(false)}>
@@ -396,7 +429,37 @@ export const FamilyManagement = ({ colors }: FamilyManagementProps) => {
                             <TextInput style={{ flex: 1, color: colors.text }} value={invitePassword} onChangeText={setInvitePassword} secureTextEntry={!showPassword} autoCapitalize="none" placeholder="Mind. 6 Zeichen" placeholderTextColor={colors.subtext} />
                             <Pressable onPress={() => setShowPassword(!showPassword)}>{showPassword ? <EyeOff size={18} color={colors.subtext} /> : <Eye size={18} color={colors.subtext} />}</Pressable>
                         </View>
-                        <Pressable onPress={handleInvite} disabled={isInviting} style={[styles.submitBtn, { backgroundColor: colors.accent, marginTop: 24 }]}>
+                        <Text style={[styles.label, { color: colors.subtext, marginTop: 16 }]}>Rolle</Text>
+                        <View style={{ flexDirection: 'row', gap: 8, marginTop: 4, marginBottom: 16 }}>
+                            <Pressable
+                                onPress={() => setInviteRole('member')}
+                                style={[{
+                                    flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center', borderWidth: 1.5,
+                                    borderColor: inviteRole === 'member' ? colors.accent : colors.border,
+                                    backgroundColor: inviteRole === 'member' ? colors.accent + '15' : colors.card,
+                                }]}
+                            >
+                                <Users size={18} color={inviteRole === 'member' ? colors.accent : colors.subtext} />
+                                <Text style={{ color: inviteRole === 'member' ? colors.accent : colors.subtext, fontSize: 12, fontWeight: '600', marginTop: 4 }}>Mitglied</Text>
+                            </Pressable>
+                            <Pressable
+                                onPress={() => setInviteRole('guest')}
+                                style={[{
+                                    flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center', borderWidth: 1.5,
+                                    borderColor: inviteRole === 'guest' ? '#8B5CF6' : colors.border,
+                                    backgroundColor: inviteRole === 'guest' ? 'rgba(139,92,246,0.15)' : colors.card,
+                                }]}
+                            >
+                                <UserCheck size={18} color={inviteRole === 'guest' ? '#8B5CF6' : colors.subtext} />
+                                <Text style={{ color: inviteRole === 'guest' ? '#8B5CF6' : colors.subtext, fontSize: 12, fontWeight: '600', marginTop: 4 }}>Gast</Text>
+                            </Pressable>
+                        </View>
+                        {inviteRole === 'guest' && (
+                            <Text style={{ color: colors.subtext, fontSize: 11, marginBottom: 8, fontStyle: 'italic' }}>
+                                Gäste sehen nur die Steuerungen, die du ihnen zuweist.
+                            </Text>
+                        )}
+                        <Pressable onPress={handleInvite} disabled={isInviting} style={[styles.submitBtn, { backgroundColor: colors.accent, marginTop: 8 }]}>
                             {isInviting ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>Hinzufügen</Text>}
                         </Pressable>
                     </ScrollView>
