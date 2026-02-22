@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, Pressable, ScrollView, Modal, StyleSheet, ActivityIndicator, Alert, TextInput } from 'react-native';
-import { X, Plus, Trash2, Lightbulb, Blinds, Bot, Shield, Search, Pencil, Check, ChevronUp, ChevronDown, Zap } from 'lucide-react-native';
+import { View, Text, Pressable, ScrollView, Modal, StyleSheet, ActivityIndicator, Alert, TextInput, Dimensions } from 'react-native';
+import { X, Plus, Trash2, Lightbulb, Blinds, Bot, Shield, Search, Pencil, Check, ChevronUp, ChevronDown, Zap, CheckCircle2, Circle } from 'lucide-react-native';
 import { useHomeAssistant, EntityState } from '../contexts/HomeAssistantContext';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -33,8 +33,7 @@ export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalP
     const availableEntities = useMemo(() => {
         let filtered = entities;
         if (activeSection === 'vacuum') {
-            // Vacuum tab: show all entities (vacuum, sensor, camera, image + any for dock)
-            // No domain filter needed
+            // Show all entities for vacuum tab
         } else if (activeTab.allEntities) {
             // Keep all
         } else {
@@ -46,10 +45,8 @@ export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalP
             .sort((a, b) => (a.attributes.friendly_name || a.entity_id).localeCompare(b.attributes.friendly_name || b.entity_id));
     }, [entities, activeTab, activeSection, searchQuery]);
 
-    // Current config for the section
     const currentMapped = useMemo(() => {
         if (activeTab.single) {
-            // For single-select: wrap in array for consistent rendering
             const entityId = dashboardConfig[activeSection];
             if (!entityId) return [];
             const entity = entities.find(e => e.entity_id === entityId);
@@ -61,36 +58,26 @@ export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalP
     const handleAdd = async (entity: EntityState) => {
         const name = entity.attributes.friendly_name || entity.entity_id;
 
-        // Vacuum tab: detect sensor/camera sub-assignments or dock entities
         if (activeSection === 'vacuum') {
             if (entity.entity_id.startsWith('vacuum.')) {
-                // Vacuum entity → main vacuum (handled below by single-select logic)
+                // handled below by single-select logic
             } else {
-                // Check if it should go to battery sensor or map camera (only if not yet set)
                 if (entity.entity_id.startsWith('sensor.') && !dashboardConfig.vacuumBatterySensor) {
                     setIsSaving(true);
                     try {
                         await saveDashboardConfig({ ...dashboardConfig, vacuumBatterySensor: entity.entity_id });
-                    } catch (e) {
-                        Alert.alert('Fehler', 'Konfiguration konnte nicht gespeichert werden.');
-                    } finally {
-                        setIsSaving(false);
-                    }
+                    } catch { Alert.alert('Fehler', 'Konfiguration konnte nicht gespeichert werden.'); }
+                    finally { setIsSaving(false); }
                     return;
                 }
                 if ((entity.entity_id.startsWith('camera.') || entity.entity_id.startsWith('image.')) && !dashboardConfig.vacuumMapCamera) {
                     setIsSaving(true);
                     try {
                         await saveDashboardConfig({ ...dashboardConfig, vacuumMapCamera: entity.entity_id });
-                    } catch (e) {
-                        Alert.alert('Fehler', 'Konfiguration konnte nicht gespeichert werden.');
-                    } finally {
-                        setIsSaving(false);
-                    }
+                    } catch { Alert.alert('Fehler', 'Konfiguration konnte nicht gespeichert werden.'); }
+                    finally { setIsSaving(false); }
                     return;
                 }
-
-                // Otherwise → add to dock entities
                 const currentDock = (dashboardConfig.vacuumDockEntities || []) as string[];
                 if (currentDock.includes(entity.entity_id)) {
                     Alert.alert('Hinweis', 'Diese Entität ist bereits zugeordnet.');
@@ -99,52 +86,30 @@ export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalP
                 setIsSaving(true);
                 try {
                     await saveDashboardConfig({ ...dashboardConfig, vacuumDockEntities: [...currentDock, entity.entity_id] });
-                } catch (e) {
-                    Alert.alert('Fehler', 'Konfiguration konnte nicht gespeichert werden.');
-                } finally {
-                    setIsSaving(false);
-                }
+                } catch { Alert.alert('Fehler', 'Konfiguration konnte nicht gespeichert werden.'); }
+                finally { setIsSaving(false); }
                 return;
             }
         }
 
         if (activeTab.single) {
-            // Single-select: replace the value
-            const newConfig = {
-                ...dashboardConfig,
-                [activeSection]: entity.entity_id,
-            };
             setIsSaving(true);
             try {
-                await saveDashboardConfig(newConfig);
-            } catch (e) {
-                Alert.alert("Fehler", "Konfiguration konnte nicht gespeichert werden.");
-            } finally {
-                setIsSaving(false);
-            }
+                await saveDashboardConfig({ ...dashboardConfig, [activeSection]: entity.entity_id });
+            } catch { Alert.alert('Fehler', 'Konfiguration konnte nicht gespeichert werden.'); }
+            finally { setIsSaving(false); }
             return;
         }
 
-        // Multi-select: add to array
-        const newEntry = { id: entity.entity_id, name };
         if (currentMapped.find((m: any) => m.id === entity.entity_id)) {
-            Alert.alert("Hinweis", "Diese Entität ist bereits zugeordnet.");
+            Alert.alert('Hinweis', 'Diese Entität ist bereits zugeordnet.');
             return;
         }
-
-        const newConfig = {
-            ...dashboardConfig,
-            [activeSection]: [...currentMapped, newEntry]
-        };
-
         setIsSaving(true);
         try {
-            await saveDashboardConfig(newConfig);
-        } catch (e) {
-            Alert.alert("Fehler", "Konfiguration konnte nicht gespeichert werden.");
-        } finally {
-            setIsSaving(false);
-        }
+            await saveDashboardConfig({ ...dashboardConfig, [activeSection]: [...currentMapped, { id: entity.entity_id, name }] });
+        } catch { Alert.alert('Fehler', 'Konfiguration konnte nicht gespeichert werden.'); }
+        finally { setIsSaving(false); }
     };
 
     const handleRemove = async (id: string) => {
@@ -152,20 +117,12 @@ export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalP
         if (activeTab.single) {
             newConfig = { ...dashboardConfig, [activeSection]: null };
         } else {
-            newConfig = {
-                ...dashboardConfig,
-                [activeSection]: currentMapped.filter((m: any) => m.id !== id)
-            };
+            newConfig = { ...dashboardConfig, [activeSection]: currentMapped.filter((m: any) => m.id !== id) };
         }
-
         setIsSaving(true);
-        try {
-            await saveDashboardConfig(newConfig);
-        } catch (e) {
-            Alert.alert("Fehler", "Entität konnte nicht entfernt werden.");
-        } finally {
-            setIsSaving(false);
-        }
+        try { await saveDashboardConfig(newConfig); }
+        catch { Alert.alert('Fehler', 'Entität konnte nicht entfernt werden.'); }
+        finally { setIsSaving(false); }
     };
 
     const handleRename = async (id: string, newName: string) => {
@@ -175,14 +132,9 @@ export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalP
             [activeSection]: currentMapped.map((m: any) => m.id === id ? { ...m, name: newName.trim() } : m)
         };
         setIsSaving(true);
-        try {
-            await saveDashboardConfig(newConfig);
-        } catch (e) {
-            Alert.alert("Fehler", "Name konnte nicht geändert werden.");
-        } finally {
-            setIsSaving(false);
-            setEditingId(null);
-        }
+        try { await saveDashboardConfig(newConfig); }
+        catch { Alert.alert('Fehler', 'Name konnte nicht geändert werden.'); }
+        finally { setIsSaving(false); setEditingId(null); }
     };
 
     const handleMove = async (id: string, direction: 'up' | 'down') => {
@@ -192,29 +144,57 @@ export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalP
         if (newIdx < 0 || newIdx >= currentMapped.length) return;
         const arr = [...currentMapped];
         [arr[idx], arr[newIdx]] = [arr[newIdx], arr[idx]];
-        const newConfig = { ...dashboardConfig, [activeSection]: arr };
         setIsSaving(true);
-        try {
-            await saveDashboardConfig(newConfig);
-        } catch (e) {
-            Alert.alert("Fehler", "Reihenfolge konnte nicht geändert werden.");
-        } finally {
-            setIsSaving(false);
+        try { await saveDashboardConfig({ ...dashboardConfig, [activeSection]: arr }); }
+        catch { Alert.alert('Fehler', 'Reihenfolge konnte nicht geändert werden.'); }
+        finally { setIsSaving(false); }
+    };
+
+    const isEntityAdded = (entityId: string) => {
+        if (activeTab.single) return dashboardConfig[activeSection] === entityId;
+        if (activeSection === 'vacuum') {
+            return dashboardConfig.vacuumBatterySensor === entityId ||
+                dashboardConfig.vacuumMapCamera === entityId ||
+                ((dashboardConfig.vacuumDockEntities || []) as string[]).includes(entityId) ||
+                dashboardConfig[activeSection] === entityId;
         }
+        return currentMapped.some((m: any) => m.id === entityId);
+    };
+
+    // Helper to render a single config chip (for vacuum sub-items)
+    const renderConfigChip = (label: string, entityId: string | null | undefined, onRemove: () => void) => {
+        const entity = entityId ? entities.find(e => e.entity_id === entityId) : null;
+        return (
+            <View style={[s.chipRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <View style={[s.chipDot, { backgroundColor: entityId ? colors.accent : colors.border }]} />
+                <View style={{ flex: 1 }}>
+                    <Text style={[s.chipLabel, { color: colors.subtext }]}>{label}</Text>
+                    <Text style={[s.chipValue, { color: entity ? colors.text : colors.subtext }]}>
+                        {entity ? (entity.attributes?.friendly_name || entityId) : 'Nicht konfiguriert'}
+                    </Text>
+                </View>
+                {entityId && (
+                    <Pressable onPress={onRemove} hitSlop={8} style={s.chipRemove}>
+                        <X size={14} color="#EF4444" />
+                    </Pressable>
+                )}
+            </View>
+        );
     };
 
     return (
         <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-            <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
-                <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-                    <Text style={[styles.modalTitle, { color: colors.text }]}>Dashboard anpassen</Text>
-                    <Pressable onPress={onClose} style={styles.closeButton}>
-                        <X size={24} color={colors.subtext} />
+            <View style={[s.container, { backgroundColor: colors.background }]}>
+                {/* Header */}
+                <View style={[s.header, { borderBottomColor: colors.border }]}>
+                    <Text style={[s.headerTitle, { color: colors.text }]}>Dashboard anpassen</Text>
+                    <Pressable onPress={onClose} style={[s.headerClose, { backgroundColor: colors.card }]}>
+                        <X size={20} color={colors.subtext} />
                     </Pressable>
                 </View>
 
-                {/* Tab Bar */}
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={[styles.tabContainer, { borderBottomColor: colors.border }]}>
+                {/* Tab Pills */}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.tabPills}>
                     {TABS.map(tab => {
                         const Icon = tab.icon;
                         const active = activeSection === tab.key;
@@ -222,370 +202,303 @@ export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalP
                             <Pressable
                                 key={tab.key}
                                 onPress={() => { setActiveSection(tab.key); setSearchQuery(''); setEditingId(null); }}
-                                style={[styles.tab, active && { borderBottomColor: colors.accent, borderBottomWidth: 2 }]}
+                                style={[
+                                    s.pill,
+                                    { backgroundColor: active ? colors.accent : colors.card, borderColor: active ? colors.accent : colors.border }
+                                ]}
                             >
-                                <Icon size={18} color={active ? colors.accent : colors.subtext} />
-                                <Text style={[styles.tabText, { color: active ? colors.accent : colors.subtext }]}>{tab.label}</Text>
+                                <Icon size={16} color={active ? '#fff' : colors.subtext} />
+                                <Text style={[s.pillText, { color: active ? '#fff' : colors.subtext }]}>{tab.label}</Text>
                             </Pressable>
                         );
                     })}
                 </ScrollView>
 
-                <View style={styles.content}>
-                    {/* Current Config Section */}
-                    <Text style={[styles.sectionTitle, { color: colors.subtext }]}>
-                        {activeTab.single ? 'AUSGEWÄHLTE ENTITÄT' : 'AKTUELLE ZUORDNUNG'}
+                {/* Main Content – single ScrollView */}
+                <ScrollView style={s.mainScroll} contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
+
+                    {/* Configured Entities Section */}
+                    <Text style={[s.sectionLabel, { color: colors.subtext }]}>
+                        {activeTab.single ? 'AUSGEWÄHLTE ENTITÄT' : 'ZUGEORDNETE ENTITÄTEN'}
                     </Text>
-                    <ScrollView style={styles.mappedListScroll} nestedScrollEnabled>
-                        {currentMapped.length === 0 ? (
-                            <Text style={[styles.emptyText, { color: colors.subtext }]}>
-                                {activeTab.single ? 'Noch keine Entität ausgewählt.' : 'Noch keine Entitäten zugeordnet.'}
+
+                    {currentMapped.length === 0 ? (
+                        <View style={[s.emptyCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                            <Circle size={32} color={colors.border} strokeWidth={1.5} />
+                            <Text style={[s.emptyTitle, { color: colors.subtext }]}>
+                                {activeTab.single ? 'Keine Entität ausgewählt' : 'Keine Entitäten zugeordnet'}
                             </Text>
-                        ) : (
-                            currentMapped.map((m: any) => (
-                                <View key={m.id} style={[styles.mappedItem, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                            <Text style={[s.emptyHint, { color: colors.subtext }]}>
+                                Suche unten nach Entitäten und tippe zum Hinzufügen.
+                            </Text>
+                        </View>
+                    ) : (
+                        <View style={{ gap: 8 }}>
+                            {currentMapped.map((m: any, idx: number) => (
+                                <View key={m.id} style={[s.configCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                                     {editingId === m.id && !activeTab.single ? (
-                                        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                        <View style={s.editRow}>
                                             <TextInput
                                                 value={editName}
                                                 onChangeText={setEditName}
                                                 autoFocus
-                                                style={[styles.renameInput, { color: colors.text, borderColor: colors.accent, backgroundColor: colors.background }]}
+                                                style={[s.editInput, { color: colors.text, borderColor: colors.accent, backgroundColor: colors.background }]}
                                                 onSubmitEditing={() => handleRename(m.id, editName)}
+                                                placeholder="Name eingeben..."
+                                                placeholderTextColor={colors.subtext}
                                             />
-                                            <Pressable onPress={() => handleRename(m.id, editName)} style={[styles.confirmBtn, { backgroundColor: colors.accent }]}>
+                                            <Pressable onPress={() => handleRename(m.id, editName)} style={[s.editConfirm, { backgroundColor: colors.accent }]}>
                                                 <Check size={16} color="#fff" />
                                             </Pressable>
                                         </View>
                                     ) : (
                                         <>
+                                            <View style={[s.configDot, { backgroundColor: colors.accent }]} />
                                             <Pressable
                                                 style={{ flex: 1 }}
                                                 onPress={() => {
-                                                    if (!activeTab.single) {
-                                                        setEditingId(m.id);
-                                                        setEditName(m.name);
-                                                    }
+                                                    if (!activeTab.single) { setEditingId(m.id); setEditName(m.name); }
                                                 }}
                                             >
                                                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                                    <Text style={[styles.mappedName, { color: colors.text }]}>{m.name}</Text>
-                                                    {!activeTab.single && <Pencil size={12} color={colors.subtext} />}
+                                                    <Text style={[s.configName, { color: colors.text }]} numberOfLines={1}>{m.name}</Text>
+                                                    {!activeTab.single && <Pencil size={11} color={colors.subtext} />}
                                                 </View>
-                                                <Text style={[styles.mappedId, { color: colors.subtext }]}>{m.id}</Text>
+                                                <Text style={[s.configId, { color: colors.subtext }]} numberOfLines={1}>{m.id}</Text>
                                             </Pressable>
                                             {!activeTab.single && (
-                                                <View style={styles.reorderBtns}>
-                                                    <Pressable onPress={() => handleMove(m.id, 'up')} style={styles.arrowBtn}>
-                                                        <ChevronUp size={16} color={colors.subtext} />
+                                                <View style={s.orderBtns}>
+                                                    <Pressable onPress={() => handleMove(m.id, 'up')} style={s.orderBtn} disabled={idx === 0}>
+                                                        <ChevronUp size={16} color={idx === 0 ? colors.border : colors.subtext} />
                                                     </Pressable>
-                                                    <Pressable onPress={() => handleMove(m.id, 'down')} style={styles.arrowBtn}>
-                                                        <ChevronDown size={16} color={colors.subtext} />
+                                                    <Pressable onPress={() => handleMove(m.id, 'down')} style={s.orderBtn} disabled={idx === currentMapped.length - 1}>
+                                                        <ChevronDown size={16} color={idx === currentMapped.length - 1 ? colors.border : colors.subtext} />
                                                     </Pressable>
                                                 </View>
                                             )}
-                                            <Pressable onPress={() => handleRemove(m.id)} style={styles.removeBtn}>
-                                                <Trash2 size={18} color="#EF4444" />
+                                            <Pressable onPress={() => handleRemove(m.id)} hitSlop={8} style={s.removeBtn}>
+                                                <Trash2 size={16} color="#EF4444" />
                                             </Pressable>
                                         </>
                                     )}
                                 </View>
-                            ))
-                        )}
-                    </ScrollView>
-
-                    {/* Vacuum Sub-Config: Battery Sensor & Map Camera */}
-                    {activeSection === 'vacuum' && dashboardConfig.vacuum && (
-                        <ScrollView style={{ marginTop: 16, maxHeight: 200 }} nestedScrollEnabled>
-                            {/* Battery Sensor */}
-                            <Text style={[styles.sectionTitle, { color: colors.subtext }]}>AKKU-SENSOR</Text>
-                            {dashboardConfig.vacuumBatterySensor ? (
-                                <View style={[styles.mappedItem, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                                    <View style={{ flex: 1 }}>
-                                        <Text style={[styles.mappedName, { color: colors.text }]}>
-                                            {entities.find(e => e.entity_id === dashboardConfig.vacuumBatterySensor)?.attributes?.friendly_name || dashboardConfig.vacuumBatterySensor}
-                                        </Text>
-                                        <Text style={[styles.mappedId, { color: colors.subtext }]}>{dashboardConfig.vacuumBatterySensor}</Text>
-                                    </View>
-                                    <Pressable onPress={async () => {
-                                        setIsSaving(true);
-                                        try { await saveDashboardConfig({ ...dashboardConfig, vacuumBatterySensor: null }); }
-                                        catch { } finally { setIsSaving(false); }
-                                    }} style={styles.removeBtn}>
-                                        <Trash2 size={18} color="#EF4444" />
-                                    </Pressable>
-                                </View>
-                            ) : (
-                                <Text style={[styles.emptyText, { color: colors.subtext }]}>
-                                    Kein Akku-Sensor ausgewählt. Wähle unten einen sensor.* aus.
-                                </Text>
-                            )}
-
-                            {/* Map Camera */}
-                            <Text style={[styles.sectionTitle, { color: colors.subtext, marginTop: 16 }]}>KARTEN-KAMERA</Text>
-                            {dashboardConfig.vacuumMapCamera ? (
-                                <View style={[styles.mappedItem, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                                    <View style={{ flex: 1 }}>
-                                        <Text style={[styles.mappedName, { color: colors.text }]}>
-                                            {entities.find(e => e.entity_id === dashboardConfig.vacuumMapCamera)?.attributes?.friendly_name || dashboardConfig.vacuumMapCamera}
-                                        </Text>
-                                        <Text style={[styles.mappedId, { color: colors.subtext }]}>{dashboardConfig.vacuumMapCamera}</Text>
-                                    </View>
-                                    <Pressable onPress={async () => {
-                                        setIsSaving(true);
-                                        try { await saveDashboardConfig({ ...dashboardConfig, vacuumMapCamera: null }); }
-                                        catch { } finally { setIsSaving(false); }
-                                    }} style={styles.removeBtn}>
-                                        <Trash2 size={18} color="#EF4444" />
-                                    </Pressable>
-                                </View>
-                            ) : (
-                                <Text style={[styles.emptyText, { color: colors.subtext }]}>
-                                    Keine Karten-Kamera ausgewählt. Wähle unten eine camera.* aus.
-                                </Text>
-                            )}
-
-                            {/* Dock Station Entities (multi-select) */}
-                            <Text style={[styles.sectionTitle, { color: colors.subtext, marginTop: 16 }]}>DOCKINGSTATION-ENTITÄTEN</Text>
-                            {(dashboardConfig.vacuumDockEntities || []).length > 0 ? (
-                                (dashboardConfig.vacuumDockEntities as string[]).map((dockId: string, idx: number) => {
-                                    const dockEntity = entities.find(e => e.entity_id === dockId);
-                                    const dockList = dashboardConfig.vacuumDockEntities as string[];
-                                    return (
-                                        <View key={dockId} style={[styles.mappedItem, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                                            <View style={{ flex: 1 }}>
-                                                <Text style={[styles.mappedName, { color: colors.text }]}>
-                                                    {dockEntity?.attributes?.friendly_name || dockId}
-                                                </Text>
-                                                <Text style={[styles.mappedId, { color: colors.subtext }]}>{dockId}</Text>
-                                            </View>
-                                            <View style={styles.reorderBtns}>
-                                                <Pressable onPress={async () => {
-                                                    if (idx === 0) return;
-                                                    const arr = [...dockList];
-                                                    [arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]];
-                                                    setIsSaving(true);
-                                                    try { await saveDashboardConfig({ ...dashboardConfig, vacuumDockEntities: arr }); }
-                                                    catch { } finally { setIsSaving(false); }
-                                                }} style={styles.arrowBtn}>
-                                                    <ChevronUp size={16} color={colors.subtext} />
-                                                </Pressable>
-                                                <Pressable onPress={async () => {
-                                                    if (idx === dockList.length - 1) return;
-                                                    const arr = [...dockList];
-                                                    [arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]];
-                                                    setIsSaving(true);
-                                                    try { await saveDashboardConfig({ ...dashboardConfig, vacuumDockEntities: arr }); }
-                                                    catch { } finally { setIsSaving(false); }
-                                                }} style={styles.arrowBtn}>
-                                                    <ChevronDown size={16} color={colors.subtext} />
-                                                </Pressable>
-                                            </View>
-                                            <Pressable onPress={async () => {
-                                                setIsSaving(true);
-                                                try {
-                                                    const updated = dockList.filter((id: string) => id !== dockId);
-                                                    await saveDashboardConfig({ ...dashboardConfig, vacuumDockEntities: updated });
-                                                } catch { } finally { setIsSaving(false); }
-                                            }} style={styles.removeBtn}>
-                                                <Trash2 size={18} color="#EF4444" />
-                                            </Pressable>
-                                        </View>
-                                    );
-                                })
-                            ) : (
-                                <Text style={[styles.emptyText, { color: colors.subtext }]}>
-                                    Keine Dockingstation-Entitäten ausgewählt. Wähle unten beliebige Entities aus.
-                                </Text>
-                            )}
-                        </ScrollView>
+                            ))}
+                        </View>
                     )}
 
-                    {/* Search & Available Entities */}
-                    <View style={styles.searchSection}>
-                        <Text style={[styles.sectionTitle, { color: colors.subtext, marginTop: 24 }]}>VERFÜGBARE ENTITÄTEN</Text>
-                        <View style={[styles.searchWrapper, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                            <Search size={18} color={colors.subtext} />
-                            <TextInput
-                                style={[styles.searchInput, { color: colors.text }]}
-                                placeholder="Suchen..."
-                                placeholderTextColor={colors.subtext}
-                                value={searchQuery}
-                                onChangeText={setSearchQuery}
-                                autoCapitalize="none"
-                            />
+                    {/* Vacuum Sub-Config */}
+                    {activeSection === 'vacuum' && dashboardConfig.vacuum && (
+                        <View style={{ marginTop: 20 }}>
+                            <Text style={[s.sectionLabel, { color: colors.subtext }]}>SAUGROBOTER-KONFIGURATION</Text>
+                            {renderConfigChip('Akku-Sensor', dashboardConfig.vacuumBatterySensor, async () => {
+                                setIsSaving(true);
+                                try { await saveDashboardConfig({ ...dashboardConfig, vacuumBatterySensor: null }); }
+                                catch { } finally { setIsSaving(false); }
+                            })}
+                            {renderConfigChip('Karten-Kamera', dashboardConfig.vacuumMapCamera, async () => {
+                                setIsSaving(true);
+                                try { await saveDashboardConfig({ ...dashboardConfig, vacuumMapCamera: null }); }
+                                catch { } finally { setIsSaving(false); }
+                            })}
+
+                            <Text style={[s.sectionLabel, { color: colors.subtext, marginTop: 16 }]}>DOCKINGSTATION-ENTITÄTEN</Text>
+                            {((dashboardConfig.vacuumDockEntities || []) as string[]).length > 0 ? (
+                                <View style={{ gap: 6 }}>
+                                    {((dashboardConfig.vacuumDockEntities || []) as string[]).map((dockId: string, idx: number) => {
+                                        const dockEntity = entities.find(e => e.entity_id === dockId);
+                                        const dockList = (dashboardConfig.vacuumDockEntities || []) as string[];
+                                        return (
+                                            <View key={dockId} style={[s.configCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                                                <View style={[s.configDot, { backgroundColor: '#3B82F6' }]} />
+                                                <View style={{ flex: 1 }}>
+                                                    <Text style={[s.configName, { color: colors.text }]} numberOfLines={1}>
+                                                        {dockEntity?.attributes?.friendly_name || dockId}
+                                                    </Text>
+                                                    <Text style={[s.configId, { color: colors.subtext }]} numberOfLines={1}>{dockId}</Text>
+                                                </View>
+                                                <View style={s.orderBtns}>
+                                                    <Pressable onPress={async () => {
+                                                        if (idx === 0) return;
+                                                        const arr = [...dockList];
+                                                        [arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]];
+                                                        setIsSaving(true);
+                                                        try { await saveDashboardConfig({ ...dashboardConfig, vacuumDockEntities: arr }); }
+                                                        catch { } finally { setIsSaving(false); }
+                                                    }} style={s.orderBtn}>
+                                                        <ChevronUp size={16} color={idx === 0 ? colors.border : colors.subtext} />
+                                                    </Pressable>
+                                                    <Pressable onPress={async () => {
+                                                        if (idx === dockList.length - 1) return;
+                                                        const arr = [...dockList];
+                                                        [arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]];
+                                                        setIsSaving(true);
+                                                        try { await saveDashboardConfig({ ...dashboardConfig, vacuumDockEntities: arr }); }
+                                                        catch { } finally { setIsSaving(false); }
+                                                    }} style={s.orderBtn}>
+                                                        <ChevronDown size={16} color={idx === dockList.length - 1 ? colors.border : colors.subtext} />
+                                                    </Pressable>
+                                                </View>
+                                                <Pressable onPress={async () => {
+                                                    setIsSaving(true);
+                                                    try {
+                                                        const updated = dockList.filter((id: string) => id !== dockId);
+                                                        await saveDashboardConfig({ ...dashboardConfig, vacuumDockEntities: updated });
+                                                    } catch { } finally { setIsSaving(false); }
+                                                }} hitSlop={8} style={s.removeBtn}>
+                                                    <Trash2 size={16} color="#EF4444" />
+                                                </Pressable>
+                                            </View>
+                                        );
+                                    })}
+                                </View>
+                            ) : (
+                                <View style={[s.emptyCard, { backgroundColor: colors.card, borderColor: colors.border, paddingVertical: 16 }]}>
+                                    <Text style={[s.emptyHint, { color: colors.subtext }]}>
+                                        Keine Dockingstation-Entitäten. Wähle beliebige Entities unten aus.
+                                    </Text>
+                                </View>
+                            )}
                         </View>
+                    )}
+
+                    {/* Search & Entity Picker */}
+                    <Text style={[s.sectionLabel, { color: colors.subtext, marginTop: 24 }]}>ENTITÄT HINZUFÜGEN</Text>
+                    <View style={[s.searchBar, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                        <Search size={18} color={colors.subtext} />
+                        <TextInput
+                            style={[s.searchInput, { color: colors.text }]}
+                            placeholder="Entität suchen..."
+                            placeholderTextColor={colors.subtext}
+                            value={searchQuery}
+                            onChangeText={setSearchQuery}
+                            autoCapitalize="none"
+                        />
+                        {searchQuery.length > 0 && (
+                            <Pressable onPress={() => setSearchQuery('')} hitSlop={8}>
+                                <X size={16} color={colors.subtext} />
+                            </Pressable>
+                        )}
                     </View>
 
-                    <ScrollView style={styles.scrollArea}>
+                    {/* Entity Cards Grid */}
+                    <View style={s.entityGrid}>
                         {availableEntities.map(e => {
-                            const isAdded = activeTab.single
-                                ? dashboardConfig[activeSection] === e.entity_id
-                                : currentMapped.some((m: any) => m.id === e.entity_id);
+                            const added = isEntityAdded(e.entity_id);
+                            const friendlyName = e.attributes.friendly_name || e.entity_id;
+                            const domain = e.entity_id.split('.')[0];
                             return (
                                 <Pressable
                                     key={e.entity_id}
-                                    onPress={() => !isAdded && handleAdd(e)}
-                                    style={[styles.entityItem, { borderBottomColor: colors.border }]}
+                                    onPress={() => !added && handleAdd(e)}
+                                    style={({ pressed }) => [
+                                        s.entityCard,
+                                        {
+                                            backgroundColor: added ? (colors.accent + '15') : colors.card,
+                                            borderColor: added ? colors.accent : colors.border,
+                                            opacity: pressed && !added ? 0.7 : 1,
+                                        }
+                                    ]}
                                 >
-                                    <View style={{ flex: 1 }}>
-                                        <Text style={[styles.entityName, { color: isAdded ? colors.subtext : colors.text }]}>
-                                            {e.attributes.friendly_name || e.entity_id}
-                                        </Text>
-                                        <Text style={[styles.entityId, { color: colors.subtext }]}>{e.entity_id}</Text>
+                                    <View style={s.entityCardHeader}>
+                                        <View style={[s.domainBadge, { backgroundColor: added ? (colors.accent + '30') : (colors.subtext + '15') }]}>
+                                            <Text style={[s.domainText, { color: added ? colors.accent : colors.subtext }]}>{domain}</Text>
+                                        </View>
+                                        {added ? (
+                                            <CheckCircle2 size={18} color={colors.accent} />
+                                        ) : (
+                                            <Plus size={18} color={colors.accent} />
+                                        )}
                                     </View>
-                                    {isAdded ? (
-                                        <Text style={{ color: colors.success || '#10B981', fontSize: 12 }}>Zugeordnet</Text>
-                                    ) : (
-                                        <Plus size={18} color={colors.accent} />
-                                    )}
+                                    <Text style={[s.entityCardName, { color: added ? colors.accent : colors.text }]} numberOfLines={2}>
+                                        {friendlyName}
+                                    </Text>
+                                    <Text style={[s.entityCardId, { color: colors.subtext }]} numberOfLines={1}>
+                                        {e.entity_id}
+                                    </Text>
                                 </Pressable>
                             );
                         })}
-                    </ScrollView>
-                </View>
+                    </View>
+
+                    {availableEntities.length === 0 && (
+                        <View style={[s.emptyCard, { backgroundColor: colors.card, borderColor: colors.border, marginTop: 8 }]}>
+                            <Search size={28} color={colors.border} />
+                            <Text style={[s.emptyTitle, { color: colors.subtext }]}>Keine Entitäten gefunden</Text>
+                            <Text style={[s.emptyHint, { color: colors.subtext }]}>Versuche einen anderen Suchbegriff.</Text>
+                        </View>
+                    )}
+                </ScrollView>
 
                 {isSaving && (
-                    <View style={styles.loadingOverlay}>
+                    <View style={s.overlay}>
                         <ActivityIndicator size="large" color={colors.accent} />
                     </View>
                 )}
             </View>
-        </Modal >
+        </Modal>
     );
 };
 
-const styles = StyleSheet.create({
-    modalContainer: {
-        flex: 1,
-    },
-    modalHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: 16,
-        borderBottomWidth: 1,
-    },
-    modalTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-    },
-    closeButton: {
-        padding: 4,
-    },
-    tabContainer: {
-        borderBottomWidth: 1,
-        flexGrow: 0,
-    },
-    tab: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 12,
-        paddingHorizontal: 16,
-        gap: 6,
-    },
-    tabText: {
-        fontWeight: '600',
-        fontSize: 13,
-    },
-    content: {
-        flex: 1,
-        padding: 16,
-    },
-    sectionTitle: {
-        fontSize: 12,
-        fontWeight: '700',
-        marginBottom: 8,
-    },
-    mappedListScroll: {
-        maxHeight: 200,
-    },
-    mappedList: {
-        gap: 8,
-    },
-    mappedItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 12,
-        borderRadius: 12,
-        borderWidth: 1,
-    },
-    mappedName: {
-        fontSize: 15,
-        fontWeight: '500',
-    },
-    mappedId: {
-        fontSize: 12,
-        marginTop: 2,
-    },
-    removeBtn: {
-        padding: 8,
-    },
-    reorderBtns: {
-        flexDirection: 'column',
-        marginRight: 4,
-    },
-    arrowBtn: {
-        padding: 2,
-    },
-    renameInput: {
-        flex: 1,
-        fontSize: 15,
-        borderWidth: 1,
-        borderRadius: 8,
-        paddingHorizontal: 10,
-        paddingVertical: 6,
-    },
-    confirmBtn: {
-        width: 32,
-        height: 32,
-        borderRadius: 8,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    searchSection: {
-        marginTop: 16,
-    },
-    searchWrapper: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 12,
-        borderWidth: 1,
-        marginBottom: 8,
-    },
-    searchInput: {
-        flex: 1,
-        marginLeft: 8,
-        fontSize: 15,
-    },
-    scrollArea: {
-        flex: 1,
-    },
-    entityItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-    },
-    entityName: {
-        fontSize: 15,
-    },
-    entityId: {
-        fontSize: 11,
-        marginTop: 2,
-    },
-    emptyText: {
-        textAlign: 'center',
-        paddingVertical: 20,
-        fontSize: 14,
-    },
-    loadingOverlay: {
-        ...StyleSheet.absoluteFillObject,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        alignItems: 'center',
-        justifyContent: 'center',
-    }
+const s = StyleSheet.create({
+    container: { flex: 1 },
+
+    // Header
+    header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1 },
+    headerTitle: { fontSize: 22, fontWeight: '700', letterSpacing: -0.3 },
+    headerClose: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+
+    // Tab Pills
+    tabPills: { flexDirection: 'row', gap: 8, paddingHorizontal: 20, paddingVertical: 14 },
+    pill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 20, borderWidth: 1 },
+    pillText: { fontSize: 13, fontWeight: '600' },
+
+    // Main scroll
+    mainScroll: { flex: 1, paddingHorizontal: 20 },
+
+    // Section labels
+    sectionLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 1.2, marginBottom: 10, marginTop: 4 },
+
+    // Empty state
+    emptyCard: { alignItems: 'center', justifyContent: 'center', paddingVertical: 28, paddingHorizontal: 24, borderRadius: 16, borderWidth: 1, gap: 8 },
+    emptyTitle: { fontSize: 15, fontWeight: '600' },
+    emptyHint: { fontSize: 13, textAlign: 'center', lineHeight: 18 },
+
+    // Config cards (assigned entities)
+    configCard: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12, borderRadius: 14, borderWidth: 1, gap: 10 },
+    configDot: { width: 8, height: 8, borderRadius: 4 },
+    configName: { fontSize: 15, fontWeight: '600' },
+    configId: { fontSize: 11, marginTop: 1 },
+
+    // Reorder
+    orderBtns: { flexDirection: 'column', gap: 0 },
+    orderBtn: { padding: 3 },
+    removeBtn: { padding: 6, marginLeft: 2 },
+
+    // Edit mode
+    editRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
+    editInput: { flex: 1, fontSize: 15, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
+    editConfirm: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+
+    // Vacuum sub-config chips
+    chipRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 11, borderRadius: 12, borderWidth: 1, gap: 10, marginBottom: 8 },
+    chipDot: { width: 8, height: 8, borderRadius: 4 },
+    chipLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 0.8 },
+    chipValue: { fontSize: 14, fontWeight: '500', marginTop: 1 },
+    chipRemove: { padding: 6 },
+
+    // Search
+    searchBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 14, borderWidth: 1, marginBottom: 14, gap: 10 },
+    searchInput: { flex: 1, fontSize: 15 },
+
+    // Entity cards grid
+    entityGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+    entityCard: { width: '48%', borderRadius: 14, borderWidth: 1, padding: 14, minHeight: 100 },
+    entityCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+    domainBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+    domainText: { fontSize: 10, fontWeight: '700', textTransform: 'uppercase' },
+    entityCardName: { fontSize: 14, fontWeight: '600', lineHeight: 18, marginBottom: 4 },
+    entityCardId: { fontSize: 10, lineHeight: 13 },
+
+    // Overlay
+    overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center' },
 });
