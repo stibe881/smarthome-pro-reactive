@@ -66,6 +66,23 @@ const DYNAMIC_ICON_MAP: Record<string, any> = {
 
 import { CloudLightning, House as HomeLucide, Thermometer, Droplets } from 'lucide-react-native';
 
+// Display group mapping: notification type name -> display group
+const NOTIF_DISPLAY_GROUPS: Record<string, string> = {
+    'Waschmaschine': 'Haushalt',
+    'Einkaufsliste': 'Haushalt',
+    'Geschirrspüler': 'Haushalt',
+    'Trockner': 'Haushalt',
+    'Baby weint': 'Babyphone',
+    'Türen UG': 'Security Center',
+    'Temp. und Feuchtigkeit Rack': 'Security Center',
+    'Haustüre wurde geöffnet': 'Security Center',
+    'Geburtstage': 'Geburtstage',
+    'Wetterwarnung': 'Wetter',
+    'Türklingel': 'Türklingel',
+    'Akkustand Ring': 'Akku',
+    'Guten Morgen': 'Tagesablauf',
+};
+
 interface DynamicNotifType {
     id: string;
     name: string;
@@ -93,6 +110,22 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
     const [dynamicTypes, setDynamicTypes] = useState<DynamicNotifType[]>([]);
     const [userPrefs, setUserPrefs] = useState<Record<string, boolean>>({});
     const [loadingDynamic, setLoadingDynamic] = useState(false);
+
+    // Group dynamic types by display category, sorted alphabetically
+    const groupedTypes = useMemo(() => {
+        if (dynamicTypes.length === 0) return [];
+        const groups: Record<string, DynamicNotifType[]> = {};
+        for (const dtype of dynamicTypes) {
+            const group = NOTIF_DISPLAY_GROUPS[dtype.name] || 'Babyphone';
+            if (!groups[group]) groups[group] = [];
+            groups[group].push(dtype);
+        }
+        const sortedGroupNames = Object.keys(groups).sort((a, b) => a.localeCompare(b, 'de'));
+        return sortedGroupNames.map(name => ({
+            name,
+            types: groups[name].sort((a, b) => a.name.localeCompare(b.name, 'de')),
+        }));
+    }, [dynamicTypes]);
 
     // Load Token for display
     useEffect(() => {
@@ -158,7 +191,19 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
         const newValue = !currentValue;
 
         // Optimistic update
-        setUserPrefs(prev => ({ ...prev, [typeId]: newValue }));
+        const updatedPrefs = { ...userPrefs, [typeId]: newValue };
+        setUserPrefs(updatedPrefs);
+
+        // Also update the AsyncStorage cache for the notification handler
+        try {
+            const categoryPrefs: Record<string, boolean> = {};
+            for (const t of dynamicTypes) {
+                categoryPrefs[t.category_key] = updatedPrefs[t.id] ?? true;
+            }
+            await AsyncStorage.setItem('@smarthome_user_notif_prefs', JSON.stringify(categoryPrefs));
+        } catch (e) {
+            console.warn('Failed to update notification prefs cache:', e);
+        }
 
         try {
             // Upsert preference
@@ -250,11 +295,11 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
 
                     {notificationSettings.enabled && (
                         <>
-                            {/* ===== DYNAMISCHE PUSH-KATEGORIEN AUS DB ===== */}
-                            {dynamicTypes.length > 0 && (
-                                <View style={[styles.settingGroup, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                                    <Text style={[styles.groupTitle, { color: colors.subtext }]}>PUSH-BENACHRICHTIGUNGEN</Text>
-                                    {dynamicTypes.map((dtype, index) => {
+                            {/* ===== DYNAMISCHE PUSH-KATEGORIEN GRUPPIERT ===== */}
+                            {groupedTypes.map(group => (
+                                <View key={group.name} style={[styles.settingGroup, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                                    <Text style={[styles.groupTitle, { color: colors.subtext }]}>{group.name.toUpperCase()}</Text>
+                                    {group.types.map((dtype, index) => {
                                         const IconComp = DYNAMIC_ICON_MAP[dtype.icon] || Bell;
                                         const isEnabled = userPrefs[dtype.id] ?? true;
                                         return (
@@ -284,7 +329,8 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
                                         );
                                     })}
                                 </View>
-                            )}
+                            ))}
+
 
                             {loadingDynamic && dynamicTypes.length === 0 && (
                                 <ActivityIndicator style={{ marginVertical: 20 }} color={colors.accent} />
@@ -292,31 +338,6 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
                         </>
                     )}
 
-                    <View style={[styles.settingGroup, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                        <Text style={[styles.groupTitle, { color: colors.subtext }]}>DIAGNOSE</Text>
-                        <View style={{ marginBottom: 16 }}>
-                            <Text style={[styles.settingLabel, { color: colors.text }]}>Push Token (Tippen zum Kopieren)</Text>
-                            <Pressable onPress={async () => {
-                                if (token) {
-                                    await Clipboard.setStringAsync(token);
-                                    Alert.alert("Kopiert", "Token in Zwischenablage kopiert!");
-                                }
-                            }}>
-                                <Text style={[styles.settingDescription, { fontSize: 11, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', color: colors.accent }]} numberOfLines={2}>
-                                    {token || "Wird geladen..."}
-                                </Text>
-                            </Pressable>
-                        </View>
-
-                        <Pressable
-                            style={[styles.saveButton, { backgroundColor: colors.border }]}
-                            onPress={testPush}
-                            disabled={isTesting}
-                        >
-                            <Bell size={20} color="#fff" />
-                            <Text style={styles.saveButtonText}>Lokalen Test senden</Text>
-                        </Pressable>
-                    </View>
 
                     {/* Admin: Benachrichtigungen verwalten */}
                     {userRole === 'admin' && (
@@ -2434,7 +2455,7 @@ const styles = StyleSheet.create({
     modalContent: { flex: 1, padding: 20 },
     settingGroup: { marginBottom: 32, backgroundColor: '#0F172A', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#1E293B' },
     groupTitle: { color: '#64748B', fontSize: 12, fontWeight: '700', marginBottom: 16, textTransform: 'uppercase', letterSpacing: 1 },
-    settingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
+    settingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10 },
     settingLabel: { color: '#fff', fontSize: 16, fontWeight: '600', marginBottom: 4 },
     settingDescription: { color: '#94A3B8', fontSize: 13, paddingRight: 16 },
     iconBadge: { width: 40, height: 40, borderRadius: 12, backgroundColor: 'rgba(239, 68, 68, 0.15)', alignItems: 'center', justifyContent: 'center' },

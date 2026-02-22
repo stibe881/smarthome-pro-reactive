@@ -1,10 +1,36 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, Pressable, Modal, FlatList, StyleSheet, Alert } from 'react-native';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { View, Text, Pressable, Modal, FlatList, ScrollView, StyleSheet, Alert } from 'react-native';
 import { Bell, Check, CheckCheck, X, Trash2 } from 'lucide-react-native';
 import * as Notifications from 'expo-notifications';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useHomeAssistant } from '../contexts/HomeAssistantContext';
 import { supabase } from '../lib/supabase';
+
+const USER_NOTIF_PREFS_CACHE_KEY = '@smarthome_user_notif_prefs';
+
+// ── Category Color Map (matched by notification title) ────────
+const CATEGORY_RULES = [
+    { key: 'security', label: 'Sicherheit', color: '#EF4444', keywords: ['security center', 'alarm', 'sicherheit'] },
+    { key: 'household', label: 'Haushalt', color: '#3B82F6', keywords: ['haushalt', 'haustür', 'wohnungstür'] },
+    { key: 'battery', label: 'Akku', color: '#F59E0B', keywords: ['akkustand', 'batterie', 'akku'] },
+    { key: 'birthday', label: 'Geburtstag', color: '#EC4899', keywords: ['geburtstag', '🎉'] },
+    { key: 'doorbell', label: 'Türklingel', color: '#6366F1', keywords: ['geklingelt', 'klingel', 'doorbell'] },
+    { key: 'weather', label: 'Wetter', color: '#EF4444', keywords: ['wetter', 'meteo', 'warnung'] },
+];
+
+function getCatColor(title: string): string {
+    const t = (title || '').toLowerCase();
+    const cat = CATEGORY_RULES.find(c => c.keywords.some(kw => t.includes(kw)));
+    return cat?.color || '#6B7280';
+}
+
+function getCatKey(title: string): string | null {
+    const t = (title || '').toLowerCase();
+    const cat = CATEGORY_RULES.find(c => c.keywords.some(kw => t.includes(kw)));
+    return cat?.key || null;
+}
 
 const NOTIFICATION_HISTORY_KEY = '@smarthome_notification_history';
 
@@ -23,8 +49,32 @@ interface NotificationBellProps {
 export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
     const { colors } = useTheme();
     const { user } = useAuth();
+    const { notificationSettings } = useHomeAssistant();
     const [notifications, setNotifications] = useState<StoredNotification[]>([]);
     const [showModal, setShowModal] = useState(false);
+    const [activeFilter, setActiveFilter] = useState<string | null>(null);
+
+    // Dynamic notification preferences from Supabase
+    // Maps category_key -> enabled (true/false)
+    const [dynamicPrefs, setDynamicPrefs] = useState<Record<string, boolean>>({});
+    const dynamicPrefsRef = React.useRef<Record<string, boolean>>({});
+    dynamicPrefsRef.current = dynamicPrefs;
+
+    // Which filter chips to show (only categories present in data)
+    const presentCategories = useMemo(() => {
+        const found = new Set<string>();
+        for (const n of notifications) {
+            const k = getCatKey(n.title);
+            if (k) found.add(k);
+        }
+        return CATEGORY_RULES.filter(c => found.has(c.key));
+    }, [notifications]);
+
+    // Filtered list
+    const displayedNotifications = useMemo(() => {
+        if (!activeFilter) return notifications;
+        return notifications.filter(n => getCatKey(n.title) === activeFilter);
+    }, [notifications, activeFilter]);
 
     // Load notifications from Supabase
     const loadNotifications = useCallback(async () => {
@@ -169,8 +219,49 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
 
     // Load on mount & Auth Change
     useEffect(() => {
-        if (user) loadNotifications();
+        if (user) {
+            loadNotifications();
+            loadDynamicPrefs();
+        }
     }, [user, loadNotifications]);
+
+    // Load dynamic notification preferences from Supabase + cache in AsyncStorage
+    const loadDynamicPrefs = useCallback(async () => {
+        if (!user) return;
+        try {
+            // 1. Fetch active notification types (to get category_key -> id mapping)
+            const { data: types } = await supabase
+                .from('notification_types')
+                .select('id, category_key, is_active')
+                .eq('is_active', true);
+
+            // 2. Fetch user preferences
+            const { data: prefs } = await supabase
+                .from('user_notification_preferences')
+                .select('notification_type_id, enabled')
+                .eq('user_id', user.id);
+
+            if (types && prefs) {
+                // Build a map: category_key -> enabled
+                const prefById: Record<string, boolean> = {};
+                for (const p of prefs) {
+                    prefById[p.notification_type_id] = p.enabled;
+                }
+
+                const categoryPrefs: Record<string, boolean> = {};
+                for (const t of types) {
+                    // If user has a preference, use it; otherwise default to enabled
+                    categoryPrefs[t.category_key] = prefById[t.id] ?? true;
+                }
+
+                setDynamicPrefs(categoryPrefs);
+                // Cache for use in notification handler (HomeAssistantContext)
+                await AsyncStorage.setItem(USER_NOTIF_PREFS_CACHE_KEY, JSON.stringify(categoryPrefs));
+            }
+        } catch (e) {
+            console.warn('Failed to load dynamic notification prefs:', e);
+        }
+    }, [user]);
 
     // Sub to Realtime
     useEffect(() => {
@@ -216,19 +307,95 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
         }
     }, [showModal]);
 
-    // Listen for incoming notifications from Push (Background/Foreground)
-    // AND SAVE THEM TO SUPABASE (User History)
+    // Save delivered push notifications to Supabase (from ALL sources)
+    // Uses a ref to avoid stale closure and dependency cycle issues
+    const addNotificationRef = React.useRef(addNotification);
+    addNotificationRef.current = addNotification;
+
+    // Track already-processed notification IDs to avoid duplicates
+    const processedIds = React.useRef(new Set<string>());
+
+    // Check if a notification's category is enabled in settings
+    const isCategoryEnabled = useCallback((title: string, pushCategoryKey?: string): boolean => {
+        // Master switch
+        if (!notificationSettings.enabled) return false;
+
+        // 1. Check dynamic preferences first (from Supabase)
+        //    Push notifications from HA carry data.category_key
+        const effectiveCatKey = pushCategoryKey || getCatKey(title);
+
+        if (effectiveCatKey && dynamicPrefsRef.current[effectiveCatKey] !== undefined) {
+            // We have a dynamic preference for this category → use it
+            return dynamicPrefsRef.current[effectiveCatKey];
+        }
+
+        // 2. Fallback to static settings for legacy categories
+        if (!effectiveCatKey) return true; // Unknown categories are always allowed
+
+        switch (effectiveCatKey) {
+            case 'security': return notificationSettings.security?.doors_ug !== false;
+            case 'doorbell': return notificationSettings.home?.doorbell !== false;
+            case 'weather': return notificationSettings.weather?.warning !== false;
+            case 'birthday': return notificationSettings.calendar?.birthday !== false;
+            case 'household': return true;
+            case 'battery': return true;
+            default: return true;
+        }
+    }, [notificationSettings, dynamicPrefs]);
+
+    const isCategoryEnabledRef = React.useRef(isCategoryEnabled);
+    isCategoryEnabledRef.current = isCategoryEnabled;
+
+    const saveNotification = useCallback((id: string, title: string, body: string, pushCategoryKey?: string) => {
+        if (processedIds.current.has(id)) return;
+        processedIds.current.add(id);
+        // Only save if this category is enabled in settings
+        if (!isCategoryEnabledRef.current(title, pushCategoryKey)) return;
+        addNotificationRef.current(title || 'Benachrichtigung', body || '');
+    }, []);
+
+    // 1) FOREGROUND: Listen for notifications while app is active
     useEffect(() => {
-        const subscription = Notifications.addNotificationReceivedListener(notification => {
-            const { title, body } = notification.request.content;
-            if (title || body) {
-                // IMPORTANT: Only add if we have a user. 
-                // Using the ref logic or wrapper might be better to avoid strict dependency on 'addNotification' changing
-                addNotification(title || 'Benachrichtigung', body || '');
-            }
+        const sub = Notifications.addNotificationReceivedListener(notification => {
+            const { title, body, data } = notification.request.content;
+            const id = notification.request.identifier;
+            const pushCatKey = (data as any)?.category_key || '';
+            console.log('🔔 FOREGROUND push:', title, 'category_key:', pushCatKey);
+            saveNotification(id, title || '', body || '', pushCatKey || undefined);
         });
-        return () => subscription.remove();
-    }, [addNotification]);
+        return () => sub.remove();
+    }, [saveNotification]);
+
+    // 2) TAPPED: When user taps a notification (background or closed app)
+    useEffect(() => {
+        const sub = Notifications.addNotificationResponseReceivedListener(response => {
+            const { title, body, data } = response.notification.request.content;
+            const id = response.notification.request.identifier;
+            const pushCatKey = (data as any)?.category_key || '';
+            console.log('🔔 TAPPED push:', title, 'category_key:', pushCatKey);
+            saveNotification(id, title || '', body || '', pushCatKey || undefined);
+        });
+        return () => sub.remove();
+    }, [saveNotification]);
+
+    // 3) APP OPEN: Catch all delivered notifications from notification center
+    useEffect(() => {
+        if (!user) return;
+        const catchDelivered = async () => {
+            try {
+                const delivered = await Notifications.getPresentedNotificationsAsync();
+                for (const n of delivered) {
+                    const { title, body, data } = n.request.content;
+                    const id = n.request.identifier;
+                    const pushCatKey = (data as any)?.category_key || '';
+                    saveNotification(id, title || '', body || '', pushCatKey || undefined);
+                }
+            } catch (e) {
+                console.warn('Failed to get delivered notifications:', e);
+            }
+        };
+        catchDelivered();
+    }, [user, saveNotification]);
 
     const unreadCount = notifications.filter(n => !n.isRead).length;
 
@@ -304,67 +471,93 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
                             </View>
                         </View>
 
+                        {/* Category Filter Chips */}
+                        {presentCategories.length > 0 && (
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+                                <Pressable
+                                    style={[styles.filterChip, { backgroundColor: !activeFilter ? colors.accent + '20' : colors.background, borderColor: !activeFilter ? colors.accent : colors.border }]}
+                                    onPress={() => setActiveFilter(null)}
+                                >
+                                    <Text style={{ color: !activeFilter ? colors.accent : colors.subtext, fontSize: 12, fontWeight: '600' }}>Alle</Text>
+                                </Pressable>
+                                {presentCategories.map(cat => {
+                                    const isActive = activeFilter === cat.key;
+                                    return (
+                                        <Pressable
+                                            key={cat.key}
+                                            style={[styles.filterChip, { backgroundColor: isActive ? cat.color + '20' : colors.background, borderColor: isActive ? cat.color : colors.border }]}
+                                            onPress={() => setActiveFilter(isActive ? null : cat.key)}
+                                        >
+                                            <View style={[styles.catDot, { backgroundColor: cat.color }]} />
+                                            <Text style={{ color: isActive ? cat.color : colors.subtext, fontSize: 12, fontWeight: '600', marginLeft: 5 }}>{cat.label}</Text>
+                                        </Pressable>
+                                    );
+                                })}
+                            </ScrollView>
+                        )}
+
                         {/* Notification List */}
-                        {notifications.length === 0 ? (
+                        {displayedNotifications.length === 0 ? (
                             <View style={styles.emptyState}>
                                 <Bell size={48} color={colors.subtext} />
                                 <Text style={[styles.emptyText, { color: colors.subtext }]}>
-                                    Keine Benachrichtigungen
+                                    {activeFilter ? 'Keine in dieser Kategorie' : 'Keine Benachrichtigungen'}
                                 </Text>
                             </View>
                         ) : (
                             <FlatList
-                                data={notifications}
+                                data={displayedNotifications}
                                 keyExtractor={item => item.id}
-                                renderItem={({ item }) => (
-                                    <Pressable
-                                        onPress={() => markAsRead(item.id)}
-                                        style={[
-                                            styles.notifItem,
-                                            {
-                                                backgroundColor: item.isRead
-                                                    ? colors.background
-                                                    : colors.accent + '15',
-                                                borderLeftColor: item.isRead
-                                                    ? 'transparent'
-                                                    : colors.accent,
-                                            }
-                                        ]}
-                                    >
-                                        <View style={styles.notifContent}>
-                                            <Text
-                                                style={[
-                                                    styles.notifTitle,
-                                                    {
-                                                        color: colors.text,
-                                                        fontWeight: item.isRead ? '500' : '700'
-                                                    }
-                                                ]}
-                                            >
-                                                {item.title}
-                                            </Text>
-                                            <Text
-                                                style={[styles.notifBody, { color: colors.subtext }]}
-                                                numberOfLines={2}
-                                            >
-                                                {item.body}
-                                            </Text>
-                                            <Text style={[styles.notifTime, { color: colors.subtext }]}>
-                                                {formatTime(item.timestamp)}
-                                            </Text>
-                                        </View>
-                                        {!item.isRead && (
-                                            <View style={[styles.unreadDot, { backgroundColor: colors.accent }]} />
-                                        )}
-                                    </Pressable>
-                                )}
+                                renderItem={({ item }) => {
+                                    const catColor = getCatColor(item.title);
+                                    return (
+                                        <Pressable
+                                            onPress={() => markAsRead(item.id)}
+                                            style={[
+                                                styles.notifItem,
+                                                {
+                                                    backgroundColor: item.isRead
+                                                        ? colors.background
+                                                        : catColor + '10',
+                                                    borderLeftColor: catColor,
+                                                }
+                                            ]}
+                                        >
+                                            <View style={styles.notifContent}>
+                                                <Text
+                                                    style={[
+                                                        styles.notifTitle,
+                                                        {
+                                                            color: colors.text,
+                                                            fontWeight: item.isRead ? '500' : '700'
+                                                        }
+                                                    ]}
+                                                >
+                                                    {item.title}
+                                                </Text>
+                                                <Text
+                                                    style={[styles.notifBody, { color: colors.subtext }]}
+                                                    numberOfLines={2}
+                                                >
+                                                    {item.body}
+                                                </Text>
+                                                <Text style={[styles.notifTime, { color: colors.subtext }]}>
+                                                    {formatTime(item.timestamp)}
+                                                </Text>
+                                            </View>
+                                            {!item.isRead && (
+                                                <View style={[styles.unreadDot, { backgroundColor: catColor }]} />
+                                            )}
+                                        </Pressable>
+                                    );
+                                }}
                                 showsVerticalScrollIndicator={false}
                                 contentContainerStyle={{ paddingBottom: 20 }}
                             />
                         )}
                     </View>
                 </View>
-            </Modal>
+            </Modal >
         </>
     );
 }
@@ -428,6 +621,26 @@ const styles = StyleSheet.create({
         borderRadius: 18,
         alignItems: 'center',
         justifyContent: 'center',
+    },
+    filterRow: {
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        gap: 8,
+        alignItems: 'center',
+    },
+    filterChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 12,
+        paddingVertical: 7,
+        borderRadius: 16,
+        borderWidth: 1,
+        height: 32,
+    },
+    catDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
     },
     emptyState: {
         flex: 1,

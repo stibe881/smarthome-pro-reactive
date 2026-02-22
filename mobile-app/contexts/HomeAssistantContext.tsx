@@ -747,13 +747,49 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
         let doorbellPushSub: any = null;
         if (Platform.OS !== 'web') {
             Notifications.setNotificationHandler({
-                handleNotification: async () => ({
-                    shouldShowAlert: true,
-                    shouldPlaySound: true,
-                    shouldSetBadge: false,
-                    shouldShowBanner: true,
-                    shouldShowList: true
-                }),
+                handleNotification: async (notification) => {
+                    // Master switch: suppress all notifications if disabled
+                    if (!notificationSettingsRef.current.enabled) {
+                        return {
+                            shouldShowAlert: false,
+                            shouldPlaySound: false,
+                            shouldSetBadge: false,
+                            shouldShowBanner: false,
+                            shouldShowList: false,
+                        };
+                    }
+
+                    // Per-category check using cached dynamic preferences
+                    try {
+                        const categoryKey = (notification.request.content.data as any)?.category_key;
+                        if (categoryKey) {
+                            const cachedPrefs = await AsyncStorage.getItem('@smarthome_user_notif_prefs');
+                            if (cachedPrefs) {
+                                const prefs = JSON.parse(cachedPrefs);
+                                if (prefs[categoryKey] === false) {
+                                    console.log(`🔕 Suppressing push for disabled category: ${categoryKey}`);
+                                    return {
+                                        shouldShowAlert: false,
+                                        shouldPlaySound: false,
+                                        shouldSetBadge: false,
+                                        shouldShowBanner: false,
+                                        shouldShowList: false,
+                                    };
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        // Ignore cache read errors, allow notification through
+                    }
+
+                    return {
+                        shouldShowAlert: true,
+                        shouldPlaySound: true,
+                        shouldSetBadge: false,
+                        shouldShowBanner: true,
+                        shouldShowList: true,
+                    };
+                },
             });
 
             // Listen for foreground push notifications to trigger Doorbell Popup
