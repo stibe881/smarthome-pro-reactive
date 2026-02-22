@@ -1438,6 +1438,80 @@ export default function Settings() {
                             </View>
                         </View>
 
+                        {/* Automationen – standalone card like HA */}
+                        <View style={styles.section}>
+                            <Pressable
+                                onPress={() => setAutomationsModalVisible(true)}
+                                style={[styles.sectionContent, {
+                                    backgroundColor: colors.card,
+                                    borderColor: colors.border,
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    padding: 16,
+                                    justifyContent: 'space-between'
+                                }]}
+                            >
+                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                    <View style={[styles.iconContainer, { backgroundColor: colors.accent + '20' }]}>
+                                        <Zap size={20} color={colors.accent} />
+                                    </View>
+                                    <Text style={[styles.rowLabel, { color: colors.text }]}>Automationen</Text>
+                                </View>
+                                <ChevronRight size={20} color={colors.subtext} />
+                            </Pressable>
+                        </View>
+
+                        {/* Benachrichtigungen – standalone card like HA */}
+                        <View style={styles.section}>
+                            <Pressable
+                                onPress={() => setNotificationModalVisible(true)}
+                                style={[styles.sectionContent, {
+                                    backgroundColor: colors.card,
+                                    borderColor: colors.border,
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    padding: 16,
+                                    justifyContent: 'space-between'
+                                }]}
+                            >
+                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                    <View style={[styles.iconContainer, { backgroundColor: (notificationSettings.enabled ? colors.accent : colors.subtext) + '20' }]}>
+                                        <Bell size={20} color={notificationSettings.enabled ? colors.accent : colors.subtext} />
+                                    </View>
+                                    <View>
+                                        <Text style={[styles.rowLabel, { color: colors.text }]}>Benachrichtigungen</Text>
+                                        <Text style={[styles.rowValue, { color: notificationSettings.enabled ? colors.success : colors.subtext, marginTop: 2 }]}>
+                                            {notificationSettings.enabled ? 'Aktiv' : 'Inaktiv'}
+                                        </Text>
+                                    </View>
+                                </View>
+                                <ChevronRight size={20} color={colors.subtext} />
+                            </Pressable>
+                        </View>
+
+                        {/* Kindermodus – standalone card like HA */}
+                        <View style={styles.section}>
+                            <Pressable
+                                onPress={() => setKidsModalVisible(true)}
+                                style={[styles.sectionContent, {
+                                    backgroundColor: colors.card,
+                                    borderColor: colors.border,
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    padding: 16,
+                                    justifyContent: 'space-between'
+                                }]}
+                            >
+                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                    <View style={[styles.iconContainer, { backgroundColor: colors.accent + '20' }]}>
+                                        <Baby size={20} color={colors.accent} />
+                                    </View>
+                                    <Text style={[styles.rowLabel, { color: colors.text }]}>Kindermodus</Text>
+                                </View>
+                                <ChevronRight size={20} color={colors.subtext} />
+                            </Pressable>
+                        </View>
+
                         {/* THEME SELECTION */}
                         <View style={styles.section}>
                             <Pressable
@@ -1615,16 +1689,7 @@ export default function Settings() {
                             </>)}
                         </View>
 
-                        <SettingsSection title="Kindermodus" colors={colors}>
-                            <SettingsRow
-                                icon={<Baby size={20} color={colors.accent} />}
-                                iconColor={colors.accent}
-                                label="Kindermodus konfigurieren"
-                                showChevron
-                                onPress={() => setKidsModalVisible(true)}
-                                colors={colors}
-                            />
-                        </SettingsSection>
+
 
                         {userRole === 'admin' && (
                             <SettingsSection title="Dashboard" colors={colors}>
@@ -1665,56 +1730,7 @@ export default function Settings() {
                             />
                         </SettingsSection>
 
-                        {/* Automationen – standalone card like HA */}
-                        <View style={styles.section}>
-                            <Pressable
-                                onPress={() => setAutomationsModalVisible(true)}
-                                style={[styles.sectionContent, {
-                                    backgroundColor: colors.card,
-                                    borderColor: colors.border,
-                                    flexDirection: 'row',
-                                    alignItems: 'center',
-                                    padding: 16,
-                                    justifyContent: 'space-between'
-                                }]}
-                            >
-                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                    <View style={[styles.iconContainer, { backgroundColor: colors.accent + '20' }]}>
-                                        <Zap size={20} color={colors.accent} />
-                                    </View>
-                                    <Text style={[styles.rowLabel, { color: colors.text }]}>Automationen</Text>
-                                </View>
-                                <ChevronRight size={20} color={colors.subtext} />
-                            </Pressable>
-                        </View>
 
-                        {/* Benachrichtigungen – standalone card like HA */}
-                        <View style={styles.section}>
-                            <Pressable
-                                onPress={() => setNotificationModalVisible(true)}
-                                style={[styles.sectionContent, {
-                                    backgroundColor: colors.card,
-                                    borderColor: colors.border,
-                                    flexDirection: 'row',
-                                    alignItems: 'center',
-                                    padding: 16,
-                                    justifyContent: 'space-between'
-                                }]}
-                            >
-                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                    <View style={[styles.iconContainer, { backgroundColor: (notificationSettings.enabled ? colors.accent : colors.subtext) + '20' }]}>
-                                        <Bell size={20} color={notificationSettings.enabled ? colors.accent : colors.subtext} />
-                                    </View>
-                                    <View>
-                                        <Text style={[styles.rowLabel, { color: colors.text }]}>Benachrichtigungen</Text>
-                                        <Text style={[styles.rowValue, { color: notificationSettings.enabled ? colors.success : colors.subtext, marginTop: 2 }]}>
-                                            {notificationSettings.enabled ? 'Aktiv' : 'Inaktiv'}
-                                        </Text>
-                                    </View>
-                                </View>
-                                <ChevronRight size={20} color={colors.subtext} />
-                            </Pressable>
-                        </View>
 
                         {/* Weitere App-Einstellungen */}
                         <SettingsSection title="Weiteres" colors={colors}>
