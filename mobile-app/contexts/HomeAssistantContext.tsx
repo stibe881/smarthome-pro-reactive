@@ -959,7 +959,7 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
                 if (items) {
                     const count = items.filter((i: any) => i.status === 'needs_action').length;
                     await AsyncStorage.setItem(SHOPPING_COUNT_KEY, count.toString());
-                    console.log(`🛒 Shopping count synced: ${count} items (from ${configuredEntity})`);
+
                 }
             } catch (e) {
                 console.warn('Failed to sync shopping count:', e);
@@ -993,7 +993,7 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
 
                 if (shops && shops.length > 0) {
                     await AsyncStorage.setItem(SHOPS_STORAGE_KEY, JSON.stringify(shops));
-                    console.log(`🛒 Synced ${shops.length} shop locations from Supabase to AsyncStorage`);
+
                 } else {
                     // No custom shops → remove key so DEFAULT_SHOPS are used
                     await AsyncStorage.removeItem(SHOPS_STORAGE_KEY);

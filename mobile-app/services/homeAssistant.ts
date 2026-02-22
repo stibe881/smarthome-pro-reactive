@@ -511,7 +511,7 @@ export class HomeAssistantService {
     }
 
     async fetchTodoItems(entityId: string): Promise<any[]> {
-        console.log(`fetching todo items for ${entityId}`);
+
         return new Promise((resolve) => {
             if (!this.isConnected()) {
                 resolve([]);
