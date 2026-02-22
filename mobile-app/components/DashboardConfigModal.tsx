@@ -15,7 +15,7 @@ const TABS: { key: SectionType; label: string; icon: any; domain: string; single
     { key: 'lights', label: 'Lichter', icon: Lightbulb, domain: 'light.' },
     { key: 'covers', label: 'Rollläden', icon: Blinds, domain: 'cover.' },
     { key: 'vacuum', label: 'Saugroboter', icon: Bot, domain: 'vacuum.', single: true },
-    { key: 'alarm', label: 'Alarmanlage', icon: Shield, domain: 'alarm_control_panel.', single: true },
+    { key: 'alarm', label: 'Alarmanlage', icon: Shield, domain: 'alarm_control_panel.', single: true, allEntities: true },
     { key: 'homescreenShortcuts', label: 'Shortcuts', icon: Zap, domain: '', allEntities: true },
 ];
 
@@ -32,8 +32,8 @@ export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalP
 
     const availableEntities = useMemo(() => {
         let filtered = entities;
-        if (activeSection === 'vacuum') {
-            // Show all entities for vacuum tab
+        if (activeSection === 'vacuum' || activeSection === 'alarm') {
+            // Show all entities for vacuum and alarm tabs
         } else if (activeTab.allEntities) {
             // Keep all
         } else {
@@ -57,6 +57,25 @@ export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalP
 
     const handleAdd = async (entity: EntityState) => {
         const name = entity.attributes.friendly_name || entity.entity_id;
+
+        // Alarm tab: alarm_control_panel → single select; everything else → add to alarmSensors
+        if (activeSection === 'alarm') {
+            if (entity.entity_id.startsWith('alarm_control_panel.')) {
+                // handled below by single-select logic
+            } else {
+                const currentSensors = (dashboardConfig.alarmSensors || []) as string[];
+                if (currentSensors.includes(entity.entity_id)) {
+                    Alert.alert('Hinweis', 'Dieser Sensor ist bereits zugeordnet.');
+                    return;
+                }
+                setIsSaving(true);
+                try {
+                    await saveDashboardConfig({ ...dashboardConfig, alarmSensors: [...currentSensors, entity.entity_id] });
+                } catch { Alert.alert('Fehler', 'Konfiguration konnte nicht gespeichert werden.'); }
+                finally { setIsSaving(false); }
+                return;
+            }
+        }
 
         if (activeSection === 'vacuum') {
             if (entity.entity_id.startsWith('vacuum.')) {
@@ -151,7 +170,13 @@ export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalP
     };
 
     const isEntityAdded = (entityId: string) => {
-        if (activeTab.single) return dashboardConfig[activeSection] === entityId;
+        if (activeTab.single) {
+            if (activeSection === 'alarm') {
+                return dashboardConfig[activeSection] === entityId ||
+                    ((dashboardConfig.alarmSensors || []) as string[]).includes(entityId);
+            }
+            return dashboardConfig[activeSection] === entityId;
+        }
         if (activeSection === 'vacuum') {
             return dashboardConfig.vacuumBatterySensor === entityId ||
                 dashboardConfig.vacuumMapCamera === entityId ||
@@ -355,6 +380,69 @@ export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalP
                                 <View style={[s.emptyCard, { backgroundColor: colors.card, borderColor: colors.border, paddingVertical: 16 }]}>
                                     <Text style={[s.emptyHint, { color: colors.subtext }]}>
                                         Keine Dockingstation-Entitäten. Wähle beliebige Entities unten aus.
+                                    </Text>
+                                </View>
+                            )}
+                        </View>
+                    )}
+
+                    {/* Alarm Sensors Config */}
+                    {activeSection === 'alarm' && (
+                        <View style={{ marginTop: 20 }}>
+                            <Text style={[s.sectionLabel, { color: colors.subtext }]}>ALARM-SENSOREN</Text>
+                            {((dashboardConfig.alarmSensors || []) as string[]).length > 0 ? (
+                                <View style={{ gap: 6 }}>
+                                    {((dashboardConfig.alarmSensors || []) as string[]).map((sensorId: string, idx: number) => {
+                                        const sensorEntity = entities.find(e => e.entity_id === sensorId);
+                                        const sensorList = (dashboardConfig.alarmSensors || []) as string[];
+                                        return (
+                                            <View key={sensorId} style={[s.configCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                                                <View style={[s.configDot, { backgroundColor: '#EF4444' }]} />
+                                                <View style={{ flex: 1 }}>
+                                                    <Text style={[s.configName, { color: colors.text }]} numberOfLines={1}>
+                                                        {sensorEntity?.attributes?.friendly_name || sensorId}
+                                                    </Text>
+                                                    <Text style={[s.configId, { color: colors.subtext }]} numberOfLines={1}>{sensorId}</Text>
+                                                </View>
+                                                <View style={s.orderBtns}>
+                                                    <Pressable onPress={async () => {
+                                                        if (idx === 0) return;
+                                                        const arr = [...sensorList];
+                                                        [arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]];
+                                                        setIsSaving(true);
+                                                        try { await saveDashboardConfig({ ...dashboardConfig, alarmSensors: arr }); }
+                                                        catch { } finally { setIsSaving(false); }
+                                                    }} style={s.orderBtn}>
+                                                        <ChevronUp size={16} color={idx === 0 ? colors.border : colors.subtext} />
+                                                    </Pressable>
+                                                    <Pressable onPress={async () => {
+                                                        if (idx === sensorList.length - 1) return;
+                                                        const arr = [...sensorList];
+                                                        [arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]];
+                                                        setIsSaving(true);
+                                                        try { await saveDashboardConfig({ ...dashboardConfig, alarmSensors: arr }); }
+                                                        catch { } finally { setIsSaving(false); }
+                                                    }} style={s.orderBtn}>
+                                                        <ChevronDown size={16} color={idx === sensorList.length - 1 ? colors.border : colors.subtext} />
+                                                    </Pressable>
+                                                </View>
+                                                <Pressable onPress={async () => {
+                                                    setIsSaving(true);
+                                                    try {
+                                                        const updated = sensorList.filter((id: string) => id !== sensorId);
+                                                        await saveDashboardConfig({ ...dashboardConfig, alarmSensors: updated });
+                                                    } catch { } finally { setIsSaving(false); }
+                                                }} hitSlop={8} style={s.removeBtn}>
+                                                    <Trash2 size={16} color="#EF4444" />
+                                                </Pressable>
+                                            </View>
+                                        );
+                                    })}
+                                </View>
+                            ) : (
+                                <View style={[s.emptyCard, { backgroundColor: colors.card, borderColor: colors.border, paddingVertical: 16 }]}>
+                                    <Text style={[s.emptyHint, { color: colors.subtext }]}>
+                                        Keine Sensoren konfiguriert. Wähle Tür-/Fenstersensoren unten aus.
                                     </Text>
                                 </View>
                             )}
