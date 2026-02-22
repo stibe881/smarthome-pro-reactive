@@ -611,7 +611,7 @@ interface SettingsSectionProps {
     colors: any;
 }
 
-const SettingsSection = ({ title, children, colors }: SettingsSectionProps) => (
+const KidsSettingsSection = ({ title, children, colors }: SettingsSectionProps) => (
     <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: colors.subtext }]}>
             {title}
@@ -714,7 +714,7 @@ const KidsSettingsModal = ({ visible, onClose }: { visible: boolean; onClose: ()
                 </View>
 
                 <ScrollView style={[styles.modalContent, { backgroundColor: colors.background }]}>
-                    <SettingsSection title="STATUS" colors={colors}>
+                    <KidsSettingsSection title="STATUS" colors={colors}>
                         <View style={styles.settingRow}>
                             <View style={{ flex: 1 }}>
                                 <Text style={[styles.settingLabel, { color: colors.text }]}>Aktivieren</Text>
@@ -732,9 +732,9 @@ const KidsSettingsModal = ({ visible, onClose }: { visible: boolean; onClose: ()
                                 disabled={config.rooms.length === 0 && !isKidsModeActive}
                             />
                         </View>
-                    </SettingsSection>
+                    </KidsSettingsSection>
 
-                    <SettingsSection title="ZIMMER" colors={colors}>
+                    <KidsSettingsSection title="ZIMMER" colors={colors}>
                         {config.rooms.map(room => (
                             <Pressable
                                 key={room.id}
@@ -781,9 +781,9 @@ const KidsSettingsModal = ({ visible, onClose }: { visible: boolean; onClose: ()
                             </View>
                             <Text style={{ color: colors.accent, fontSize: 16, fontWeight: '600' }}>Zimmer hinzufügen</Text>
                         </Pressable>
-                    </SettingsSection>
+                    </KidsSettingsSection>
 
-                    <SettingsSection title="ELTERN-EINSTELLUNGEN" colors={colors}>
+                    <KidsSettingsSection title="ELTERN-EINSTELLUNGEN" colors={colors}>
                         <View style={styles.inputGroup}>
                             <Text style={[styles.inputLabel, { color: colors.subtext }]}>Parental PIN</Text>
                             <TextInput
@@ -795,7 +795,7 @@ const KidsSettingsModal = ({ visible, onClose }: { visible: boolean; onClose: ()
                                 secureTextEntry
                             />
                         </View>
-                    </SettingsSection>
+                    </KidsSettingsSection>
 
                     <View style={{ height: 40 }} />
                 </ScrollView>
