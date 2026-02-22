@@ -79,7 +79,21 @@ export default function RobiVacuumModal({
     if (!vacuum) return null;
 
     const batteryLevel = batterySensor?.state ?? vacuum.attributes?.battery_level ?? '?';
-    const status = vacuum.attributes?.status || vacuum.state || 'Unbekannt';
+    const rawStatus = vacuum.attributes?.status || vacuum.state || 'unknown';
+
+    // Translate vacuum states to German
+    const statusMap: Record<string, string> = {
+        docked: 'Angedockt',
+        cleaning: 'Reinigt',
+        returning: 'Kehrt zurück',
+        paused: 'Pausiert',
+        idle: 'Bereit',
+        error: 'Fehler',
+        charging: 'Lädt',
+        'returning_to_dock': 'Kehrt zurück',
+        unknown: 'Unbekannt',
+    };
+    const status = statusMap[rawStatus.toLowerCase()] || rawStatus;
 
     const renderCleaningTab = () => (
         <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: 40 }}>
