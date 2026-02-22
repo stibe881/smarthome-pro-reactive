@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { View, Text, Pressable, ScrollView, Modal, StyleSheet, ActivityIndicator, Alert, TextInput, Dimensions } from 'react-native';
-import { X, Plus, Trash2, Lightbulb, Blinds, Bot, Shield, Search, Pencil, Check, ChevronUp, ChevronDown, Zap, CheckCircle2, Circle } from 'lucide-react-native';
+import { X, Plus, Trash2, Lightbulb, Blinds, Bot, Shield, Search, Pencil, Check, ChevronUp, ChevronDown, Zap, CheckCircle2, Circle, CookingPot } from 'lucide-react-native';
 import { useHomeAssistant, EntityState } from '../contexts/HomeAssistantContext';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -9,11 +9,12 @@ interface DashboardConfigModalProps {
     onClose: () => void;
 }
 
-type SectionType = 'lights' | 'covers' | 'vacuum' | 'alarm' | 'homescreenShortcuts';
+type SectionType = 'lights' | 'covers' | 'vacuum' | 'alarm' | 'homescreenShortcuts' | 'appliances';
 
 const TABS: { key: SectionType; label: string; icon: any; domain: string; single?: boolean; allEntities?: boolean }[] = [
     { key: 'lights', label: 'Lichter', icon: Lightbulb, domain: 'light.' },
     { key: 'covers', label: 'Rollläden', icon: Blinds, domain: 'cover.' },
+    { key: 'appliances', label: 'Geräte', icon: CookingPot, domain: 'sensor.', allEntities: true },
     { key: 'vacuum', label: 'Saugroboter', icon: Bot, domain: 'vacuum.', single: true },
     { key: 'alarm', label: 'Alarmanlage', icon: Shield, domain: 'alarm_control_panel.', single: true },
     { key: 'homescreenShortcuts', label: 'Shortcuts', icon: Zap, domain: '', allEntities: true },
@@ -57,6 +58,24 @@ export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalP
 
     const handleAdd = async (entity: EntityState) => {
         const name = entity.attributes.friendly_name || entity.entity_id;
+
+        // Appliances tab: add to appliances array
+        if (activeSection === 'appliances') {
+            const currentAppliances = (dashboardConfig.appliances || []) as { id: string; label: string; secondaryId?: string }[];
+            if (currentAppliances.find(a => a.id === entity.entity_id)) {
+                Alert.alert('Hinweis', 'Dieses Gerät ist bereits hinzugefügt.');
+                return;
+            }
+            setIsSaving(true);
+            try {
+                await saveDashboardConfig({
+                    ...dashboardConfig,
+                    appliances: [...currentAppliances, { id: entity.entity_id, label: name }]
+                });
+            } catch { Alert.alert('Fehler', 'Konfiguration konnte nicht gespeichert werden.'); }
+            finally { setIsSaving(false); }
+            return;
+        }
 
         if (activeSection === 'vacuum') {
             if (entity.entity_id.startsWith('vacuum.')) {
@@ -152,6 +171,9 @@ export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalP
 
     const isEntityAdded = (entityId: string) => {
         if (activeTab.single) return dashboardConfig[activeSection] === entityId;
+        if (activeSection === 'appliances') {
+            return ((dashboardConfig.appliances || []) as { id: string }[]).some(a => a.id === entityId);
+        }
         if (activeSection === 'vacuum') {
             return dashboardConfig.vacuumBatterySensor === entityId ||
                 dashboardConfig.vacuumMapCamera === entityId ||
@@ -283,6 +305,104 @@ export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalP
                                     )}
                                 </View>
                             ))}
+                        </View>
+                    )}
+
+                    {/* Appliances Config */}
+                    {activeSection === 'appliances' && (
+                        <View>
+                            <Text style={[s.sectionLabel, { color: colors.subtext }]}>KONFIGURIERTE GERÄTE</Text>
+                            {((dashboardConfig.appliances || []) as { id: string; label: string }[]).length > 0 ? (
+                                <View style={{ gap: 8 }}>
+                                    {((dashboardConfig.appliances || []) as { id: string; label: string }[]).map((app, idx) => {
+                                        const appList = (dashboardConfig.appliances || []) as { id: string; label: string }[];
+                                        const entity = entities.find(e => e.entity_id === app.id);
+                                        return (
+                                            <View key={app.id} style={[s.configCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                                                {editingId === app.id ? (
+                                                    <View style={s.editRow}>
+                                                        <TextInput
+                                                            value={editName}
+                                                            onChangeText={setEditName}
+                                                            autoFocus
+                                                            style={[s.editInput, { color: colors.text, borderColor: colors.accent, backgroundColor: colors.background }]}
+                                                            onSubmitEditing={async () => {
+                                                                if (!editName.trim()) return;
+                                                                const updated = appList.map(a => a.id === app.id ? { ...a, label: editName.trim() } : a);
+                                                                setIsSaving(true);
+                                                                try { await saveDashboardConfig({ ...dashboardConfig, appliances: updated }); }
+                                                                catch { } finally { setIsSaving(false); setEditingId(null); }
+                                                            }}
+                                                            placeholder="Gerätename..."
+                                                            placeholderTextColor={colors.subtext}
+                                                        />
+                                                        <Pressable onPress={async () => {
+                                                            if (!editName.trim()) return;
+                                                            const updated = appList.map(a => a.id === app.id ? { ...a, label: editName.trim() } : a);
+                                                            setIsSaving(true);
+                                                            try { await saveDashboardConfig({ ...dashboardConfig, appliances: updated }); }
+                                                            catch { } finally { setIsSaving(false); setEditingId(null); }
+                                                        }} style={[s.editConfirm, { backgroundColor: colors.accent }]}>
+                                                            <Check size={16} color="#fff" />
+                                                        </Pressable>
+                                                    </View>
+                                                ) : (
+                                                    <>
+                                                        <View style={[s.configDot, { backgroundColor: '#F59E0B' }]} />
+                                                        <Pressable style={{ flex: 1 }} onPress={() => { setEditingId(app.id); setEditName(app.label); }}>
+                                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                                                <Text style={[s.configName, { color: colors.text }]} numberOfLines={1}>{app.label}</Text>
+                                                                <Pencil size={11} color={colors.subtext} />
+                                                            </View>
+                                                            <Text style={[s.configId, { color: colors.subtext }]} numberOfLines={1}>{app.id}</Text>
+                                                        </Pressable>
+                                                        <View style={s.orderBtns}>
+                                                            <Pressable onPress={async () => {
+                                                                if (idx === 0) return;
+                                                                const arr = [...appList];
+                                                                [arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]];
+                                                                setIsSaving(true);
+                                                                try { await saveDashboardConfig({ ...dashboardConfig, appliances: arr }); }
+                                                                catch { } finally { setIsSaving(false); }
+                                                            }} style={s.orderBtn}>
+                                                                <ChevronUp size={16} color={idx === 0 ? colors.border : colors.subtext} />
+                                                            </Pressable>
+                                                            <Pressable onPress={async () => {
+                                                                if (idx === appList.length - 1) return;
+                                                                const arr = [...appList];
+                                                                [arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]];
+                                                                setIsSaving(true);
+                                                                try { await saveDashboardConfig({ ...dashboardConfig, appliances: arr }); }
+                                                                catch { } finally { setIsSaving(false); }
+                                                            }} style={s.orderBtn}>
+                                                                <ChevronDown size={16} color={idx === appList.length - 1 ? colors.border : colors.subtext} />
+                                                            </Pressable>
+                                                        </View>
+                                                        <Pressable onPress={async () => {
+                                                            const updated = appList.filter(a => a.id !== app.id);
+                                                            setIsSaving(true);
+                                                            try { await saveDashboardConfig({ ...dashboardConfig, appliances: updated }); }
+                                                            catch { } finally { setIsSaving(false); }
+                                                        }} hitSlop={8} style={s.removeBtn}>
+                                                            <Trash2 size={16} color="#EF4444" />
+                                                        </Pressable>
+                                                    </>
+                                                )}
+                                            </View>
+                                        );
+                                    })}
+                                </View>
+                            ) : (
+                                <View style={[s.emptyCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                                    <CookingPot size={32} color={colors.border} strokeWidth={1.5} />
+                                    <Text style={[s.emptyTitle, { color: colors.subtext }]}>
+                                        Keine Geräte konfiguriert
+                                    </Text>
+                                    <Text style={[s.emptyHint, { color: colors.subtext }]}>
+                                        Füge Sensoren hinzu, die den Gerätestatus anzeigen (z.B. Strom-Sensoren, Programm-Sensoren).
+                                    </Text>
+                                </View>
+                            )}
                         </View>
                     )}
 

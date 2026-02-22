@@ -728,24 +728,24 @@ export default function Dashboard() {
     const calendars = useMemo(() => entities.filter(e => e.entity_id.startsWith('calendar.')).filter(c => c.state === 'on' || c.attributes.message), [entities]);
     const shoppingList = useMemo(() => entities.find(e => e.entity_id === cfgShoppingList), [entities, cfgShoppingList]);
 
-    // --- Specific Appliance Logic ---
+    // --- Generic Appliance Logic (configurable from dashboardConfig.appliances) ---
+    const applianceStatuses = useMemo(() => {
+        const appliances = (dashboardConfig.appliances || []) as { id: string; label: string; secondaryId?: string }[];
+        if (appliances.length === 0) return [];
 
-    // 1. Dishwasher
-    const dishwasherStatus = useMemo(() => {
-        const progEnde = entities.find(e => e.entity_id === 'sensor.adoradish_v2000_programm_ende');
-        const prog = entities.find(e => e.entity_id === 'sensor.adoradish_v2000_programm');
+        return appliances.map(app => {
+            const entity = entities.find(e => e.entity_id === app.id);
+            if (!entity) return { ...app, status: null };
 
-        if (!progEnde && !prog) return null;
+            const state = entity.state;
+            if (!state || ['unknown', 'unavailable', 'None', ''].includes(state)) {
+                return { ...app, status: null };
+            }
 
-        // Check End Time - only if we have a valid future timestamp
-        if (progEnde && progEnde.state && !['unknown', 'unavailable', 'None', ''].includes(progEnde.state)) {
-            const endDate = new Date(progEnde.state);
-            const now = new Date(); // Re-use this line to match existing code structure for replacement
-
-            // Validate date
-            if (!isNaN(endDate.getTime())) {
-                const diffMs = endDate.getTime() - now.getTime();
-
+            // 1. Check if state is an ISO timestamp (future = running countdown)
+            const asDate = new Date(state);
+            if (!isNaN(asDate.getTime()) && state.includes('-')) {
+                const diffMs = asDate.getTime() - Date.now();
                 if (diffMs > 0) {
                     const hours = Math.floor(diffMs / (1000 * 60 * 60));
                     const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
@@ -753,66 +753,52 @@ export default function Dashboard() {
                     if (hours > 0) timeStr += ` ${hours} Std`;
                     if (minutes > 0) timeStr += ` ${minutes} Min`;
                     if (hours === 0 && minutes === 0) timeStr = 'noch < 1 Min';
-
-                    return { isRunning: true, isFinished: false, text: timeStr };
-                } else {
-                    // Time is past → Finished!
-                    return { isRunning: false, isFinished: true, text: 'Fertig' };
+                    return { ...app, status: { isRunning: true, isFinished: false, text: timeStr } };
                 }
+                // Past timestamp → finished
+                return { ...app, status: { isRunning: false, isFinished: true, text: 'Fertig' } };
             }
-        }
 
-        // Check Status - if program is not standby and not unavailable, it's running
-        if (prog && prog.state && !['standby', 'unknown', 'unavailable', 'None', ''].includes(prog.state)) {
-            return { isRunning: true, isFinished: false, text: prog.state };
-        }
-
-        // If program is standby or end time is in the past or unavailable → finished
-        return { isRunning: false, isFinished: true, text: 'Fertig' };
-    }, [entities]);
-
-    // 2. Washing Machine
-    const washerStatus = useMemo(() => {
-        const progEndeRoh = entities.find(e => e.entity_id === 'sensor.adorawash_v4000_program_ende_rohwert');
-        const progEnde = entities.find(e => e.entity_id === 'sensor.adorawash_v4000_programm_ende');
-
-        if (!progEndeRoh && !progEnde) return null;
-
-        // Check Rohwert (XhYY)
-        if (progEndeRoh && !['unknown', 'unavailable', 'None', '', '0h00'].includes(progEndeRoh.state)) {
-            const parts = progEndeRoh.state.split('h');
-            if (parts.length === 2) {
-                const hours = parseInt(parts[0]);
-                const minutes = parseInt(parts[1]);
+            // 2. Check "XhYY" format (e.g., "2h30" → 2 hours, 30 minutes)
+            const timeMatch = state.match(/^(\d+)h(\d+)$/);
+            if (timeMatch) {
+                const hours = parseInt(timeMatch[1]);
+                const minutes = parseInt(timeMatch[2]);
+                if (hours === 0 && minutes === 0) {
+                    return { ...app, status: { isRunning: false, isFinished: true, text: 'Fertig' } };
+                }
                 let timeStr = 'noch';
                 if (hours > 0) timeStr += ` ${hours} Std`;
                 if (minutes > 0) timeStr += ` ${minutes} Min`;
-
-                return { isRunning: true, isFinished: false, text: timeStr };
+                return { ...app, status: { isRunning: true, isFinished: false, text: timeStr } };
             }
-        }
 
-        // Check logic for "finished"
-        if (progEnde && (progEnde.state === 'unknown' || progEnde.state === 'unavailable')) {
-            return { isRunning: false, isFinished: true, text: 'Waschmaschine fertig!' };
-        }
+            // 3. Check numeric value (power draw → running if above threshold)
+            const numVal = parseFloat(state);
+            if (!isNaN(numVal)) {
+                const unit = entity.attributes?.unit_of_measurement || '';
+                // If it's a power/current sensor with significant draw → running
+                if (numVal >= 10 && (unit === 'W' || unit === 'A' || unit === 'mA')) {
+                    return { ...app, status: { isRunning: true, isFinished: false, text: `${state} ${unit}` } };
+                }
+                if (numVal > 0 && numVal < 10 && (unit === 'W' || unit === 'A')) {
+                    return { ...app, status: { isRunning: false, isFinished: true, text: 'Standby' } };
+                }
+                // Generic numeric with unit
+                if (unit) {
+                    return { ...app, status: null }; // Don't show for generic number sensors in standby
+                }
+            }
 
-        // Else nothing (YAML didn't specify an else for Washer)
-        return null;
-    }, [entities]);
+            // 4. Check string state (program name → running if not idle/standby)
+            if (['standby', 'idle', 'off', 'aus', 'inaktiv', 'inactive'].includes(state.toLowerCase())) {
+                return { ...app, status: null };
+            }
 
-    // 3. Tumbler
-    const tumblerStatus = useMemo(() => {
-        const current = entities.find(e => e.entity_id === 'sensor.001015699ea263_current');
-        if (!current) return null;
-
-        const val = parseFloat(current.state);
-        if (!isNaN(val) && val >= 12) {
-            return { isRunning: true, isFinished: false, text: 'am trocknen' };
-        } else {
-            return { isRunning: false, isFinished: true, text: 'Tumbler fertig!' };
-        }
-    }, [entities]);
+            // Non-idle state → show as running with state text
+            return { ...app, status: { isRunning: true, isFinished: false, text: state } };
+        }).filter(a => a.status !== null);
+    }, [entities, dashboardConfig.appliances]);
 
     // Find Röbi and Cameras
     const robi = useMemo(() => vacuums[0] || null, [vacuums]);
@@ -1226,34 +1212,23 @@ export default function Dashboard() {
                     </View>
                 </View>
 
-                {/* --- APPLIANCE STATUS ROW (Dynamic) --- */}
-                {/* --- APPLIANCE STATUS ROW (Specific) --- */}
-                {(() => {
-                    const activeAppliances = [
-                        { status: dishwasherStatus, label: 'Geschirrspüler', icon: UtensilsCrossed },
-                        { status: washerStatus, label: 'Waschmaschine', icon: Shirt },
-                        { status: tumblerStatus, label: 'Tumbler', icon: Wind },
-                    ].filter(item => item.status !== null);
-
-                    if (activeAppliances.length === 0) return null;
-
-                    return (
-                        <View style={[styles.applianceRow, { marginBottom: 16, flexDirection: 'row' }]}>
-                            {activeAppliances.map((app, index) => (
-                                <View key={index} style={{ flex: 1 }}>
-                                    <SpecificApplianceTile
-                                        label={app.label}
-                                        icon={app.icon}
-                                        statusText={app.status!.text}
-                                        isRunning={app.status!.isRunning}
-                                        isFinished={app.status!.isFinished}
-                                        compact={true}
-                                    />
-                                </View>
-                            ))}
-                        </View>
-                    );
-                })()}
+                {/* --- APPLIANCE STATUS ROW (Dynamic from Config) --- */}
+                {applianceStatuses.length > 0 && (
+                    <View style={[styles.applianceRow, { marginBottom: 16, flexDirection: 'row' }]}>
+                        {applianceStatuses.map((app: any, index: number) => (
+                            <View key={app.id || index} style={{ flex: 1 }}>
+                                <SpecificApplianceTile
+                                    label={app.label}
+                                    icon={Zap}
+                                    statusText={app.status.text}
+                                    isRunning={app.status.isRunning}
+                                    isFinished={app.status.isFinished}
+                                    compact={true}
+                                />
+                            </View>
+                        ))}
+                    </View>
+                )}
 
                 {/* Door Opener Buttons */}
                 {(cfgDoorFront || cfgDoorApart) && (() => {
