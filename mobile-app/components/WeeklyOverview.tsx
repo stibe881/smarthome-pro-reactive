@@ -11,7 +11,7 @@ import { supabase } from '../lib/supabase';
 const WEEKDAYS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 const DAY_NAMES = ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag'];
 
-interface WeeklyOverviewProps { visible: boolean; onClose: () => void; }
+interface WeeklyOverviewProps { visible: boolean; onClose: () => void; onOpenModule?: (key: string) => void; }
 
 interface DayData {
     events: { id: string; title: string; color: string; start_date: string; all_day?: boolean }[];
@@ -20,7 +20,7 @@ interface DayData {
     routines: { id: string; title: string; time_of_day: string }[];
 }
 
-export const WeeklyOverview: React.FC<WeeklyOverviewProps> = ({ visible, onClose }) => {
+export const WeeklyOverview: React.FC<WeeklyOverviewProps> = ({ visible, onClose, onOpenModule }) => {
     const { colors } = useTheme();
     const { householdId } = useHousehold();
 
@@ -106,21 +106,21 @@ export const WeeklyOverview: React.FC<WeeklyOverviewProps> = ({ visible, onClose
 
                 {/* Quick Stats */}
                 <View style={[styles.statsRow]}>
-                    <View style={[styles.statBadge, { backgroundColor: '#3B82F615' }]}>
+                    <Pressable style={[styles.statBadge, { backgroundColor: '#3B82F615' }]} onPress={() => { onClose(); onOpenModule?.('calendar'); }}>
                         <Text style={{ fontSize: 18 }}>📅</Text>
                         <Text style={[styles.statNum, { color: '#3B82F6' }]}>{totalEvents}</Text>
                         <Text style={[styles.statLabel, { color: colors.subtext }]}>Termine</Text>
-                    </View>
-                    <View style={[styles.statBadge, { backgroundColor: '#F59E0B15' }]}>
+                    </Pressable>
+                    <Pressable style={[styles.statBadge, { backgroundColor: '#F59E0B15' }]} onPress={() => { onClose(); onOpenModule?.('meals'); }}>
                         <Text style={{ fontSize: 18 }}>🍽️</Text>
                         <Text style={[styles.statNum, { color: '#F59E0B' }]}>{totalMeals}</Text>
                         <Text style={[styles.statLabel, { color: colors.subtext }]}>Mahlzeiten</Text>
-                    </View>
-                    <View style={[styles.statBadge, { backgroundColor: '#EF444415' }]}>
+                    </Pressable>
+                    <Pressable style={[styles.statBadge, { backgroundColor: '#EF444415' }]} onPress={() => { onClose(); onOpenModule?.('todos'); }}>
                         <Text style={{ fontSize: 18 }}>✅</Text>
                         <Text style={[styles.statNum, { color: '#EF4444' }]}>{openTodos}</Text>
                         <Text style={[styles.statLabel, { color: colors.subtext }]}>Offen</Text>
-                    </View>
+                    </Pressable>
                 </View>
 
                 <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>

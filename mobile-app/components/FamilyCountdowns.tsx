@@ -159,8 +159,13 @@ export const FamilyCountdowns: React.FC<CountdownsProps> = ({ visible, onClose }
                             <Text style={{ color: colors.text, fontSize: 15 }}>📅 {formDate.getDate()}.{formDate.getMonth() + 1}.{formDate.getFullYear()}</Text>
                         </Pressable>
                         {showDatePicker && (
-                            <DateTimePicker value={formDate} mode="date" display={Platform.OS === 'ios' ? 'spinner' : 'default'} minimumDate={new Date()}
-                                onChange={(_, date) => { setShowDatePicker(Platform.OS === 'android'); if (date) setFormDate(date); }} />
+                            <DateTimePicker value={formDate} mode="date" locale="de" display={Platform.OS === 'ios' ? 'spinner' : 'default'} minimumDate={new Date()}
+                                onChange={(_, date) => { if (Platform.OS === 'android') setShowDatePicker(false); if (date) setFormDate(date); }} />
+                        )}
+                        {showDatePicker && Platform.OS === 'ios' && (
+                            <Pressable style={{ alignItems: 'center', paddingVertical: 8 }} onPress={() => setShowDatePicker(false)}>
+                                <Text style={{ color: colors.accent, fontWeight: '700', fontSize: 14 }}>Datum bestätigen</Text>
+                            </Pressable>
                         )}
                         <View style={{ flexDirection: 'row', gap: 8, marginTop: 14 }}>
                             <Pressable style={[styles.cancelBtn, { borderColor: colors.border }]} onPress={() => setShowAdd(false)}><Text style={{ color: colors.subtext }}>Abbrechen</Text></Pressable>

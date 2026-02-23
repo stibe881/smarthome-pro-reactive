@@ -39,9 +39,7 @@ export const FamilyRewards: React.FC<RewardsProps> = ({ visible, onClose }) => {
     const [rewards, setRewards] = useState<RewardItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [tab, setTab] = useState<'points' | 'rewards'>('points');
-    const [showAddMember, setShowAddMember] = useState(false);
     const [showAddReward, setShowAddReward] = useState(false);
-    const [newName, setNewName] = useState('');
     const [newRewardTitle, setNewRewardTitle] = useState('');
     const [newRewardPoints, setNewRewardPoints] = useState('');
     const [newRewardEmoji, setNewRewardEmoji] = useState('🎁');
@@ -52,31 +50,76 @@ export const FamilyRewards: React.FC<RewardsProps> = ({ visible, onClose }) => {
         if (!householdId) return;
         setIsLoading(true);
         try {
-            const [membersRes, rewardsRes] = await Promise.all([
-                supabase.from('reward_points').select('*').eq('household_id', householdId).order('points', { ascending: false }),
-                supabase.from('reward_catalog').select('*').eq('household_id', householdId).order('points_required'),
-            ]);
-            setMembers(membersRes.data || []);
-            setRewards(rewardsRes.data || []);
-        } catch (e) { console.error(e); }
-        finally { setIsLoading(false); }
+            // 1. Get all family members
+            const { data: familyData } = await supabase
+                .from('family_members')
+                .select('user_id, email, display_name')
+                .eq('household_id', householdId)
+                .eq('is_active', true);
+
+            // 2. Get existing reward_points entries
+            const { data: rewardData } = await supabase
+                .from('reward_points')
+                .select('*')
+                .eq('household_id', householdId)
+                .order('points', { ascending: false });
+
+            // 3. Auto-create reward_points entries for family members that don't have one
+            const existingNames = new Set((rewardData || []).map(r => r.member_name));
+            const newEntries: { household_id: string; member_name: string; points: number }[] = [];
+            (familyData || []).forEach(m => {
+                const name = m.display_name || m.email.split('@')[0];
+                if (!existingNames.has(name)) {
+                    newEntries.push({ household_id: householdId, member_name: name, points: 0 });
+                }
+            });
+
+            if (newEntries.length > 0) {
+                await supabase.from('reward_points').insert(newEntries);
+                // Re-fetch after insert
+                const { data: updatedData } = await supabase
+                    .from('reward_points')
+                    .select('*')
+                    .eq('household_id', householdId)
+                    .order('points', { ascending: false });
+                setMembers(updatedData || []);
+            } else {
+                setMembers(rewardData || []);
+            }
+
+            // 4. Load rewards catalog
+            const { data: catalogData } = await supabase
+                .from('reward_catalog')
+                .select('*')
+                .eq('household_id', householdId)
+                .order('points_required');
+            setRewards(catalogData || []);
+        } catch (e) {
+            console.error('Error loading rewards:', e);
+        } finally {
+            setIsLoading(false);
+        }
     }, [householdId]);
 
     useEffect(() => { if (visible) loadData(); }, [visible, loadData]);
 
-    const addMember = async () => {
-        if (!newName.trim() || !householdId) return;
-        await supabase.from('reward_points').insert({ household_id: householdId, member_name: newName.trim(), points: 0 });
-        setNewName(''); setShowAddMember(false); loadData();
-    };
-
     const addReward = async () => {
         if (!newRewardTitle.trim() || !householdId) return;
-        await supabase.from('reward_catalog').insert({
-            household_id: householdId, title: newRewardTitle.trim(),
-            points_required: parseInt(newRewardPoints) || 10, emoji: newRewardEmoji,
-        });
-        setNewRewardTitle(''); setNewRewardPoints(''); setShowAddReward(false); loadData();
+        try {
+            const { error } = await supabase.from('reward_catalog').insert({
+                household_id: householdId, title: newRewardTitle.trim(),
+                points_required: parseInt(newRewardPoints) || 10, emoji: newRewardEmoji,
+            });
+            if (error) {
+                console.error('Error adding reward:', error);
+                Alert.alert('Fehler', error.message);
+                return;
+            }
+            setNewRewardTitle(''); setNewRewardPoints(''); setShowAddReward(false); loadData();
+        } catch (e: any) {
+            console.error('Error adding reward:', e);
+            Alert.alert('Fehler', e.message);
+        }
     };
 
     const addPoints = (member: Reward, pts: number) => {
@@ -84,7 +127,8 @@ export const FamilyRewards: React.FC<RewardsProps> = ({ visible, onClose }) => {
             { text: 'Abbrechen', style: 'cancel' },
             {
                 text: 'OK', onPress: async () => {
-                    await supabase.from('reward_points').update({ points: member.points + pts }).eq('id', member.id);
+                    const { error } = await supabase.from('reward_points').update({ points: member.points + pts }).eq('id', member.id);
+                    if (error) console.error('Error updating points:', error);
                     loadData();
                 }
             },
@@ -100,7 +144,20 @@ export const FamilyRewards: React.FC<RewardsProps> = ({ visible, onClose }) => {
             { text: 'Abbrechen', style: 'cancel' },
             {
                 text: 'Einlösen', onPress: async () => {
-                    await supabase.from('reward_points').update({ points: member.points - reward.points_required }).eq('id', member.id);
+                    const { error } = await supabase.from('reward_points').update({ points: member.points - reward.points_required }).eq('id', member.id);
+                    if (error) console.error('Error redeeming reward:', error);
+                    loadData();
+                }
+            },
+        ]);
+    };
+
+    const deleteMember = (member: Reward) => {
+        Alert.alert('Entfernen', `${member.member_name} aus Belohnungen entfernen?`, [
+            { text: 'Abbrechen', style: 'cancel' },
+            {
+                text: 'Entfernen', style: 'destructive', onPress: async () => {
+                    await supabase.from('reward_points').delete().eq('id', member.id);
                     loadData();
                 }
             },
@@ -131,29 +188,33 @@ export const FamilyRewards: React.FC<RewardsProps> = ({ visible, onClose }) => {
                 <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
                     {isLoading ? <ActivityIndicator color={colors.accent} style={{ paddingVertical: 40 }} /> : tab === 'points' ? (
                         <>
-                            {members.map((m, idx) => (
-                                <View key={m.id} style={[styles.memberCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                                    <Text style={styles.rank}>{RANK_EMOJIS[idx] || '⭐'}</Text>
-                                    <View style={{ flex: 1 }}>
-                                        <Text style={[styles.memberName, { color: colors.text }]}>{m.member_name}</Text>
-                                        <Text style={[styles.memberPoints, { color: colors.accent }]}>{m.points} ⭐</Text>
-                                    </View>
-                                    <View style={styles.pointBtns}>
-                                        <Pressable style={[styles.ptBtn, { backgroundColor: '#10B98120' }]} onPress={() => addPoints(m, 1)}>
-                                            <Text style={{ color: '#10B981', fontWeight: '800' }}>+1</Text>
-                                        </Pressable>
-                                        <Pressable style={[styles.ptBtn, { backgroundColor: '#3B82F620' }]} onPress={() => addPoints(m, 5)}>
-                                            <Text style={{ color: '#3B82F6', fontWeight: '800' }}>+5</Text>
-                                        </Pressable>
-                                        <Pressable style={[styles.ptBtn, { backgroundColor: '#EF444420' }]} onPress={() => addPoints(m, -1)}>
-                                            <Text style={{ color: '#EF4444', fontWeight: '800' }}>-1</Text>
-                                        </Pressable>
-                                    </View>
+                            {members.length === 0 ? (
+                                <View style={styles.emptyState}>
+                                    <Trophy size={40} color={colors.subtext} />
+                                    <Text style={[styles.emptyText, { color: colors.subtext }]}>Erstelle Familienmitglieder unter{'\n'}"Familie" um Belohnungen zu nutzen.</Text>
                                 </View>
-                            ))}
-                            <Pressable style={[styles.addFullBtn, { backgroundColor: colors.accent }]} onPress={() => setShowAddMember(true)}>
-                                <Plus size={18} color="#fff" /><Text style={styles.addFullBtnText}>Kind hinzufügen</Text>
-                            </Pressable>
+                            ) : (
+                                members.map((m, idx) => (
+                                    <View key={m.id} style={[styles.memberCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                                        <Text style={styles.rank}>{RANK_EMOJIS[idx] || '⭐'}</Text>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={[styles.memberName, { color: colors.text }]}>{m.member_name}</Text>
+                                            <Text style={[styles.memberPoints, { color: colors.accent }]}>{m.points} ⭐</Text>
+                                        </View>
+                                        <View style={styles.pointBtns}>
+                                            <Pressable style={[styles.ptBtn, { backgroundColor: '#10B98120' }]} onPress={() => addPoints(m, 1)}>
+                                                <Text style={{ color: '#10B981', fontWeight: '800' }}>+1</Text>
+                                            </Pressable>
+                                            <Pressable style={[styles.ptBtn, { backgroundColor: '#3B82F620' }]} onPress={() => addPoints(m, 5)}>
+                                                <Text style={{ color: '#3B82F6', fontWeight: '800' }}>+5</Text>
+                                            </Pressable>
+                                            <Pressable style={[styles.ptBtn, { backgroundColor: '#EF444420' }]} onPress={() => addPoints(m, -1)}>
+                                                <Text style={{ color: '#EF4444', fontWeight: '800' }}>-1</Text>
+                                            </Pressable>
+                                        </View>
+                                    </View>
+                                ))
+                            )}
 
                             {/* Redeem Section */}
                             {rewards.length > 0 && members.length > 0 && (
@@ -199,18 +260,6 @@ export const FamilyRewards: React.FC<RewardsProps> = ({ visible, onClose }) => {
                     )}
                 </ScrollView>
 
-                {/* Add Member Modal */}
-                <Modal visible={showAddMember} transparent animationType="fade">
-                    <View style={styles.overlay}><View style={[styles.popup, { backgroundColor: colors.card }]}>
-                        <Text style={[styles.popupTitle, { color: colors.text }]}>Kind hinzufügen</Text>
-                        <TextInput style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]} value={newName} onChangeText={setNewName} placeholder="Name" placeholderTextColor={colors.subtext} />
-                        <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
-                            <Pressable style={[styles.cancelBtn, { borderColor: colors.border }]} onPress={() => setShowAddMember(false)}><Text style={{ color: colors.subtext }}>Abbrechen</Text></Pressable>
-                            <Pressable style={[styles.saveBtn, { backgroundColor: colors.accent }]} onPress={addMember}><Text style={{ color: '#fff', fontWeight: '700' }}>Hinzufügen</Text></Pressable>
-                        </View>
-                    </View></View>
-                </Modal>
-
                 {/* Add Reward Modal */}
                 <Modal visible={showAddReward} transparent animationType="fade">
                     <View style={styles.overlay}><View style={[styles.popup, { backgroundColor: colors.card }]}>
@@ -241,6 +290,8 @@ const styles = StyleSheet.create({
     headerTitle: { fontSize: 18, fontWeight: 'bold' },
     tabs: { flexDirection: 'row', marginHorizontal: 16, marginTop: 12, borderRadius: 12, borderWidth: 1, overflow: 'hidden' },
     tab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10 },
+    emptyState: { alignItems: 'center', paddingVertical: 60, gap: 12 },
+    emptyText: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
     memberCard: { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 16, borderWidth: 1, marginBottom: 8 },
     rank: { fontSize: 24, marginRight: 10 },
     memberName: { fontSize: 16, fontWeight: '700' },

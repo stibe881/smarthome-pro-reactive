@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     View, Text, StyleSheet, Pressable, ScrollView, TextInput,
-    ActivityIndicator, Alert, Animated, Modal,
+    ActivityIndicator, Alert, Modal,
 } from 'react-native';
 import {
     Plus, X, Check, Circle, CheckCircle2, Trash2, ChevronDown,
@@ -27,6 +27,8 @@ interface Todo {
 interface FamilyMember {
     user_id: string;
     email: string;
+    display_name: string | null;
+    planner_access: boolean;
 }
 
 const PRIORITIES = [
@@ -35,6 +37,8 @@ const PRIORITIES = [
     { key: 'high', label: 'Wichtig', color: '#F59E0B', icon: '⚡' },
     { key: 'urgent', label: 'Dringend', color: '#EF4444', icon: '🔥' },
 ];
+
+const AVATAR_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EC4899', '#8B5CF6', '#06B6D4', '#EF4444', '#14B8A6'];
 
 interface FamilyTodosProps {
     visible: boolean;
@@ -52,6 +56,8 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
     const [newTitle, setNewTitle] = useState('');
     const [isAdding, setIsAdding] = useState(false);
     const [filter, setFilter] = useState<'all' | 'open' | 'done'>('open');
+    const [selectedMember, setSelectedMember] = useState<string | null>(null);
+    const [showMemberPicker, setShowMemberPicker] = useState(false);
 
     const loadTodos = useCallback(async () => {
         if (!householdId) return;
@@ -78,9 +84,10 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
         try {
             const { data } = await supabase
                 .from('family_members')
-                .select('user_id, email')
-                .eq('household_id', householdId);
-            setMembers(data || []);
+                .select('user_id, email, display_name, planner_access')
+                .eq('household_id', householdId)
+                .eq('is_active', true);
+            setMembers((data || []).filter(m => m.planner_access !== false));
         } catch (e) { console.error(e); }
     }, [householdId]);
 
@@ -95,10 +102,12 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
             const { error } = await supabase.from('family_todos').insert({
                 household_id: householdId,
                 created_by: user?.id,
+                assigned_to: selectedMember,
                 title: newTitle.trim(),
             });
             if (error) throw error;
             setNewTitle('');
+            setSelectedMember(null);
             loadTodos();
         } catch (e: any) {
             Alert.alert('Fehler', e.message);
@@ -139,9 +148,27 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
     const openCount = todos.filter(t => !t.completed).length;
     const doneCount = todos.filter(t => t.completed).length;
 
-    const getMemberEmail = (userId: string | null) => {
+    const getMemberName = (userId: string | null) => {
         if (!userId) return null;
-        return members.find(m => m.user_id === userId)?.email?.split('@')[0] || null;
+        const m = members.find(m => m.user_id === userId);
+        if (!m) return null;
+        return m.display_name || m.email.split('@')[0];
+    };
+
+    const getMemberColor = (userId: string | null) => {
+        if (!userId) return AVATAR_COLORS[0];
+        const idx = members.findIndex(m => m.user_id === userId);
+        return AVATAR_COLORS[idx >= 0 ? idx % AVATAR_COLORS.length : 0];
+    };
+
+    const getMemberInitial = (userId: string | null) => {
+        const name = getMemberName(userId);
+        return name ? name.substring(0, 1).toUpperCase() : '?';
+    };
+
+    const getSelectedMemberLabel = () => {
+        if (!selectedMember) return 'Alle';
+        return getMemberName(selectedMember) || 'Alle';
     };
 
     const getPriority = (key: string) => PRIORITIES.find(p => p.key === key) || PRIORITIES[1];
@@ -174,19 +201,50 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
                 </View>
 
                 {/* Add */}
-                <View style={[styles.addRow, { borderColor: colors.border, backgroundColor: colors.card }]}>
-                    <TextInput
-                        style={[styles.addInput, { color: colors.text }]}
-                        value={newTitle}
-                        onChangeText={setNewTitle}
-                        placeholder="Neue Aufgabe..."
-                        placeholderTextColor={colors.subtext}
-                        onSubmitEditing={handleAdd}
-                        returnKeyType="done"
-                    />
-                    <Pressable onPress={handleAdd} disabled={isAdding || !newTitle.trim()} style={[styles.addBtn, { backgroundColor: colors.accent, opacity: newTitle.trim() ? 1 : 0.4 }]}>
-                        {isAdding ? <ActivityIndicator size="small" color="#fff" /> : <Plus size={18} color="#fff" />}
-                    </Pressable>
+                <View style={[styles.addSection, { borderColor: colors.border, backgroundColor: colors.card }]}>
+                    <View style={styles.addRow}>
+                        <TextInput
+                            style={[styles.addInput, { color: colors.text }]}
+                            value={newTitle}
+                            onChangeText={setNewTitle}
+                            placeholder="Neue Aufgabe..."
+                            placeholderTextColor={colors.subtext}
+                            onSubmitEditing={handleAdd}
+                            returnKeyType="done"
+                        />
+                        <Pressable onPress={handleAdd} disabled={isAdding || !newTitle.trim()} style={[styles.addBtn, { backgroundColor: colors.accent, opacity: newTitle.trim() ? 1 : 0.4 }]}>
+                            {isAdding ? <ActivityIndicator size="small" color="#fff" /> : <Plus size={18} color="#fff" />}
+                        </Pressable>
+                    </View>
+                    {/* Member Picker Row */}
+                    <View style={styles.assignRow}>
+                        <Text style={[styles.assignLabel, { color: colors.subtext }]}>Zuweisen an:</Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+                            <Pressable
+                                style={[styles.memberChip, !selectedMember && { backgroundColor: colors.accent + '20', borderColor: colors.accent }]}
+                                onPress={() => setSelectedMember(null)}
+                            >
+                                <Text style={[styles.memberChipText, { color: !selectedMember ? colors.accent : colors.subtext }]}>Alle</Text>
+                            </Pressable>
+                            {members.map((m, idx) => {
+                                const color = AVATAR_COLORS[idx % AVATAR_COLORS.length];
+                                const isSelected = selectedMember === m.user_id;
+                                const name = m.display_name || m.email.split('@')[0];
+                                return (
+                                    <Pressable
+                                        key={m.user_id}
+                                        style={[styles.memberChip, isSelected && { backgroundColor: color + '20', borderColor: color }]}
+                                        onPress={() => setSelectedMember(isSelected ? null : m.user_id)}
+                                    >
+                                        <View style={[styles.chipAvatar, { backgroundColor: color }]}>
+                                            <Text style={styles.chipAvatarText}>{name.substring(0, 1).toUpperCase()}</Text>
+                                        </View>
+                                        <Text style={[styles.memberChipText, { color: isSelected ? color : colors.subtext }]}>{name}</Text>
+                                    </Pressable>
+                                );
+                            })}
+                        </ScrollView>
+                    </View>
                 </View>
 
                 {/* List */}
@@ -202,7 +260,8 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
                     ) : (
                         filteredTodos.map(todo => {
                             const prio = getPriority(todo.priority);
-                            const assignee = getMemberEmail(todo.assigned_to);
+                            const assigneeName = getMemberName(todo.assigned_to);
+                            const assigneeColor = getMemberColor(todo.assigned_to);
                             return (
                                 <Pressable
                                     key={todo.id}
@@ -216,6 +275,12 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
                                             <Circle size={22} color={colors.subtext} />
                                         )}
                                     </View>
+                                    {/* Assignee Avatar */}
+                                    {todo.assigned_to && (
+                                        <View style={[styles.todoAvatar, { backgroundColor: assigneeColor }]}>
+                                            <Text style={styles.todoAvatarText}>{getMemberInitial(todo.assigned_to)}</Text>
+                                        </View>
+                                    )}
                                     <View style={styles.todoContent}>
                                         <Text style={[
                                             styles.todoTitle,
@@ -231,10 +296,10 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
                                                     <Text style={[styles.prioText, { color: prio.color }]}>{prio.label}</Text>
                                                 </View>
                                             )}
-                                            {assignee && (
-                                                <View style={[styles.assigneeBadge, { backgroundColor: colors.accent + '15' }]}>
-                                                    <User size={10} color={colors.accent} />
-                                                    <Text style={[styles.assigneeText, { color: colors.accent }]}>{assignee}</Text>
+                                            {assigneeName && (
+                                                <View style={[styles.assigneeBadge, { backgroundColor: assigneeColor + '15' }]}>
+                                                    <User size={10} color={assigneeColor} />
+                                                    <Text style={[styles.assigneeText, { color: assigneeColor }]}>{assigneeName}</Text>
                                                 </View>
                                             )}
                                         </View>
@@ -264,12 +329,26 @@ const styles = StyleSheet.create({
     filterBtn: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: 'transparent' },
     filterText: { fontSize: 13, fontWeight: '600' },
 
+    addSection: {
+        marginHorizontal: 16, borderRadius: 14, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 8,
+    },
     addRow: {
-        flexDirection: 'row', alignItems: 'center', marginHorizontal: 16,
-        borderRadius: 14, borderWidth: 1, paddingLeft: 14, paddingRight: 4, paddingVertical: 4,
+        flexDirection: 'row', alignItems: 'center',
     },
     addInput: { flex: 1, fontSize: 15, paddingVertical: 8 },
     addBtn: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+
+    assignRow: {
+        flexDirection: 'row', alignItems: 'center', marginTop: 8, paddingTop: 8, borderTopWidth: 0.5, borderTopColor: 'rgba(128,128,128,0.2)',
+    },
+    assignLabel: { fontSize: 12, fontWeight: '600', marginRight: 8 },
+    memberChip: {
+        flexDirection: 'row', alignItems: 'center', gap: 5,
+        paddingHorizontal: 10, paddingVertical: 5, borderRadius: 16, borderWidth: 1, borderColor: 'transparent',
+    },
+    memberChipText: { fontSize: 12, fontWeight: '600' },
+    chipAvatar: { width: 18, height: 18, borderRadius: 9, justifyContent: 'center', alignItems: 'center' },
+    chipAvatarText: { fontSize: 10, fontWeight: '800', color: '#fff' },
 
     empty: { alignItems: 'center', paddingVertical: 60 },
     emptyText: { fontSize: 15 },
@@ -278,7 +357,9 @@ const styles = StyleSheet.create({
         flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 16,
         marginHorizontal: 16, marginTop: 8, borderRadius: 14, borderWidth: 1,
     },
-    todoCheck: { marginRight: 12 },
+    todoCheck: { marginRight: 10 },
+    todoAvatar: { width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginRight: 10 },
+    todoAvatarText: { fontSize: 12, fontWeight: '800', color: '#fff' },
     todoContent: { flex: 1 },
     todoTitle: { fontSize: 15, fontWeight: '500' },
     todoDone: { textDecorationLine: 'line-through' },

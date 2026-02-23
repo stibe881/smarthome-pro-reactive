@@ -253,7 +253,7 @@ export default function FamilyScreen() {
             <FamilyRoutines visible={activeModule === 'routines'} onClose={handleCloseModule} />
             <FamilyPackingLists visible={activeModule === 'packing'} onClose={handleCloseModule} />
             <FamilyCountdowns visible={activeModule === 'countdowns'} onClose={handleCloseModule} />
-            <WeeklyOverview visible={activeModule === 'weekly'} onClose={handleCloseModule} />
+            <WeeklyOverview visible={activeModule === 'weekly'} onClose={handleCloseModule} onOpenModule={(key) => setActiveModule(key as ModuleKey)} />
         </SafeAreaView>
     );
 }
