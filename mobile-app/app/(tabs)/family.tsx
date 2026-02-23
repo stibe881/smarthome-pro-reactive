@@ -4,7 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
     CalendarDays, CheckSquare, ShoppingCart, MessageSquare,
-    ChevronRight, Users, Clock,
+    ChevronRight, Users, UtensilsCrossed, Trophy, Phone,
+    Clock, Luggage, Target, LayoutList,
 } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -14,9 +15,18 @@ import { FamilyPlanner } from '../../components/FamilyPlanner';
 import { FamilyTodos } from '../../components/FamilyTodos';
 import { FamilyPinboard } from '../../components/FamilyPinboard';
 import ShoppingListModal from '../../components/ShoppingListModal';
+import { MealPlanner } from '../../components/MealPlanner';
+import { FamilyRewards } from '../../components/FamilyRewards';
+import { FamilyContacts } from '../../components/FamilyContacts';
+import { FamilyRoutines } from '../../components/FamilyRoutines';
+import { FamilyPackingLists } from '../../components/FamilyPackingLists';
+import { FamilyCountdowns } from '../../components/FamilyCountdowns';
+import { WeeklyOverview } from '../../components/WeeklyOverview';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = (SCREEN_WIDTH - 48) / 2;
+
+type ModuleKey = 'calendar' | 'todos' | 'shopping' | 'pinboard' | 'meals' | 'rewards' | 'contacts' | 'routines' | 'packing' | 'countdowns' | 'weekly';
 
 interface ModuleStats {
     todayEvents: number;
@@ -29,7 +39,7 @@ export default function FamilyScreen() {
     const { user } = useAuth();
     const { householdId } = useHousehold();
 
-    const [activeModule, setActiveModule] = useState<'calendar' | 'todos' | 'shopping' | 'pinboard' | null>(null);
+    const [activeModule, setActiveModule] = useState<ModuleKey | null>(null);
     const [stats, setStats] = useState<ModuleStats>({ todayEvents: 0, openTodos: 0, recentPins: 0 });
     const [fadeAnim] = useState(new Animated.Value(0));
 
@@ -37,7 +47,6 @@ export default function FamilyScreen() {
         Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start();
     }, []);
 
-    // Load stats for module previews
     const loadStats = useCallback(async () => {
         if (!householdId) return;
         try {
@@ -72,44 +81,72 @@ export default function FamilyScreen() {
 
     useEffect(() => { loadStats(); }, [loadStats]);
 
-    // Refresh stats when a module closes
     const handleCloseModule = () => {
         setActiveModule(null);
         loadStats();
     };
 
-    const MODULES = [
+    const MAIN_MODULES: { key: ModuleKey; title: string; subtitle: string; icon: any; gradient: [string, string]; emoji: string }[] = [
         {
-            key: 'calendar' as const,
-            title: 'Kalender',
-            subtitle: stats.todayEvents > 0 ? `${stats.todayEvents} Termine heute` : 'Keine Termine heute',
-            icon: CalendarDays,
-            gradient: ['#3B82F6', '#1D4ED8'] as [string, string],
-            emoji: '📅',
+            key: 'calendar', title: 'Kalender',
+            subtitle: stats.todayEvents > 0 ? `${stats.todayEvents} Termine heute` : 'Keine Termine',
+            icon: CalendarDays, gradient: ['#3B82F6', '#1D4ED8'], emoji: '📅',
         },
         {
-            key: 'todos' as const,
-            title: 'Aufgaben',
+            key: 'todos', title: 'Aufgaben',
             subtitle: stats.openTodos > 0 ? `${stats.openTodos} offen` : 'Alles erledigt ✓',
-            icon: CheckSquare,
-            gradient: ['#10B981', '#059669'] as [string, string],
-            emoji: '✅',
+            icon: CheckSquare, gradient: ['#10B981', '#059669'], emoji: '✅',
         },
         {
-            key: 'shopping' as const,
-            title: 'Einkaufsliste',
+            key: 'shopping', title: 'Einkaufsliste',
             subtitle: 'Gemeinsam einkaufen',
-            icon: ShoppingCart,
-            gradient: ['#F59E0B', '#D97706'] as [string, string],
-            emoji: '🛒',
+            icon: ShoppingCart, gradient: ['#F59E0B', '#D97706'], emoji: '🛒',
         },
         {
-            key: 'pinboard' as const,
-            title: 'Pinnwand',
-            subtitle: stats.recentPins > 0 ? `${stats.recentPins} Einträge` : 'Noch keine Beiträge',
-            icon: MessageSquare,
-            gradient: ['#EC4899', '#DB2777'] as [string, string],
-            emoji: '📌',
+            key: 'meals', title: 'Essensplaner',
+            subtitle: 'Wochenplan',
+            icon: UtensilsCrossed, gradient: ['#F97316', '#EA580C'], emoji: '🍽️',
+        },
+    ];
+
+    const FAMILY_MODULES: { key: ModuleKey; title: string; subtitle: string; icon: any; gradient: [string, string]; emoji: string }[] = [
+        {
+            key: 'pinboard', title: 'Pinnwand',
+            subtitle: stats.recentPins > 0 ? `${stats.recentPins} Einträge` : 'Noch keine',
+            icon: MessageSquare, gradient: ['#EC4899', '#DB2777'], emoji: '📌',
+        },
+        {
+            key: 'rewards', title: 'Belohnungen',
+            subtitle: 'Punkte sammeln',
+            icon: Trophy, gradient: ['#8B5CF6', '#6D28D9'], emoji: '🏆',
+        },
+        {
+            key: 'contacts', title: 'Kontakte',
+            subtitle: 'Wichtige Nummern',
+            icon: Phone, gradient: ['#06B6D4', '#0891B2'], emoji: '📍',
+        },
+        {
+            key: 'routines', title: 'Routinen',
+            subtitle: 'Tagesabläufe',
+            icon: Clock, gradient: ['#14B8A6', '#0D9488'], emoji: '⏰',
+        },
+    ];
+
+    const UTILITY_MODULES: { key: ModuleKey; title: string; subtitle: string; icon: any; gradient: [string, string]; emoji: string }[] = [
+        {
+            key: 'packing', title: 'Packlisten',
+            subtitle: 'Für Ferien & Ausflüge',
+            icon: Luggage, gradient: ['#A855F7', '#7C3AED'], emoji: '🧳',
+        },
+        {
+            key: 'countdowns', title: 'Countdowns',
+            subtitle: 'Tage zählen',
+            icon: Target, gradient: ['#EF4444', '#DC2626'], emoji: '🎯',
+        },
+        {
+            key: 'weekly', title: 'Wochenübersicht',
+            subtitle: 'Alles auf einen Blick',
+            icon: LayoutList, gradient: ['#6366F1', '#4F46E5'], emoji: '📋',
         },
     ];
 
@@ -118,6 +155,36 @@ export default function FamilyScreen() {
         if (h < 12) return 'Guten Morgen';
         if (h < 18) return 'Guten Tag';
         return 'Guten Abend';
+    };
+
+    const renderModuleCard = (mod: typeof MAIN_MODULES[0]) => {
+        const Icon = mod.icon;
+        return (
+            <Pressable
+                key={mod.key}
+                style={({ pressed }) => [
+                    styles.moduleCard,
+                    { transform: [{ scale: pressed ? 0.96 : 1 }] }
+                ]}
+                onPress={() => setActiveModule(mod.key)}
+            >
+                <LinearGradient
+                    colors={mod.gradient}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.moduleGradient}
+                >
+                    <Text style={styles.moduleEmoji}>{mod.emoji}</Text>
+                    <View style={styles.moduleInfo}>
+                        <Text style={styles.moduleTitle}>{mod.title}</Text>
+                        <Text style={styles.moduleSubtitle}>{mod.subtitle}</Text>
+                    </View>
+                    <View style={styles.moduleArrow}>
+                        <ChevronRight size={18} color="rgba(255,255,255,0.6)" />
+                    </View>
+                </LinearGradient>
+            </Pressable>
+        );
     };
 
     return (
@@ -156,48 +223,37 @@ export default function FamilyScreen() {
                     </View>
                 </View>
 
-                {/* Module Cards Grid */}
-                <Text style={[styles.sectionTitle, { color: colors.text }]}>Module</Text>
+                {/* Planung & Organisation */}
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>📋 Planung</Text>
                 <View style={styles.gridContainer}>
-                    {MODULES.map((mod, index) => {
-                        const Icon = mod.icon;
-                        return (
-                            <Pressable
-                                key={mod.key}
-                                style={({ pressed }) => [
-                                    styles.moduleCard,
-                                    { transform: [{ scale: pressed ? 0.96 : 1 }] }
-                                ]}
-                                onPress={() => setActiveModule(mod.key)}
-                            >
-                                <LinearGradient
-                                    colors={mod.gradient}
-                                    start={{ x: 0, y: 0 }}
-                                    end={{ x: 1, y: 1 }}
-                                    style={styles.moduleGradient}
-                                >
-                                    <Text style={styles.moduleEmoji}>{mod.emoji}</Text>
-                                    <View style={styles.moduleInfo}>
-                                        <Text style={styles.moduleTitle}>{mod.title}</Text>
-                                        <Text style={styles.moduleSubtitle}>{mod.subtitle}</Text>
-                                    </View>
-                                    <View style={styles.moduleArrow}>
-                                        <ChevronRight size={18} color="rgba(255,255,255,0.6)" />
-                                    </View>
-                                </LinearGradient>
-                            </Pressable>
-                        );
-                    })}
+                    {MAIN_MODULES.map(renderModuleCard)}
+                </View>
+
+                {/* Familie & Motivation */}
+                <Text style={[styles.sectionTitle, { color: colors.text, marginTop: 20 }]}>👨‍👩‍👧‍👦 Familie</Text>
+                <View style={styles.gridContainer}>
+                    {FAMILY_MODULES.map(renderModuleCard)}
+                </View>
+
+                {/* Tools & Extras */}
+                <Text style={[styles.sectionTitle, { color: colors.text, marginTop: 20 }]}>🛠️ Extras</Text>
+                <View style={styles.gridContainer}>
+                    {UTILITY_MODULES.map(renderModuleCard)}
                 </View>
             </Animated.ScrollView>
 
             {/* Module Modals */}
-            {activeModule === 'calendar' && (
-                <FamilyPlanner visible={true} onClose={handleCloseModule} />
-            )}
+            {activeModule === 'calendar' && <FamilyPlanner visible={true} onClose={handleCloseModule} />}
             <FamilyTodos visible={activeModule === 'todos'} onClose={handleCloseModule} />
             <ShoppingListModal visible={activeModule === 'shopping'} onClose={handleCloseModule} />
             <FamilyPinboard visible={activeModule === 'pinboard'} onClose={handleCloseModule} />
+            <MealPlanner visible={activeModule === 'meals'} onClose={handleCloseModule} />
+            <FamilyRewards visible={activeModule === 'rewards'} onClose={handleCloseModule} />
+            <FamilyContacts visible={activeModule === 'contacts'} onClose={handleCloseModule} />
+            <FamilyRoutines visible={activeModule === 'routines'} onClose={handleCloseModule} />
+            <FamilyPackingLists visible={activeModule === 'packing'} onClose={handleCloseModule} />
+            <FamilyCountdowns visible={activeModule === 'countdowns'} onClose={handleCloseModule} />
+            <WeeklyOverview visible={activeModule === 'weekly'} onClose={handleCloseModule} />
         </SafeAreaView>
     );
 }
@@ -229,13 +285,13 @@ const styles = StyleSheet.create({
 
     // Module card
     moduleCard: { width: CARD_WIDTH, borderRadius: 20, overflow: 'hidden' },
-    moduleGradient: { padding: 18, height: 140, justifyContent: 'space-between' },
+    moduleGradient: { padding: 18, height: 130, justifyContent: 'space-between' },
     moduleEmoji: { fontSize: 28 },
-    moduleInfo: { marginTop: 8 },
-    moduleTitle: { fontSize: 16, fontWeight: '700', color: '#fff' },
-    moduleSubtitle: { fontSize: 12, color: 'rgba(255,255,255,0.75)', marginTop: 2 },
+    moduleInfo: { marginTop: 4 },
+    moduleTitle: { fontSize: 15, fontWeight: '700', color: '#fff' },
+    moduleSubtitle: { fontSize: 11, color: 'rgba(255,255,255,0.75)', marginTop: 2 },
     moduleArrow: {
-        position: 'absolute', bottom: 16, right: 16,
+        position: 'absolute', bottom: 14, right: 14,
         width: 28, height: 28, borderRadius: 14,
         backgroundColor: 'rgba(255,255,255,0.15)',
         justifyContent: 'center', alignItems: 'center',
