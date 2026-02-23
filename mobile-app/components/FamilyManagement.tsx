@@ -12,6 +12,7 @@ interface FamilyMember {
     id: string;
     user_id: string;
     email: string;
+    display_name?: string | null;
     role: string;
     is_active: boolean;
     created_at: string;
@@ -42,6 +43,11 @@ export const FamilyManagement = ({ colors }: FamilyManagementProps) => {
     const [isInviting, setIsInviting] = useState(false);
     const [inviteRole, setInviteRole] = useState<'member' | 'guest'>('member');
     const [invitePlannerAccess, setInvitePlannerAccess] = useState(true);
+
+    // Child creation
+    const [showAddChildModal, setShowAddChildModal] = useState(false);
+    const [childName, setChildName] = useState('');
+    const [isAddingChild, setIsAddingChild] = useState(false);
 
     // Administrative Modals
     const [selectedMember, setSelectedMember] = useState<FamilyMember | null>(null);
@@ -90,6 +96,54 @@ export const FamilyManagement = ({ colors }: FamilyManagementProps) => {
             console.error('Error loading family data:', e);
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const handleAddChild = async () => {
+        if (!childName.trim()) {
+            Alert.alert('Fehler', 'Bitte einen Namen eingeben.');
+            return;
+        }
+        setIsAddingChild(true);
+        try {
+            // Get household ID
+            const { data: myMember } = await supabase
+                .from('family_members')
+                .select('household_id')
+                .eq('user_id', user?.id)
+                .single();
+
+            if (!myMember?.household_id) {
+                Alert.alert('Fehler', 'Kein Haushalt gefunden.');
+                return;
+            }
+
+            // Create a child entry - no auth user needed, just a family_member row
+            const childId = crypto?.randomUUID?.() || `child-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+            const { error } = await supabase.from('family_members').insert({
+                household_id: myMember.household_id,
+                user_id: childId,
+                email: `${childName.trim().toLowerCase().replace(/\s+/g, '.')}@kind.lokal`,
+                display_name: childName.trim(),
+                role: 'child',
+                is_active: true,
+                planner_access: true,
+            });
+
+            if (error) {
+                console.error('Error adding child:', error);
+                Alert.alert('Fehler', error.message);
+                return;
+            }
+
+            Alert.alert('Erfolgreich', `${childName.trim()} wurde hinzugefügt.`);
+            setChildName('');
+            setShowAddChildModal(false);
+            loadFamilyData();
+        } catch (e: any) {
+            Alert.alert('Fehler', e?.message || 'Unbekannter Fehler');
+        } finally {
+            setIsAddingChild(false);
         }
     };
 
@@ -281,10 +335,16 @@ export const FamilyManagement = ({ colors }: FamilyManagementProps) => {
             <View style={styles.header}>
                 <Text style={[styles.title, { color: colors.subtext }]}>{members.length} Mitglieder</Text>
                 {userRole === 'admin' && (
-                    <Pressable onPress={() => setShowInviteModal(true)} style={[styles.inviteBtn, { backgroundColor: colors.accent }]}>
-                        <UserPlus size={18} color="#fff" />
-                        <Text style={styles.inviteBtnText}>Einladen</Text>
-                    </Pressable>
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                        <Pressable onPress={() => setShowAddChildModal(true)} style={[styles.inviteBtn, { backgroundColor: '#10B981' }]}>
+                            <UserPlus size={16} color="#fff" />
+                            <Text style={styles.inviteBtnText}>Kind</Text>
+                        </Pressable>
+                        <Pressable onPress={() => setShowInviteModal(true)} style={[styles.inviteBtn, { backgroundColor: colors.accent }]}>
+                            <UserPlus size={16} color="#fff" />
+                            <Text style={styles.inviteBtnText}>Einladen</Text>
+                        </Pressable>
+                    </View>
                 )}
             </View>
 
@@ -304,20 +364,22 @@ export const FamilyManagement = ({ colors }: FamilyManagementProps) => {
                             <Image source={{ uri: getAvatarPublicUrl(member.avatar_url) }} style={styles.avatar} />
                         ) : (
                             <LinearGradient colors={getAvatarColor(index) as any} style={styles.avatar}>
-                                <Text style={styles.avatarText}>{getInitials(member.email)}</Text>
+                                <Text style={styles.avatarText}>{member.display_name ? member.display_name.substring(0, 2).toUpperCase() : getInitials(member.email)}</Text>
                             </LinearGradient>
                         )}
                         <View style={styles.memberInfo}>
-                            <Text style={[styles.memberEmail, { color: colors.text }]} numberOfLines={1}>{member.email}</Text>
+                            <Text style={[styles.memberEmail, { color: colors.text }]} numberOfLines={1}>{member.display_name || member.email}</Text>
                             <View style={styles.roleRow}>
                                 {member.role === 'admin' ? (
                                     <View style={styles.adminBadge}><Crown size={10} color="#FBBF24" /><Text style={styles.adminText}>Admin</Text></View>
                                 ) : member.role === 'guest' ? (
                                     <View style={[styles.adminBadge, { backgroundColor: 'rgba(139, 92, 246, 0.15)' }]}><UserCheck size={10} color="#8B5CF6" /><Text style={[styles.adminText, { color: '#8B5CF6' }]}>Gast</Text></View>
+                                ) : member.role === 'child' ? (
+                                    <View style={[styles.adminBadge, { backgroundColor: 'rgba(16, 185, 129, 0.15)' }]}><Text style={[styles.adminText, { color: '#10B981' }]}>👶 Kind</Text></View>
                                 ) : <Text style={[styles.memberRole, { color: colors.subtext }]}>Mitglied</Text>}
                                 {member.email === user?.email && <Text style={[styles.meTag, { color: colors.subtext }]}>• Du</Text>}
                                 {member.is_active === false && <Text style={[styles.meTag, { color: colors.error }]}>• Deaktiviert</Text>}
-                                {member.planner_access !== false && member.is_active !== false && (
+                                {member.planner_access !== false && member.is_active !== false && member.role !== 'child' && (
                                     <View style={[styles.adminBadge, { backgroundColor: 'rgba(16, 185, 129, 0.15)' }]}><CalendarDays size={10} color="#10B981" /><Text style={[styles.adminText, { color: '#10B981' }]}>Planner</Text></View>
                                 )}
                             </View>
@@ -503,6 +565,33 @@ export const FamilyManagement = ({ colors }: FamilyManagementProps) => {
                         </View>
                         <Pressable onPress={handleInvite} disabled={isInviting} style={[styles.submitBtn, { backgroundColor: colors.accent, marginTop: 8 }]}>
                             {isInviting ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>Hinzufügen</Text>}
+                        </Pressable>
+                    </ScrollView>
+                </View>
+            </Modal>
+
+            {/* Add Child Modal */}
+            <Modal visible={showAddChildModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowAddChildModal(false)}>
+                <View style={[styles.modalContent, { backgroundColor: colors.background }]}>
+                    <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+                        <Text style={[styles.modalTitle, { color: colors.text }]}>Kind hinzufügen</Text>
+                        <Pressable onPress={() => setShowAddChildModal(false)}><X size={24} color={colors.subtext} /></Pressable>
+                    </View>
+                    <ScrollView style={{ padding: 16 }}>
+                        <Text style={[styles.label, { color: colors.subtext }]}>Name des Kindes</Text>
+                        <TextInput
+                            style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
+                            value={childName}
+                            onChangeText={setChildName}
+                            placeholder="z.B. Max"
+                            placeholderTextColor={colors.subtext}
+                            autoCapitalize="words"
+                        />
+                        <Text style={{ color: colors.subtext, fontSize: 12, marginTop: 8, lineHeight: 18 }}>
+                            Kinder werden ohne E-Mail-Adresse hinzugefügt und erscheinen automatisch in den Belohnungen und bei der Aufgaben-Zuweisung.
+                        </Text>
+                        <Pressable onPress={handleAddChild} disabled={isAddingChild} style={[styles.submitBtn, { backgroundColor: '#10B981', marginTop: 20 }]}>
+                            {isAddingChild ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>Kind hinzufügen</Text>}
                         </Pressable>
                     </ScrollView>
                 </View>

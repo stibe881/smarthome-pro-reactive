@@ -3,7 +3,7 @@ import {
     View, Text, StyleSheet, Pressable, ScrollView, TextInput,
     ActivityIndicator, Alert, Modal, Image, Dimensions, Platform,
 } from 'react-native';
-import { Plus, X, Send, ImagePlus, Trash2, MessageCircle, Heart, Pin, Check } from 'lucide-react-native';
+import { Plus, X, Send, ImagePlus, Trash2, Check } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { useTheme } from '../contexts/ThemeContext';
@@ -12,6 +12,7 @@ import { useHousehold } from '../hooks/useHousehold';
 import { supabase } from '../lib/supabase';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const CARD_WIDTH = (SCREEN_WIDTH - 48) / 2;
 
 interface PinItem {
     id: string;
@@ -34,8 +35,7 @@ interface FamilyPinboardProps {
     onClose: () => void;
 }
 
-const PIN_TAPE_COLORS = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', '#C9B1FF', '#FFD93D', '#6BCB77'];
-const NOTE_COLORS = ['#FFF9C4', '#FFECB3', '#F8BBD0', '#C8E6C9', '#B3E5FC', '#D1C4E9', '#FFCCBC', '#B2DFDB'];
+const PIN_COLORS_LIGHT = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', '#C9B1FF', '#FFD93D', '#6BCB77'];
 
 export const FamilyPinboard: React.FC<FamilyPinboardProps> = ({ visible, onClose }) => {
     const { colors } = useTheme();
@@ -88,7 +88,6 @@ export const FamilyPinboard: React.FC<FamilyPinboardProps> = ({ visible, onClose
             });
             setMembers(map);
             setFamilyMembers(memberList);
-            // Select all by default except current user
             const allOthers = new Set((data || []).filter(m => m.user_id !== user?.id).map(m => m.user_id));
             setSelectedNotifyMembers(allOthers);
         } catch (e) { console.error(e); }
@@ -101,20 +100,16 @@ export const FamilyPinboard: React.FC<FamilyPinboardProps> = ({ visible, onClose
     const sendPushNotifications = async (message: string) => {
         if (selectedNotifyMembers.size === 0) return;
         try {
-            // Get push tokens for selected members
             const { data: tokens } = await supabase
                 .from('push_tokens')
                 .select('token')
                 .in('user_id', Array.from(selectedNotifyMembers));
 
             if (!tokens || tokens.length === 0) return;
-
             const expoPushTokens = tokens.map(t => t.token).filter(Boolean);
             if (expoPushTokens.length === 0) return;
 
             const senderName = members[user?.id || ''] || 'Jemand';
-
-            // Send via Expo Push API
             await fetch('https://exp.host/--/api/v2/push/send', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -245,36 +240,38 @@ export const FamilyPinboard: React.FC<FamilyPinboardProps> = ({ visible, onClose
         });
     };
 
+    const getPinColor = (index: number) => PIN_COLORS_LIGHT[index % PIN_COLORS_LIGHT.length];
+
     return (
         <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-            <View style={[styles.container, { backgroundColor: '#C4A882' }]}>
+            <View style={[styles.container, { backgroundColor: colors.background }]}>
                 {/* Header */}
-                <View style={[styles.header, { backgroundColor: '#8B6914', borderBottomColor: '#A07D1A' }]}>
-                    <Pressable onPress={onClose}><X size={24} color="#FFF8E7" /></Pressable>
+                <View style={[styles.header, { borderBottomColor: colors.border }]}>
+                    <Pressable onPress={onClose}><X size={24} color={colors.subtext} /></Pressable>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                         <Text style={{ fontSize: 18 }}>📌</Text>
-                        <Text style={[styles.headerTitle, { color: '#FFF8E7' }]}>Pinnwand</Text>
+                        <Text style={[styles.headerTitle, { color: colors.text }]}>Pinnwand</Text>
                     </View>
                     <Pressable onPress={handlePostImage}>
-                        <ImagePlus size={22} color="#FFF8E7" />
+                        <ImagePlus size={22} color={colors.accent} />
                     </Pressable>
                 </View>
 
                 {/* Compose */}
-                <View style={[styles.composeRow, { backgroundColor: '#FFF9C4', borderColor: '#D4A76A' }]}>
+                <View style={[styles.composeRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
                     <TextInput
-                        style={[styles.composeInput, { color: '#5D4037' }]}
+                        style={[styles.composeInput, { color: colors.text }]}
                         value={newContent}
                         onChangeText={setNewContent}
                         placeholder="Nachricht an die Familie..."
-                        placeholderTextColor="#A1887F"
+                        placeholderTextColor={colors.subtext}
                         multiline
                         maxLength={500}
                     />
                     <Pressable
                         onPress={handlePostNote}
                         disabled={isPosting || !newContent.trim()}
-                        style={[styles.sendBtn, { backgroundColor: '#8B6914', opacity: newContent.trim() ? 1 : 0.4 }]}
+                        style={[styles.sendBtn, { backgroundColor: colors.accent, opacity: newContent.trim() ? 1 : 0.4 }]}
                     >
                         {isPosting ? <ActivityIndicator size="small" color="#fff" /> : <Send size={16} color="#fff" />}
                     </Pressable>
@@ -282,8 +279,8 @@ export const FamilyPinboard: React.FC<FamilyPinboardProps> = ({ visible, onClose
 
                 {/* Notify picker */}
                 {newContent.trim().length > 0 && (
-                    <Pressable style={styles.notifyToggle} onPress={() => setShowNotifyPicker(!showNotifyPicker)}>
-                        <Text style={styles.notifyLabel}>🔔 Benachrichtigen ({selectedNotifyMembers.size})</Text>
+                    <Pressable style={[styles.notifyToggle]} onPress={() => setShowNotifyPicker(!showNotifyPicker)}>
+                        <Text style={[styles.notifyLabel, { color: colors.subtext }]}>🔔 Benachrichtigen ({selectedNotifyMembers.size})</Text>
                     </Pressable>
                 )}
                 {showNotifyPicker && (
@@ -292,73 +289,90 @@ export const FamilyPinboard: React.FC<FamilyPinboardProps> = ({ visible, onClose
                             const name = m.display_name || m.email.split('@')[0];
                             const isSelected = selectedNotifyMembers.has(m.user_id);
                             return (
-                                <Pressable key={m.user_id} style={styles.notifyChip} onPress={() => toggleNotifyMember(m.user_id)}>
-                                    <View style={[styles.notifyCheck, isSelected && { backgroundColor: '#8B6914' }]}>
+                                <Pressable key={m.user_id} style={[styles.notifyChip, { backgroundColor: isSelected ? colors.accent + '15' : colors.card, borderColor: isSelected ? colors.accent : colors.border }]} onPress={() => toggleNotifyMember(m.user_id)}>
+                                    <View style={[styles.notifyCheck, isSelected && { backgroundColor: colors.accent, borderColor: colors.accent }]}>
                                         {isSelected && <Check size={10} color="#fff" />}
                                     </View>
-                                    <Text style={[styles.notifyName, { color: isSelected ? '#5D4037' : '#A1887F' }]}>{name}</Text>
+                                    <Text style={[styles.notifyName, { color: isSelected ? colors.text : colors.subtext }]}>{name}</Text>
                                 </Pressable>
                             );
                         })}
                     </View>
                 )}
 
-                {/* Pins Feed - Cork Board */}
-                <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 12, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+                {/* Pins Grid - Masonry-style */}
+                <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.gridContainer} showsVerticalScrollIndicator={false}>
                     {isLoading ? (
-                        <ActivityIndicator color="#8B6914" style={{ paddingVertical: 40 }} />
+                        <ActivityIndicator color={colors.accent} style={{ paddingVertical: 40, width: '100%' }} />
                     ) : pins.length === 0 ? (
                         <View style={styles.empty}>
                             <Text style={{ fontSize: 40 }}>📌</Text>
-                            <Text style={[styles.emptyText, { color: '#8B7355' }]}>
+                            <Text style={[styles.emptyText, { color: colors.subtext }]}>
                                 Noch keine Einträge.{'\n'}Teile etwas mit deiner Familie!
                             </Text>
                         </View>
                     ) : (
-                        pins.map((pin, index) => {
-                            const rotation = ((index * 7 + 3) % 7) - 3;
-                            const noteColor = NOTE_COLORS[index % NOTE_COLORS.length];
-                            const tapeColor = PIN_TAPE_COLORS[index % PIN_TAPE_COLORS.length];
-                            return (
-                                <View
-                                    key={pin.id}
-                                    style={[
-                                        styles.pinCard,
-                                        {
-                                            backgroundColor: noteColor,
-                                            transform: [{ rotate: `${rotation}deg` }],
-                                        },
-                                    ]}
-                                >
-                                    {/* Pin/tape at top */}
-                                    <View style={[styles.pinTape, { backgroundColor: tapeColor }]} />
-                                    <View style={styles.pinHeader}>
-                                        <View style={{ flex: 1 }}>
-                                            <Text style={[styles.pinAuthor, { color: '#5D4037' }]}>
-                                                {members[pin.created_by || ''] || 'Unbekannt'}
-                                            </Text>
-                                            <Text style={[styles.pinTime, { color: '#8D6E63' }]}>{formatDate(pin.created_at)}</Text>
-                                        </View>
-                                        {pin.created_by === user?.id && (
-                                            <Pressable onPress={() => handleDelete(pin)} hitSlop={12}>
-                                                <Trash2 size={14} color="#A1887F" />
-                                            </Pressable>
-                                        )}
-                                    </View>
-                                    {pin.content && (
-                                        <Text style={[styles.pinContent, { color: '#3E2723' }]}>{pin.content}</Text>
-                                    )}
-                                    {pin.image_url && (
-                                        <Image source={{ uri: pin.image_url }} style={styles.pinImage} resizeMode="cover" />
-                                    )}
-                                </View>
-                            );
-                        })
+                        <View style={styles.masonryContainer}>
+                            {/* Left column */}
+                            <View style={styles.masonryColumn}>
+                                {pins.filter((_, i) => i % 2 === 0).map((pin, index) => renderPin(pin, index * 2))}
+                            </View>
+                            {/* Right column */}
+                            <View style={styles.masonryColumn}>
+                                {pins.filter((_, i) => i % 2 === 1).map((pin, index) => renderPin(pin, index * 2 + 1))}
+                            </View>
+                        </View>
                     )}
                 </ScrollView>
             </View>
         </Modal>
     );
+
+    function renderPin(pin: PinItem, index: number) {
+        const pinColor = getPinColor(index);
+        const isPhoto = pin.pin_type === 'photo' && pin.image_url;
+
+        return (
+            <View
+                key={pin.id}
+                style={[
+                    styles.pinCard,
+                    {
+                        backgroundColor: colors.card,
+                        borderColor: colors.border,
+                    },
+                ]}
+            >
+                {/* Colored pin indicator */}
+                <View style={[styles.pinDot, { backgroundColor: pinColor }]} />
+
+                {/* Photo displayed directly */}
+                {isPhoto && (
+                    <Image source={{ uri: pin.image_url! }} style={styles.pinImage} resizeMode="cover" />
+                )}
+
+                {/* Text content */}
+                {pin.content && (
+                    <Text style={[styles.pinContent, { color: colors.text }]}>{pin.content}</Text>
+                )}
+
+                {/* Footer */}
+                <View style={styles.pinFooter}>
+                    <View style={{ flex: 1 }}>
+                        <Text style={[styles.pinAuthor, { color: pinColor }]}>
+                            {members[pin.created_by || ''] || 'Unbekannt'}
+                        </Text>
+                        <Text style={[styles.pinTime, { color: colors.subtext }]}>{formatDate(pin.created_at)}</Text>
+                    </View>
+                    {pin.created_by === user?.id && (
+                        <Pressable onPress={() => handleDelete(pin)} hitSlop={12}>
+                            <Trash2 size={13} color={colors.subtext} />
+                        </Pressable>
+                    )}
+                </View>
+            </View>
+        );
+    }
 };
 
 const styles = StyleSheet.create({
@@ -371,35 +385,45 @@ const styles = StyleSheet.create({
 
     composeRow: {
         flexDirection: 'row', alignItems: 'flex-end', marginHorizontal: 12, marginTop: 12,
-        borderRadius: 4, borderWidth: 1, paddingLeft: 14, paddingRight: 4, paddingVertical: 4,
-        shadowColor: '#000', shadowOffset: { width: 1, height: 2 }, shadowOpacity: 0.15, shadowRadius: 3,
-        elevation: 3,
+        borderRadius: 16, borderWidth: 1, paddingLeft: 14, paddingRight: 4, paddingVertical: 4,
     },
-    composeInput: { flex: 1, fontSize: 15, paddingVertical: 8, fontFamily: Platform.OS === 'ios' ? 'Noteworthy' : undefined },
-    sendBtn: { width: 36, height: 36, borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginBottom: 2 },
+    composeInput: { flex: 1, fontSize: 15, paddingVertical: 8 },
+    sendBtn: { width: 36, height: 36, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 2 },
 
     notifyToggle: { marginHorizontal: 12, marginTop: 6, paddingVertical: 6, paddingHorizontal: 12 },
-    notifyLabel: { fontSize: 12, fontWeight: '700', color: '#5D4037' },
+    notifyLabel: { fontSize: 12, fontWeight: '700' },
     notifyPicker: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginHorizontal: 12, marginBottom: 4 },
-    notifyChip: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#FFF9C4', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12 },
-    notifyCheck: { width: 16, height: 16, borderRadius: 4, borderWidth: 1, borderColor: '#A1887F', justifyContent: 'center', alignItems: 'center' },
+    notifyChip: {
+        flexDirection: 'row', alignItems: 'center', gap: 5,
+        paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, borderWidth: 1,
+    },
+    notifyCheck: { width: 16, height: 16, borderRadius: 4, borderWidth: 1.5, borderColor: '#999', justifyContent: 'center', alignItems: 'center' },
     notifyName: { fontSize: 12, fontWeight: '600' },
 
-    empty: { alignItems: 'center', paddingVertical: 60, gap: 12 },
+    gridContainer: { padding: 12, paddingBottom: 40 },
+    empty: { alignItems: 'center', paddingVertical: 60, gap: 12, width: '100%' },
     emptyText: { fontSize: 15, textAlign: 'center', lineHeight: 22 },
 
+    masonryContainer: { flexDirection: 'row', gap: 10 },
+    masonryColumn: { flex: 1, gap: 10 },
+
     pinCard: {
-        borderRadius: 2, padding: 14, marginBottom: 16, marginHorizontal: 4,
-        shadowColor: '#000', shadowOffset: { width: 2, height: 3 }, shadowOpacity: 0.2, shadowRadius: 4,
-        elevation: 4,
+        borderRadius: 16, overflow: 'hidden', borderWidth: 1,
     },
-    pinTape: {
-        position: 'absolute', top: -4, alignSelf: 'center', left: '40%',
-        width: 50, height: 12, borderRadius: 1, opacity: 0.7,
+    pinDot: {
+        position: 'absolute', top: 10, right: 10, width: 8, height: 8,
+        borderRadius: 4, zIndex: 2,
     },
-    pinHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, marginTop: 4 },
-    pinAuthor: { fontSize: 14, fontWeight: '700' },
-    pinTime: { fontSize: 11 },
-    pinContent: { fontSize: 15, lineHeight: 22, marginBottom: 4 },
-    pinImage: { width: '100%', height: 200, borderRadius: 4, marginTop: 8 },
+    pinImage: {
+        width: '100%', height: 160, backgroundColor: '#f0f0f0',
+    },
+    pinContent: {
+        fontSize: 14, lineHeight: 20, padding: 12, paddingBottom: 4,
+    },
+    pinFooter: {
+        flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12,
+        paddingVertical: 8, paddingTop: 4,
+    },
+    pinAuthor: { fontSize: 12, fontWeight: '700' },
+    pinTime: { fontSize: 10 },
 });

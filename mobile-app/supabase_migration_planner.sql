@@ -7,6 +7,10 @@
 ALTER TABLE family_members 
   ADD COLUMN IF NOT EXISTS planner_access BOOLEAN DEFAULT true;
 
+-- 1b. Add display_name column for children and member names
+ALTER TABLE family_members
+  ADD COLUMN IF NOT EXISTS display_name TEXT;
+
 -- 2. Create planner_events table
 CREATE TABLE IF NOT EXISTS planner_events (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,

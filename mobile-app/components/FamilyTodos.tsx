@@ -82,13 +82,28 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
     const loadMembers = useCallback(async () => {
         if (!householdId) return;
         try {
-            const { data } = await supabase
+            // Try loading with display_name first, fall back to basic columns
+            let data: any[] | null = null;
+            const { data: fullData, error: fullError } = await supabase
                 .from('family_members')
                 .select('user_id, email, display_name, planner_access')
                 .eq('household_id', householdId)
                 .eq('is_active', true);
+
+            if (fullError) {
+                // display_name column might not exist, try without
+                const { data: basicData } = await supabase
+                    .from('family_members')
+                    .select('user_id, email, planner_access')
+                    .eq('household_id', householdId)
+                    .eq('is_active', true);
+                data = (basicData || []).map(m => ({ ...m, display_name: null }));
+            } else {
+                data = fullData;
+            }
+
             setMembers((data || []).filter(m => m.planner_access !== false));
-        } catch (e) { console.error(e); }
+        } catch (e) { console.error('Error loading members:', e); }
     }, [householdId]);
 
     useEffect(() => {
