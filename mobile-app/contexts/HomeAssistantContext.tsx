@@ -1127,12 +1127,12 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
             }
 
             await Location.startLocationUpdatesAsync(SHOPPING_TASK, {
-                accuracy: Location.Accuracy.High,
-                distanceInterval: 50,
-                deferredUpdatesInterval: 30000,
-                showsBackgroundLocationIndicator: true, // Shows blue bar → iOS keeps updates alive
-                pausesUpdatesAutomatically: false, // Prevent iOS from pausing background updates
-                activityType: Location.ActivityType.OtherNavigation, // Tells iOS we need continuous updates
+                accuracy: Location.Accuracy.Balanced, // Battery-friendly: WiFi/Cell instead of GPS
+                distanceInterval: 100, // Only update every 100m (shop detection radius)
+                deferredUpdatesInterval: 60000, // Batch updates every 60s
+                showsBackgroundLocationIndicator: true,
+                pausesUpdatesAutomatically: true, // Let iOS pause when stationary to save battery
+                activityType: Location.ActivityType.Other, // General activity, not navigation
                 foregroundService: { // Android: required for background location
                     notificationTitle: 'Einkaufs-Erinnerung',
                     notificationBody: 'Standort wird im Hintergrund geprüft',

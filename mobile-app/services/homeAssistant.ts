@@ -22,14 +22,13 @@ export class HomeAssistantService {
     private startPingInterval() {
         if (this.pingInterval) clearInterval(this.pingInterval);
         
-        // Ping every 10 seconds (Aggressive Keep-Alive)
+        // Ping every 30 seconds (Battery-Friendly Keep-Alive)
         this.pingInterval = setInterval(() => {
             if (this.isConnected()) {
                 const id = this.messageId++;
-                // console.log(`Sending PING (id: ${id})`);
                 this.socket?.send(JSON.stringify({ id, type: 'ping' }));
             }
-        }, 10000);
+        }, 30000);
     }
 
     private stopPingInterval() {
@@ -208,20 +207,31 @@ export class HomeAssistantService {
         this.socket.send(JSON.stringify({ ...data, id }));
     }
 
+    // Internal cache of all entities for incremental updates
+    private entityCache: any[] = [];
+
     private subscribeToStates() {
+        // Initial full load
         this.send({ type: 'get_states' }, (response) => {
             if (response.success) {
-                // console.log(`✅ Loaded ${response.result.length} entities`);
-                this.onStateChange(response.result);
+                this.entityCache = response.result;
+                this.onStateChange(this.entityCache);
             }
         });
 
+        // Incremental updates: only patch the changed entity instead of reloading everything
         this.send({ type: 'subscribe_events', event_type: 'state_changed' }, (data) => {
-            if (data.type === 'event') {
-                // Reload all states on any state change
-                this.send({ type: 'get_states' }, (res) => {
-                    if (res.success) this.onStateChange(res.result);
-                });
+            if (data.type === 'event' && data.event?.data?.new_state) {
+                const newState = data.event.data.new_state;
+                const entityId = newState.entity_id;
+                const idx = this.entityCache.findIndex((e: any) => e.entity_id === entityId);
+                if (idx >= 0) {
+                    this.entityCache[idx] = newState;
+                } else {
+                    this.entityCache.push(newState);
+                }
+                // Spread to trigger React state update
+                this.onStateChange([...this.entityCache]);
             }
         });
 
