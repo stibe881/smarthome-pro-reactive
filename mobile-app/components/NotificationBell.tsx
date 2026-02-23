@@ -234,6 +234,8 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
 
                             setNotifications([]);
                             Notifications.setBadgeCountAsync(0);
+                            // Also dismiss from iOS notification center to prevent re-insertion
+                            await Notifications.dismissAllNotificationsAsync();
                         } catch (e) {
                             console.warn('Failed to delete all:', e);
                         }
