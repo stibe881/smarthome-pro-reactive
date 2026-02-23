@@ -43,7 +43,12 @@ const COLOR_OPTIONS = ['#3B82F6', '#10B981', '#F59E0B', '#EC4899', '#8B5CF6', '#
 const WEEKDAYS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 const MONTHS = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
 
-export const FamilyPlanner: React.FC = () => {
+interface FamilyPlannerProps {
+    visible: boolean;
+    onClose: () => void;
+}
+
+export const FamilyPlanner: React.FC<FamilyPlannerProps> = ({ visible, onClose }) => {
     const { colors } = useTheme();
     const { user } = useAuth();
     const { householdId } = useHousehold();
@@ -228,299 +233,309 @@ export const FamilyPlanner: React.FC = () => {
 
     if (!householdId) {
         return (
-            <View style={[styles.emptyContainer, { backgroundColor: colors.background }]}>
-                <CalendarDays size={48} color={colors.subtext} />
-                <Text style={[styles.emptyText, { color: colors.subtext }]}>
-                    Kein Haushalt gefunden.{'\n'}Bitte richte zuerst deinen Haushalt ein.
-                </Text>
-            </View>
+            <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+                <View style={[styles.emptyContainer, { backgroundColor: colors.background }]}>
+                    <CalendarDays size={48} color={colors.subtext} />
+                    <Text style={[styles.emptyText, { color: colors.subtext }]}>
+                        Kein Haushalt gefunden.{'\n'}Bitte richte zuerst deinen Haushalt ein.
+                    </Text>
+                </View>
+            </Modal>
         );
     }
 
     return (
-        <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
-            {/* Month Header */}
-            <View style={[styles.monthHeader, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <Pressable onPress={prevMonth} style={styles.navBtn} hitSlop={12}>
-                    <ChevronLeft size={22} color={colors.text} />
-                </Pressable>
-                <Pressable onPress={goToToday}>
-                    <Text style={[styles.monthTitle, { color: colors.text }]}>
-                        {MONTHS[currentMonth.getMonth()]} {currentMonth.getFullYear()}
-                    </Text>
-                </Pressable>
-                <Pressable onPress={nextMonth} style={styles.navBtn} hitSlop={12}>
-                    <ChevronRight size={22} color={colors.text} />
-                </Pressable>
-            </View>
-
-            {/* Weekday Headers */}
-            <View style={styles.weekdayRow}>
-                {WEEKDAYS.map(day => (
-                    <View key={day} style={styles.weekdayCell}>
-                        <Text style={[styles.weekdayText, { color: colors.subtext }]}>{day}</Text>
-                    </View>
-                ))}
-            </View>
-
-            {/* Calendar Grid */}
-            <View style={styles.calendarGrid}>
-                {calendarDays.map((day, i) => {
-                    if (day === null) return <View key={`empty-${i}`} style={styles.dayCell} />;
-                    const date = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
-                    const isSelected = isSameDay(date, selectedDate);
-                    const isTodayDate = isToday(date);
-                    const hasEvents = hasEventsOnDay(date);
-
-                    return (
-                        <Pressable
-                            key={day}
-                            style={[
-                                styles.dayCell,
-                                isSelected && { backgroundColor: colors.accent, borderRadius: 12 },
-                                isTodayDate && !isSelected && { borderWidth: 1.5, borderColor: colors.accent, borderRadius: 12 },
-                            ]}
-                            onPress={() => setSelectedDate(date)}
-                        >
-                            <Text style={[
-                                styles.dayText,
-                                { color: isSelected ? '#fff' : colors.text },
-                                isTodayDate && !isSelected && { color: colors.accent, fontWeight: '800' },
-                            ]}>
-                                {day}
-                            </Text>
-                            {hasEvents && (
-                                <View style={[styles.eventDot, { backgroundColor: isSelected ? '#fff' : colors.accent }]} />
-                            )}
-                        </Pressable>
-                    );
-                })}
-            </View>
-
-            {/* Selected Day Header */}
-            <View style={[styles.dayHeader, { borderColor: colors.border }]}>
-                <View>
-                    <Text style={[styles.dayHeaderTitle, { color: colors.text }]}>
-                        {selectedDate.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' })}
-                    </Text>
-                    <Text style={[styles.eventCount, { color: colors.subtext }]}>
-                        {selectedDayEvents.length === 0 ? 'Keine Termine' : `${selectedDayEvents.length} ${selectedDayEvents.length === 1 ? 'Termin' : 'Termine'}`}
-                    </Text>
+        <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+            <Animated.View style={[styles.container, { opacity: fadeAnim, backgroundColor: colors.background }]}>
+                {/* Header with Close */}
+                <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+                    <Pressable onPress={onClose}><X size={24} color={colors.subtext} /></Pressable>
+                    <Text style={[styles.modalTitle, { color: colors.text }]}>Kalender</Text>
+                    <View style={{ width: 24 }} />
                 </View>
-                <Pressable
-                    style={[styles.addBtn, { backgroundColor: colors.accent }]}
-                    onPress={openCreateModal}
-                >
-                    <Plus size={20} color="#fff" />
-                </Pressable>
-            </View>
-
-            {/* Events List */}
-            <ScrollView style={styles.eventsList} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
-                {isLoading ? (
-                    <ActivityIndicator color={colors.accent} style={{ paddingVertical: 40 }} />
-                ) : selectedDayEvents.length === 0 ? (
-                    <View style={styles.emptyDay}>
-                        <Text style={[styles.emptyDayText, { color: colors.subtext }]}>
-                            Keine Einträge für diesen Tag
+                {/* Month Header */}
+                <View style={[styles.monthHeader, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                    <Pressable onPress={prevMonth} style={styles.navBtn} hitSlop={12}>
+                        <ChevronLeft size={22} color={colors.text} />
+                    </Pressable>
+                    <Pressable onPress={goToToday}>
+                        <Text style={[styles.monthTitle, { color: colors.text }]}>
+                            {MONTHS[currentMonth.getMonth()]} {currentMonth.getFullYear()}
                         </Text>
-                        <Pressable onPress={openCreateModal} style={{ marginTop: 12 }}>
-                            <Text style={[styles.emptyDayLink, { color: colors.accent }]}>+ Neuen Termin erstellen</Text>
-                        </Pressable>
-                    </View>
-                ) : (
-                    selectedDayEvents.map(event => {
-                        const cat = getCategoryInfo(event.category);
+                    </Pressable>
+                    <Pressable onPress={nextMonth} style={styles.navBtn} hitSlop={12}>
+                        <ChevronRight size={22} color={colors.text} />
+                    </Pressable>
+                </View>
+
+                {/* Weekday Headers */}
+                <View style={styles.weekdayRow}>
+                    {WEEKDAYS.map(day => (
+                        <View key={day} style={styles.weekdayCell}>
+                            <Text style={[styles.weekdayText, { color: colors.subtext }]}>{day}</Text>
+                        </View>
+                    ))}
+                </View>
+
+                {/* Calendar Grid */}
+                <View style={styles.calendarGrid}>
+                    {calendarDays.map((day, i) => {
+                        if (day === null) return <View key={`empty-${i}`} style={styles.dayCell} />;
+                        const date = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
+                        const isSelected = isSameDay(date, selectedDate);
+                        const isTodayDate = isToday(date);
+                        const hasEvents = hasEventsOnDay(date);
+
                         return (
                             <Pressable
-                                key={event.id}
-                                style={[styles.eventCard, { backgroundColor: colors.card, borderLeftColor: event.color, borderColor: colors.border }]}
-                                onPress={() => openEditModal(event)}
+                                key={day}
+                                style={[
+                                    styles.dayCell,
+                                    isSelected && { backgroundColor: colors.accent, borderRadius: 12 },
+                                    isTodayDate && !isSelected && { borderWidth: 1.5, borderColor: colors.accent, borderRadius: 12 },
+                                ]}
+                                onPress={() => setSelectedDate(date)}
                             >
-                                <View style={styles.eventCardContent}>
-                                    <View style={styles.eventCardTop}>
-                                        <Text style={styles.eventEmoji}>{cat.icon}</Text>
-                                        <View style={{ flex: 1 }}>
-                                            <Text style={[styles.eventTitle, { color: colors.text }]} numberOfLines={1}>{event.title}</Text>
-                                            {event.description ? (
-                                                <Text style={[styles.eventDesc, { color: colors.subtext }]} numberOfLines={1}>{event.description}</Text>
-                                            ) : null}
-                                        </View>
-                                    </View>
-                                    <View style={styles.eventMeta}>
-                                        {!event.all_day && (
-                                            <View style={styles.eventTimeRow}>
-                                                <Clock size={12} color={colors.subtext} />
-                                                <Text style={[styles.eventTimeText, { color: colors.subtext }]}>
-                                                    {formatTime(event.start_date)}
-                                                    {event.end_date && ` – ${formatTime(event.end_date)}`}
-                                                </Text>
-                                            </View>
-                                        )}
-                                        {event.all_day && (
-                                            <View style={[styles.allDayBadge, { backgroundColor: event.color + '20' }]}>
-                                                <Text style={[styles.allDayText, { color: event.color }]}>Ganztägig</Text>
-                                            </View>
-                                        )}
-                                        <View style={[styles.categoryBadge, { backgroundColor: cat.color + '15' }]}>
-                                            <Text style={[styles.categoryText, { color: cat.color }]}>{cat.label}</Text>
-                                        </View>
-                                    </View>
-                                </View>
-                                <Pressable onPress={() => handleDelete(event)} hitSlop={12} style={styles.deleteBtn}>
-                                    <Trash2 size={16} color={colors.subtext} />
-                                </Pressable>
+                                <Text style={[
+                                    styles.dayText,
+                                    { color: isSelected ? '#fff' : colors.text },
+                                    isTodayDate && !isSelected && { color: colors.accent, fontWeight: '800' },
+                                ]}>
+                                    {day}
+                                </Text>
+                                {hasEvents && (
+                                    <View style={[styles.eventDot, { backgroundColor: isSelected ? '#fff' : colors.accent }]} />
+                                )}
                             </Pressable>
                         );
-                    })
-                )}
-            </ScrollView>
-
-            {/* Create/Edit Modal */}
-            <Modal visible={showCreateModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowCreateModal(false)}>
-                <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
-                    <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-                        <Pressable onPress={() => setShowCreateModal(false)}><X size={24} color={colors.subtext} /></Pressable>
-                        <Text style={[styles.modalTitle, { color: colors.text }]}>{editingEvent ? 'Bearbeiten' : 'Neuer Termin'}</Text>
-                        <Pressable onPress={handleSave} disabled={isSaving}>
-                            {isSaving ? <ActivityIndicator size="small" color={colors.accent} /> : <Check size={24} color={colors.accent} />}
-                        </Pressable>
-                    </View>
-                    <ScrollView style={{ padding: 16 }} keyboardShouldPersistTaps="handled">
-                        {/* Title */}
-                        <Text style={[styles.formLabel, { color: colors.subtext }]}>Titel</Text>
-                        <TextInput
-                            style={[styles.formInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
-                            value={formTitle}
-                            onChangeText={setFormTitle}
-                            placeholder="z.B. Arzttermin, Einkaufen..."
-                            placeholderTextColor={colors.subtext}
-                            autoFocus
-                        />
-
-                        {/* Description */}
-                        <Text style={[styles.formLabel, { color: colors.subtext, marginTop: 16 }]}>Beschreibung</Text>
-                        <TextInput
-                            style={[styles.formInput, styles.formTextArea, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
-                            value={formDescription}
-                            onChangeText={setFormDescription}
-                            placeholder="Optional..."
-                            placeholderTextColor={colors.subtext}
-                            multiline
-                            numberOfLines={3}
-                        />
-
-                        {/* Date */}
-                        <Text style={[styles.formLabel, { color: colors.subtext, marginTop: 16 }]}>Datum</Text>
-                        <Pressable
-                            style={[styles.formInput, { borderColor: colors.border, backgroundColor: colors.card, flexDirection: 'row', alignItems: 'center', gap: 8 }]}
-                            onPress={() => setShowDatePicker('start')}
-                        >
-                            <CalendarDays size={16} color={colors.subtext} />
-                            <Text style={{ color: colors.text, fontSize: 15 }}>{formatDate(formStartDate)}</Text>
-                        </Pressable>
-
-                        {showDatePicker === 'start' && (
-                            <DateTimePicker
-                                value={formStartDate}
-                                mode="date"
-                                display="spinner"
-                                onChange={(_, date) => { setShowDatePicker(null); if (date) setFormStartDate(date); }}
-                                locale="de"
-                            />
-                        )}
-
-                        {/* Time (if not all day) */}
-                        {!formAllDay && (
-                            <View style={{ marginTop: 12 }}>
-                                <View style={{ flexDirection: 'row', gap: 8 }}>
-                                    <Pressable
-                                        style={[styles.formInput, { flex: 1, borderColor: colors.border, backgroundColor: colors.card, flexDirection: 'row', alignItems: 'center', gap: 8 }]}
-                                        onPress={() => setShowDatePicker('startTime')}
-                                    >
-                                        <Clock size={14} color={colors.subtext} />
-                                        <Text style={{ color: colors.text, fontSize: 15 }}>{formStartDate.getHours().toString().padStart(2, '0')}:{formStartDate.getMinutes().toString().padStart(2, '0')}</Text>
-                                    </Pressable>
-                                    <Text style={{ color: colors.subtext, alignSelf: 'center' }}>–</Text>
-                                    <Pressable
-                                        style={[styles.formInput, { flex: 1, borderColor: colors.border, backgroundColor: colors.card, flexDirection: 'row', alignItems: 'center', gap: 8 }]}
-                                        onPress={() => setShowDatePicker('endTime')}
-                                    >
-                                        <Clock size={14} color={colors.subtext} />
-                                        <Text style={{ color: colors.text, fontSize: 15 }}>
-                                            {formEndDate ? `${formEndDate.getHours().toString().padStart(2, '0')}:${formEndDate.getMinutes().toString().padStart(2, '0')}` : '--:--'}
-                                        </Text>
-                                    </Pressable>
-                                </View>
-                                {showDatePicker === 'startTime' && (
-                                    <DateTimePicker
-                                        value={formStartDate}
-                                        mode="time"
-                                        display="spinner"
-                                        is24Hour
-                                        onChange={(_, date) => { setShowDatePicker(null); if (date) setFormStartDate(date); }}
-                                        locale="de"
-                                    />
-                                )}
-                                {showDatePicker === 'endTime' && (
-                                    <DateTimePicker
-                                        value={formEndDate || new Date(formStartDate.getTime() + 3600000)}
-                                        mode="time"
-                                        display="spinner"
-                                        is24Hour
-                                        onChange={(_, date) => { setShowDatePicker(null); if (date) setFormEndDate(date); }}
-                                        locale="de"
-                                    />
-                                )}
-                            </View>
-                        )}
-
-                        {/* All Day Toggle */}
-                        <Pressable
-                            style={[styles.allDayToggle, { borderColor: colors.border, backgroundColor: formAllDay ? colors.accent + '15' : colors.card }]}
-                            onPress={() => setFormAllDay(!formAllDay)}
-                        >
-                            <Text style={{ color: formAllDay ? colors.accent : colors.text, fontWeight: '600' }}>Ganztägig</Text>
-                            <View style={[styles.checkbox, formAllDay && { backgroundColor: colors.accent, borderColor: colors.accent }]}>
-                                {formAllDay && <Check size={14} color="#fff" />}
-                            </View>
-                        </Pressable>
-
-                        {/* Category */}
-                        <Text style={[styles.formLabel, { color: colors.subtext, marginTop: 20 }]}>Kategorie</Text>
-                        <View style={styles.categoryRow}>
-                            {CATEGORIES.map(cat => (
-                                <Pressable
-                                    key={cat.key}
-                                    style={[
-                                        styles.categoryOption,
-                                        { borderColor: formCategory === cat.key ? cat.color : colors.border, backgroundColor: formCategory === cat.key ? cat.color + '15' : colors.card }
-                                    ]}
-                                    onPress={() => { setFormCategory(cat.key); setFormColor(cat.color); }}
-                                >
-                                    <Text style={{ fontSize: 16 }}>{cat.icon}</Text>
-                                    <Text style={{ fontSize: 11, fontWeight: '600', color: formCategory === cat.key ? cat.color : colors.subtext, marginTop: 2 }}>{cat.label}</Text>
-                                </Pressable>
-                            ))}
-                        </View>
-
-                        {/* Color */}
-                        <Text style={[styles.formLabel, { color: colors.subtext, marginTop: 20 }]}>Farbe</Text>
-                        <View style={styles.colorRow}>
-                            {COLOR_OPTIONS.map(c => (
-                                <Pressable
-                                    key={c}
-                                    style={[styles.colorDot, { backgroundColor: c, borderWidth: formColor === c ? 3 : 0, borderColor: '#fff' }]}
-                                    onPress={() => setFormColor(c)}
-                                />
-                            ))}
-                        </View>
-
-                        <View style={{ height: 40 }} />
-                    </ScrollView>
+                    })}
                 </View>
-            </Modal>
-        </Animated.View>
+
+                {/* Selected Day Header */}
+                <View style={[styles.dayHeader, { borderColor: colors.border }]}>
+                    <View>
+                        <Text style={[styles.dayHeaderTitle, { color: colors.text }]}>
+                            {selectedDate.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' })}
+                        </Text>
+                        <Text style={[styles.eventCount, { color: colors.subtext }]}>
+                            {selectedDayEvents.length === 0 ? 'Keine Termine' : `${selectedDayEvents.length} ${selectedDayEvents.length === 1 ? 'Termin' : 'Termine'}`}
+                        </Text>
+                    </View>
+                    <Pressable
+                        style={[styles.addBtn, { backgroundColor: colors.accent }]}
+                        onPress={openCreateModal}
+                    >
+                        <Plus size={20} color="#fff" />
+                    </Pressable>
+                </View>
+
+                {/* Events List */}
+                <ScrollView style={styles.eventsList} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
+                    {isLoading ? (
+                        <ActivityIndicator color={colors.accent} style={{ paddingVertical: 40 }} />
+                    ) : selectedDayEvents.length === 0 ? (
+                        <View style={styles.emptyDay}>
+                            <Text style={[styles.emptyDayText, { color: colors.subtext }]}>
+                                Keine Einträge für diesen Tag
+                            </Text>
+                            <Pressable onPress={openCreateModal} style={{ marginTop: 12 }}>
+                                <Text style={[styles.emptyDayLink, { color: colors.accent }]}>+ Neuen Termin erstellen</Text>
+                            </Pressable>
+                        </View>
+                    ) : (
+                        selectedDayEvents.map(event => {
+                            const cat = getCategoryInfo(event.category);
+                            return (
+                                <Pressable
+                                    key={event.id}
+                                    style={[styles.eventCard, { backgroundColor: colors.card, borderLeftColor: event.color, borderColor: colors.border }]}
+                                    onPress={() => openEditModal(event)}
+                                >
+                                    <View style={styles.eventCardContent}>
+                                        <View style={styles.eventCardTop}>
+                                            <Text style={styles.eventEmoji}>{cat.icon}</Text>
+                                            <View style={{ flex: 1 }}>
+                                                <Text style={[styles.eventTitle, { color: colors.text }]} numberOfLines={1}>{event.title}</Text>
+                                                {event.description ? (
+                                                    <Text style={[styles.eventDesc, { color: colors.subtext }]} numberOfLines={1}>{event.description}</Text>
+                                                ) : null}
+                                            </View>
+                                        </View>
+                                        <View style={styles.eventMeta}>
+                                            {!event.all_day && (
+                                                <View style={styles.eventTimeRow}>
+                                                    <Clock size={12} color={colors.subtext} />
+                                                    <Text style={[styles.eventTimeText, { color: colors.subtext }]}>
+                                                        {formatTime(event.start_date)}
+                                                        {event.end_date && ` – ${formatTime(event.end_date)}`}
+                                                    </Text>
+                                                </View>
+                                            )}
+                                            {event.all_day && (
+                                                <View style={[styles.allDayBadge, { backgroundColor: event.color + '20' }]}>
+                                                    <Text style={[styles.allDayText, { color: event.color }]}>Ganztägig</Text>
+                                                </View>
+                                            )}
+                                            <View style={[styles.categoryBadge, { backgroundColor: cat.color + '15' }]}>
+                                                <Text style={[styles.categoryText, { color: cat.color }]}>{cat.label}</Text>
+                                            </View>
+                                        </View>
+                                    </View>
+                                    <Pressable onPress={() => handleDelete(event)} hitSlop={12} style={styles.deleteBtn}>
+                                        <Trash2 size={16} color={colors.subtext} />
+                                    </Pressable>
+                                </Pressable>
+                            );
+                        })
+                    )}
+                </ScrollView>
+
+                {/* Create/Edit Modal */}
+                <Modal visible={showCreateModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowCreateModal(false)}>
+                    <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+                        <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+                            <Pressable onPress={() => setShowCreateModal(false)}><X size={24} color={colors.subtext} /></Pressable>
+                            <Text style={[styles.modalTitle, { color: colors.text }]}>{editingEvent ? 'Bearbeiten' : 'Neuer Termin'}</Text>
+                            <Pressable onPress={handleSave} disabled={isSaving}>
+                                {isSaving ? <ActivityIndicator size="small" color={colors.accent} /> : <Check size={24} color={colors.accent} />}
+                            </Pressable>
+                        </View>
+                        <ScrollView style={{ padding: 16 }} keyboardShouldPersistTaps="handled">
+                            {/* Title */}
+                            <Text style={[styles.formLabel, { color: colors.subtext }]}>Titel</Text>
+                            <TextInput
+                                style={[styles.formInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
+                                value={formTitle}
+                                onChangeText={setFormTitle}
+                                placeholder="z.B. Arzttermin, Einkaufen..."
+                                placeholderTextColor={colors.subtext}
+                                autoFocus
+                            />
+
+                            {/* Description */}
+                            <Text style={[styles.formLabel, { color: colors.subtext, marginTop: 16 }]}>Beschreibung</Text>
+                            <TextInput
+                                style={[styles.formInput, styles.formTextArea, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
+                                value={formDescription}
+                                onChangeText={setFormDescription}
+                                placeholder="Optional..."
+                                placeholderTextColor={colors.subtext}
+                                multiline
+                                numberOfLines={3}
+                            />
+
+                            {/* Date */}
+                            <Text style={[styles.formLabel, { color: colors.subtext, marginTop: 16 }]}>Datum</Text>
+                            <Pressable
+                                style={[styles.formInput, { borderColor: colors.border, backgroundColor: colors.card, flexDirection: 'row', alignItems: 'center', gap: 8 }]}
+                                onPress={() => setShowDatePicker('start')}
+                            >
+                                <CalendarDays size={16} color={colors.subtext} />
+                                <Text style={{ color: colors.text, fontSize: 15 }}>{formatDate(formStartDate)}</Text>
+                            </Pressable>
+
+                            {showDatePicker === 'start' && (
+                                <DateTimePicker
+                                    value={formStartDate}
+                                    mode="date"
+                                    display="spinner"
+                                    onChange={(_, date) => { setShowDatePicker(null); if (date) setFormStartDate(date); }}
+                                    locale="de"
+                                />
+                            )}
+
+                            {/* Time (if not all day) */}
+                            {!formAllDay && (
+                                <View style={{ marginTop: 12 }}>
+                                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                                        <Pressable
+                                            style={[styles.formInput, { flex: 1, borderColor: colors.border, backgroundColor: colors.card, flexDirection: 'row', alignItems: 'center', gap: 8 }]}
+                                            onPress={() => setShowDatePicker('startTime')}
+                                        >
+                                            <Clock size={14} color={colors.subtext} />
+                                            <Text style={{ color: colors.text, fontSize: 15 }}>{formStartDate.getHours().toString().padStart(2, '0')}:{formStartDate.getMinutes().toString().padStart(2, '0')}</Text>
+                                        </Pressable>
+                                        <Text style={{ color: colors.subtext, alignSelf: 'center' }}>–</Text>
+                                        <Pressable
+                                            style={[styles.formInput, { flex: 1, borderColor: colors.border, backgroundColor: colors.card, flexDirection: 'row', alignItems: 'center', gap: 8 }]}
+                                            onPress={() => setShowDatePicker('endTime')}
+                                        >
+                                            <Clock size={14} color={colors.subtext} />
+                                            <Text style={{ color: colors.text, fontSize: 15 }}>
+                                                {formEndDate ? `${formEndDate.getHours().toString().padStart(2, '0')}:${formEndDate.getMinutes().toString().padStart(2, '0')}` : '--:--'}
+                                            </Text>
+                                        </Pressable>
+                                    </View>
+                                    {showDatePicker === 'startTime' && (
+                                        <DateTimePicker
+                                            value={formStartDate}
+                                            mode="time"
+                                            display="spinner"
+                                            is24Hour
+                                            onChange={(_, date) => { setShowDatePicker(null); if (date) setFormStartDate(date); }}
+                                            locale="de"
+                                        />
+                                    )}
+                                    {showDatePicker === 'endTime' && (
+                                        <DateTimePicker
+                                            value={formEndDate || new Date(formStartDate.getTime() + 3600000)}
+                                            mode="time"
+                                            display="spinner"
+                                            is24Hour
+                                            onChange={(_, date) => { setShowDatePicker(null); if (date) setFormEndDate(date); }}
+                                            locale="de"
+                                        />
+                                    )}
+                                </View>
+                            )}
+
+                            {/* All Day Toggle */}
+                            <Pressable
+                                style={[styles.allDayToggle, { borderColor: colors.border, backgroundColor: formAllDay ? colors.accent + '15' : colors.card }]}
+                                onPress={() => setFormAllDay(!formAllDay)}
+                            >
+                                <Text style={{ color: formAllDay ? colors.accent : colors.text, fontWeight: '600' }}>Ganztägig</Text>
+                                <View style={[styles.checkbox, formAllDay && { backgroundColor: colors.accent, borderColor: colors.accent }]}>
+                                    {formAllDay && <Check size={14} color="#fff" />}
+                                </View>
+                            </Pressable>
+
+                            {/* Category */}
+                            <Text style={[styles.formLabel, { color: colors.subtext, marginTop: 20 }]}>Kategorie</Text>
+                            <View style={styles.categoryRow}>
+                                {CATEGORIES.map(cat => (
+                                    <Pressable
+                                        key={cat.key}
+                                        style={[
+                                            styles.categoryOption,
+                                            { borderColor: formCategory === cat.key ? cat.color : colors.border, backgroundColor: formCategory === cat.key ? cat.color + '15' : colors.card }
+                                        ]}
+                                        onPress={() => { setFormCategory(cat.key); setFormColor(cat.color); }}
+                                    >
+                                        <Text style={{ fontSize: 16 }}>{cat.icon}</Text>
+                                        <Text style={{ fontSize: 11, fontWeight: '600', color: formCategory === cat.key ? cat.color : colors.subtext, marginTop: 2 }}>{cat.label}</Text>
+                                    </Pressable>
+                                ))}
+                            </View>
+
+                            {/* Color */}
+                            <Text style={[styles.formLabel, { color: colors.subtext, marginTop: 20 }]}>Farbe</Text>
+                            <View style={styles.colorRow}>
+                                {COLOR_OPTIONS.map(c => (
+                                    <Pressable
+                                        key={c}
+                                        style={[styles.colorDot, { backgroundColor: c, borderWidth: formColor === c ? 3 : 0, borderColor: '#fff' }]}
+                                        onPress={() => setFormColor(c)}
+                                    />
+                                ))}
+                            </View>
+
+                            <View style={{ height: 40 }} />
+                        </ScrollView>
+                    </View>
+                </Modal>
+            </Animated.View>
+        </Modal>
     );
 };
 
