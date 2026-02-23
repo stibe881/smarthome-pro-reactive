@@ -6,11 +6,12 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
     CalendarDays, Plus, X, Clock, Trash2, Edit3, Check,
-    ChevronLeft, ChevronRight, Tag, AlignLeft, Palette,
+    ChevronLeft, ChevronRight, Tag, AlignLeft, Palette, Settings, Link2,
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useHomeAssistant } from '../contexts/HomeAssistantContext';
 import { useHousehold } from '../hooks/useHousehold';
 import { supabase } from '../lib/supabase';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -31,11 +32,30 @@ interface PlannerEvent {
     created_at: string;
 }
 
+interface CalendarSource {
+    id: string;
+    household_id: string;
+    entity_id: string;
+    label: string;
+    color: string;
+    enabled: boolean;
+}
+
 const CATEGORIES = [
     { key: 'event', label: 'Termin', color: '#3B82F6', icon: '📅' },
     { key: 'task', label: 'Aufgabe', color: '#10B981', icon: '✅' },
     { key: 'reminder', label: 'Erinnerung', color: '#F59E0B', icon: '🔔' },
     { key: 'birthday', label: 'Geburtstag', color: '#EC4899', icon: '🎂' },
+];
+
+const CALENDAR_LABELS = [
+    { key: 'geburtstage', label: 'Geburtstage', icon: '🎂', color: '#EC4899' },
+    { key: 'termine', label: 'Termine', icon: '📅', color: '#3B82F6' },
+    { key: 'feiertage', label: 'Feiertage', icon: '🎄', color: '#10B981' },
+    { key: 'arbeit', label: 'Arbeit', icon: '💼', color: '#F59E0B' },
+    { key: 'schule', label: 'Schule', icon: '🎒', color: '#8B5CF6' },
+    { key: 'sport', label: 'Sport', icon: '⚽', color: '#06B6D4' },
+    { key: 'sonstiges', label: 'Sonstiges', icon: '📋', color: '#64748B' },
 ];
 
 const COLOR_OPTIONS = ['#3B82F6', '#10B981', '#F59E0B', '#EC4899', '#8B5CF6', '#EF4444', '#06B6D4', '#F97316'];
@@ -52,6 +72,7 @@ export const FamilyPlanner: React.FC<FamilyPlannerProps> = ({ visible, onClose }
     const { colors } = useTheme();
     const { user } = useAuth();
     const { householdId } = useHousehold();
+    const { entities, fetchCalendarEvents } = useHomeAssistant();
     const insets = useSafeAreaInsets();
 
     const [selectedDate, setSelectedDate] = useState(new Date());
@@ -71,6 +92,13 @@ export const FamilyPlanner: React.FC<FamilyPlannerProps> = ({ visible, onClose }
     const [formCategory, setFormCategory] = useState('event');
     const [isSaving, setIsSaving] = useState(false);
     const [showDatePicker, setShowDatePicker] = useState<'start' | 'end' | 'startTime' | 'endTime' | null>(null);
+
+    // HA Calendar integration
+    const [calendarSources, setCalendarSources] = useState<CalendarSource[]>([]);
+    const [haEvents, setHaEvents] = useState<PlannerEvent[]>([]);
+    const [showCalSettings, setShowCalSettings] = useState(false);
+    const [addingCalEntityId, setAddingCalEntityId] = useState('');
+    const [addingCalLabel, setAddingCalLabel] = useState('termine');
 
     const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -103,7 +131,90 @@ export const FamilyPlanner: React.FC<FamilyPlannerProps> = ({ visible, onClose }
         }
     }, [householdId, currentMonth]);
 
+    // Load calendar sources
+    const loadCalendarSources = useCallback(async () => {
+        if (!householdId) return;
+        try {
+            const { data } = await supabase
+                .from('planner_calendar_sources')
+                .select('*')
+                .eq('household_id', householdId);
+            setCalendarSources(data || []);
+        } catch (e) {
+            console.error('Error loading calendar sources:', e);
+        }
+    }, [householdId]);
+
+    // Load HA calendar events for current month
+    const loadHaEvents = useCallback(async () => {
+        if (!calendarSources.length || !fetchCalendarEvents) return;
+        const monthStart = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
+        const monthEnd = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0, 23, 59, 59);
+        const allHaEvents: PlannerEvent[] = [];
+
+        for (const src of calendarSources.filter(s => s.enabled)) {
+            try {
+                const data = await fetchCalendarEvents(src.entity_id, monthStart.toISOString(), monthEnd.toISOString());
+                if (data && Array.isArray(data)) {
+                    const labelInfo = CALENDAR_LABELS.find(l => l.key === src.label) || CALENDAR_LABELS[6];
+                    data.forEach((evt: any, idx: number) => {
+                        const startStr = evt.start?.dateTime || evt.start?.date || evt.start || '';
+                        const endStr = evt.end?.dateTime || evt.end?.date || evt.end || '';
+                        const isAllDay = !evt.start?.dateTime && (!!evt.start?.date || (typeof evt.start === 'string' && evt.start.length <= 10));
+                        allHaEvents.push({
+                            id: `ha-${src.entity_id}-${idx}`,
+                            household_id: '',
+                            created_by: null,
+                            title: evt.summary || evt.title || 'Ohne Titel',
+                            description: evt.description || null,
+                            start_date: startStr,
+                            end_date: endStr || null,
+                            all_day: isAllDay,
+                            color: src.color || labelInfo.color,
+                            category: src.label,
+                            created_at: '',
+                        });
+                    });
+                }
+            } catch (e) {
+                console.error(`Error loading HA calendar ${src.entity_id}:`, e);
+            }
+        }
+        setHaEvents(allHaEvents);
+    }, [calendarSources, currentMonth, fetchCalendarEvents]);
+
     useEffect(() => { loadEvents(); }, [loadEvents]);
+    useEffect(() => { loadCalendarSources(); }, [loadCalendarSources]);
+    useEffect(() => { loadHaEvents(); }, [loadHaEvents]);
+
+    // Available HA calendar entities
+    const availableCalEntities = Object.values(entities)
+        .filter((e: any) => e.entity_id?.startsWith('calendar.'))
+        .filter((e: any) => !calendarSources.some(s => s.entity_id === e.entity_id));
+
+    const addCalendarSource = async () => {
+        if (!addingCalEntityId || !householdId) return;
+        const labelInfo = CALENDAR_LABELS.find(l => l.key === addingCalLabel) || CALENDAR_LABELS[6];
+        try {
+            const { error } = await supabase.from('planner_calendar_sources').insert({
+                household_id: householdId,
+                entity_id: addingCalEntityId,
+                label: addingCalLabel,
+                color: labelInfo.color,
+                enabled: true,
+            });
+            if (error) throw error;
+            setAddingCalEntityId('');
+            loadCalendarSources();
+        } catch (e: any) {
+            Alert.alert('Fehler', e.message);
+        }
+    };
+
+    const removeCalendarSource = async (id: string) => {
+        await supabase.from('planner_calendar_sources').delete().eq('id', id);
+        loadCalendarSources();
+    };
 
     // Calendar helpers
     const getDaysInMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
@@ -117,8 +228,18 @@ export const FamilyPlanner: React.FC<FamilyPlannerProps> = ({ visible, onClose }
 
     const isToday = (date: Date) => isSameDay(date, new Date());
 
+    const allEvents = [...events, ...haEvents];
+
     const getEventsForDay = (date: Date) =>
-        events.filter(e => isSameDay(new Date(e.start_date), date));
+        allEvents.filter(e => {
+            const startStr = e.start_date;
+            // Handle date-only strings (YYYY-MM-DD)
+            if (startStr && startStr.length <= 10) {
+                const [y, m, d] = startStr.split('-').map(Number);
+                return date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d;
+            }
+            return isSameDay(new Date(startStr), date);
+        });
 
     const hasEventsOnDay = (date: Date) => getEventsForDay(date).length > 0;
 
@@ -251,7 +372,7 @@ export const FamilyPlanner: React.FC<FamilyPlannerProps> = ({ visible, onClose }
                 <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
                     <Pressable onPress={onClose}><X size={24} color={colors.subtext} /></Pressable>
                     <Text style={[styles.modalTitle, { color: colors.text }]}>Kalender</Text>
-                    <View style={{ width: 24 }} />
+                    <Pressable onPress={() => setShowCalSettings(true)}><Settings size={22} color={colors.subtext} /></Pressable>
                 </View>
                 {/* Month Header */}
                 <View style={[styles.monthHeader, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -344,22 +465,31 @@ export const FamilyPlanner: React.FC<FamilyPlannerProps> = ({ visible, onClose }
                         </View>
                     ) : (
                         selectedDayEvents.map(event => {
+                            const isHaEvent = event.id.startsWith('ha-');
                             const cat = getCategoryInfo(event.category);
+                            const labelInfo = CALENDAR_LABELS.find(l => l.key === event.category);
+                            const icon = labelInfo?.icon || cat.icon;
                             return (
                                 <Pressable
                                     key={event.id}
                                     style={[styles.eventCard, { backgroundColor: colors.card, borderLeftColor: event.color, borderColor: colors.border }]}
-                                    onPress={() => openEditModal(event)}
+                                    onPress={() => !isHaEvent && openEditModal(event)}
                                 >
                                     <View style={styles.eventCardContent}>
                                         <View style={styles.eventCardTop}>
-                                            <Text style={styles.eventEmoji}>{cat.icon}</Text>
+                                            <Text style={styles.eventEmoji}>{icon}</Text>
                                             <View style={{ flex: 1 }}>
                                                 <Text style={[styles.eventTitle, { color: colors.text }]} numberOfLines={1}>{event.title}</Text>
                                                 {event.description ? (
                                                     <Text style={[styles.eventDesc, { color: colors.subtext }]} numberOfLines={1}>{event.description}</Text>
                                                 ) : null}
                                             </View>
+                                            {isHaEvent && (
+                                                <View style={[styles.haBadge, { backgroundColor: event.color + '15' }]}>
+                                                    <Link2 size={10} color={event.color} />
+                                                    <Text style={{ fontSize: 9, color: event.color, fontWeight: '600' }}>HA</Text>
+                                                </View>
+                                            )}
                                         </View>
                                         <View style={styles.eventMeta}>
                                             {!event.all_day && (
@@ -376,14 +506,16 @@ export const FamilyPlanner: React.FC<FamilyPlannerProps> = ({ visible, onClose }
                                                     <Text style={[styles.allDayText, { color: event.color }]}>Ganztägig</Text>
                                                 </View>
                                             )}
-                                            <View style={[styles.categoryBadge, { backgroundColor: cat.color + '15' }]}>
-                                                <Text style={[styles.categoryText, { color: cat.color }]}>{cat.label}</Text>
+                                            <View style={[styles.categoryBadge, { backgroundColor: (labelInfo?.color || cat.color) + '15' }]}>
+                                                <Text style={[styles.categoryText, { color: labelInfo?.color || cat.color }]}>{labelInfo?.label || cat.label}</Text>
                                             </View>
                                         </View>
                                     </View>
-                                    <Pressable onPress={() => handleDelete(event)} hitSlop={12} style={styles.deleteBtn}>
-                                        <Trash2 size={16} color={colors.subtext} />
-                                    </Pressable>
+                                    {!isHaEvent && (
+                                        <Pressable onPress={() => handleDelete(event)} hitSlop={12} style={styles.deleteBtn}>
+                                            <Trash2 size={16} color={colors.subtext} />
+                                        </Pressable>
+                                    )}
                                 </Pressable>
                             );
                         })
@@ -534,6 +666,115 @@ export const FamilyPlanner: React.FC<FamilyPlannerProps> = ({ visible, onClose }
                         </ScrollView>
                     </View>
                 </Modal>
+
+                {/* Calendar Sources Settings Modal */}
+                <Modal visible={showCalSettings} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowCalSettings(false)}>
+                    <View style={[styles.container, { backgroundColor: colors.background }]}>
+                        <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+                            <Pressable onPress={() => setShowCalSettings(false)}><X size={24} color={colors.subtext} /></Pressable>
+                            <Text style={[styles.modalTitle, { color: colors.text }]}>HA-Kalender</Text>
+                            <View style={{ width: 24 }} />
+                        </View>
+                        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
+                            <Text style={[styles.formLabel, { color: colors.subtext, marginBottom: 12 }]}>Verbundene Kalender</Text>
+                            {calendarSources.length === 0 ? (
+                                <View style={[styles.emptyDay, { marginBottom: 20 }]}>
+                                    <Text style={{ color: colors.subtext, textAlign: 'center' }}>Noch keine Kalender verbunden.{'\n'}Füge unten einen HA-Kalender hinzu.</Text>
+                                </View>
+                            ) : (
+                                calendarSources.map(src => {
+                                    const labelInfo = CALENDAR_LABELS.find(l => l.key === src.label) || CALENDAR_LABELS[6];
+                                    return (
+                                        <View key={src.id} style={[styles.eventCard, { backgroundColor: colors.card, borderLeftColor: src.color, borderColor: colors.border, marginBottom: 8 }]}>
+                                            <View style={{ flex: 1 }}>
+                                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                                    <Text style={{ fontSize: 18 }}>{labelInfo.icon}</Text>
+                                                    <Text style={[styles.eventTitle, { color: colors.text }]}>{labelInfo.label}</Text>
+                                                </View>
+                                                <Text style={{ color: colors.subtext, fontSize: 12, marginTop: 2 }}>{src.entity_id}</Text>
+                                            </View>
+                                            <Pressable
+                                                onPress={() => Alert.alert('Entfernen', `"${labelInfo.label}" Kalender entfernen?`, [
+                                                    { text: 'Abbrechen', style: 'cancel' },
+                                                    { text: 'Entfernen', style: 'destructive', onPress: () => removeCalendarSource(src.id) },
+                                                ])}
+                                                hitSlop={12}
+                                            >
+                                                <Trash2 size={18} color="#EF4444" />
+                                            </Pressable>
+                                        </View>
+                                    );
+                                })
+                            )}
+
+                            <View style={{ marginTop: 20, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 20 }}>
+                                <Text style={[styles.formLabel, { color: colors.subtext, marginBottom: 10 }]}>Kalender hinzufügen</Text>
+
+                                {/* Entity Picker */}
+                                <Text style={{ color: colors.subtext, fontSize: 12, marginBottom: 6 }}>HA-Kalender wählen:</Text>
+                                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, marginBottom: 16 }}>
+                                    {availableCalEntities.length === 0 ? (
+                                        <Text style={{ color: colors.subtext, fontSize: 13, fontStyle: 'italic' }}>
+                                            {Object.values(entities).filter((e: any) => e.entity_id?.startsWith('calendar.')).length === 0
+                                                ? 'Keine Kalender in HA gefunden'
+                                                : 'Alle Kalender verbunden'}
+                                        </Text>
+                                    ) : (
+                                        availableCalEntities.map((e: any) => (
+                                            <Pressable
+                                                key={e.entity_id}
+                                                style={[
+                                                    styles.categoryOption,
+                                                    {
+                                                        borderColor: addingCalEntityId === e.entity_id ? colors.accent : colors.border,
+                                                        backgroundColor: addingCalEntityId === e.entity_id ? colors.accent + '15' : colors.card
+                                                    }
+                                                ]}
+                                                onPress={() => setAddingCalEntityId(e.entity_id)}
+                                            >
+                                                <Text style={{ fontSize: 12, color: addingCalEntityId === e.entity_id ? colors.accent : colors.text }}>
+                                                    {e.attributes?.friendly_name || e.entity_id.replace('calendar.', '')}
+                                                </Text>
+                                            </Pressable>
+                                        ))
+                                    )}
+                                </ScrollView>
+
+                                {/* Label Picker */}
+                                {addingCalEntityId ? (
+                                    <>
+                                        <Text style={{ color: colors.subtext, fontSize: 12, marginBottom: 6 }}>Kategorie wählen:</Text>
+                                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
+                                            {CALENDAR_LABELS.map(label => (
+                                                <Pressable
+                                                    key={label.key}
+                                                    style={[
+                                                        styles.categoryOption,
+                                                        {
+                                                            borderColor: addingCalLabel === label.key ? label.color : colors.border,
+                                                            backgroundColor: addingCalLabel === label.key ? label.color + '15' : colors.card
+                                                        }
+                                                    ]}
+                                                    onPress={() => setAddingCalLabel(label.key)}
+                                                >
+                                                    <Text style={{ fontSize: 14 }}>{label.icon}</Text>
+                                                    <Text style={{ fontSize: 12, color: addingCalLabel === label.key ? label.color : colors.text }}>{label.label}</Text>
+                                                </Pressable>
+                                            ))}
+                                        </View>
+                                        <Pressable
+                                            style={[styles.addBtn, { backgroundColor: colors.accent }]}
+                                            onPress={addCalendarSource}
+                                        >
+                                            <Plus size={18} color="#fff" />
+                                            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>Kalender verbinden</Text>
+                                        </Pressable>
+                                    </>
+                                ) : null}
+                            </View>
+                        </ScrollView>
+                    </View>
+                </Modal>
             </Animated.View>
         </Modal>
     );
@@ -629,4 +870,7 @@ const styles = StyleSheet.create({
 
     colorRow: { flexDirection: 'row', gap: 10, marginTop: 8 },
     colorDot: { width: 28, height: 28, borderRadius: 14 },
+
+    haBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
+    addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: 14 },
 });
