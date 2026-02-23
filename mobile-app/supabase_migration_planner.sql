@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS family_todos (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   household_id UUID REFERENCES households(id) ON DELETE CASCADE NOT NULL,
   created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
-  assigned_to UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  assigned_to UUID,  -- references family_members.id (no FK, children have no auth user)
   title TEXT NOT NULL,
   completed BOOLEAN DEFAULT false,
   due_date DATE,
