@@ -3,7 +3,7 @@ import {
     View, Text, StyleSheet, Pressable, ScrollView, TextInput,
     ActivityIndicator, Alert, Modal,
 } from 'react-native';
-import { X, Plus, Trash2, Trophy, Star, Gift, Check } from 'lucide-react-native';
+import { X, Plus, Trash2, Trophy, Star, Gift, Check, Clock, ChevronRight } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useHousehold } from '../hooks/useHousehold';
@@ -26,6 +26,11 @@ interface RewardItem {
     created_at: string;
 }
 
+interface HistoryEntry {
+    id: string; member_name: string; points: number;
+    reason: string; type: string; created_at: string;
+}
+
 interface RewardsProps { visible: boolean; onClose: () => void; }
 
 const RANK_EMOJIS = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣', '6️⃣'];
@@ -43,6 +48,16 @@ export const FamilyRewards: React.FC<RewardsProps> = ({ visible, onClose }) => {
     const [newRewardTitle, setNewRewardTitle] = useState('');
     const [newRewardPoints, setNewRewardPoints] = useState('');
     const [newRewardEmoji, setNewRewardEmoji] = useState('🎁');
+
+    // History
+    const [historyMember, setHistoryMember] = useState<Reward | null>(null);
+    const [history, setHistory] = useState<HistoryEntry[]>([]);
+    const [historyLoading, setHistoryLoading] = useState(false);
+
+    // Manual points with reason
+    const [pointsMember, setPointsMember] = useState<Reward | null>(null);
+    const [pointsAmount, setPointsAmount] = useState(0);
+    const [pointsReason, setPointsReason] = useState('');
 
     const EMOJI_OPTIONS = ['🎁', '🍦', '🎮', '📱', '🎬', '🏊', '⚽', '🎨', '📚', '🧸', '🎵', '🎯'];
 
@@ -123,16 +138,36 @@ export const FamilyRewards: React.FC<RewardsProps> = ({ visible, onClose }) => {
     };
 
     const addPoints = (member: Reward, pts: number) => {
-        Alert.alert('Punkte', `${pts > 0 ? '+' : ''}${pts} Punkte für ${member.member_name}?`, [
-            { text: 'Abbrechen', style: 'cancel' },
-            {
-                text: 'OK', onPress: async () => {
-                    const { error } = await supabase.from('reward_points').update({ points: member.points + pts }).eq('id', member.id);
-                    if (error) console.error('Error updating points:', error);
-                    loadData();
-                }
-            },
-        ]);
+        setPointsMember(member);
+        setPointsAmount(pts);
+        setPointsReason('');
+    };
+
+    const confirmAddPoints = async () => {
+        if (!pointsMember || !pointsReason.trim()) {
+            Alert.alert('Fehler', 'Bitte einen Grund angeben.');
+            return;
+        }
+        try {
+            const { error } = await supabase.from('reward_points')
+                .update({ points: pointsMember.points + pointsAmount })
+                .eq('id', pointsMember.id);
+            if (error) throw error;
+            // Log history
+            if (householdId) {
+                await supabase.from('reward_history').insert({
+                    household_id: householdId,
+                    member_name: pointsMember.member_name,
+                    points: pointsAmount,
+                    reason: pointsReason.trim(),
+                    type: 'manual',
+                });
+            }
+            setPointsMember(null);
+            loadData();
+        } catch (e: any) {
+            Alert.alert('Fehler', e.message);
+        }
     };
 
     const redeemReward = (member: Reward, reward: RewardItem) => {
@@ -144,8 +179,20 @@ export const FamilyRewards: React.FC<RewardsProps> = ({ visible, onClose }) => {
             { text: 'Abbrechen', style: 'cancel' },
             {
                 text: 'Einlösen', onPress: async () => {
-                    const { error } = await supabase.from('reward_points').update({ points: member.points - reward.points_required }).eq('id', member.id);
+                    const { error } = await supabase.from('reward_points')
+                        .update({ points: member.points - reward.points_required })
+                        .eq('id', member.id);
                     if (error) console.error('Error redeeming reward:', error);
+                    // Log history
+                    if (householdId) {
+                        await supabase.from('reward_history').insert({
+                            household_id: householdId,
+                            member_name: member.member_name,
+                            points: -reward.points_required,
+                            reason: `${reward.emoji} ${reward.title} eingelöst`,
+                            type: 'redeem',
+                        });
+                    }
                     loadData();
                 }
             },
@@ -162,6 +209,33 @@ export const FamilyRewards: React.FC<RewardsProps> = ({ visible, onClose }) => {
                 }
             },
         ]);
+    };
+
+    const openHistory = async (member: Reward) => {
+        setHistoryMember(member);
+        setHistoryLoading(true);
+        try {
+            const { data } = await supabase.from('reward_history')
+                .select('*')
+                .eq('household_id', householdId!)
+                .eq('member_name', member.member_name)
+                .order('created_at', { ascending: false })
+                .limit(50);
+            setHistory(data || []);
+        } catch (e) {
+            console.error('Error loading history:', e);
+        } finally {
+            setHistoryLoading(false);
+        }
+    };
+
+    const formatDate = (d: string) => {
+        const date = new Date(d);
+        const day = date.getDate().toString().padStart(2, '0');
+        const month = (date.getMonth() + 1).toString().padStart(2, '0');
+        const hours = date.getHours().toString().padStart(2, '0');
+        const mins = date.getMinutes().toString().padStart(2, '0');
+        return `${day}.${month}. ${hours}:${mins}`;
     };
 
     return (
@@ -197,10 +271,13 @@ export const FamilyRewards: React.FC<RewardsProps> = ({ visible, onClose }) => {
                                 members.map((m, idx) => (
                                     <View key={m.id} style={[styles.memberCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                                         <Text style={styles.rank}>{RANK_EMOJIS[idx] || '⭐'}</Text>
-                                        <View style={{ flex: 1 }}>
-                                            <Text style={[styles.memberName, { color: colors.text }]}>{m.member_name}</Text>
+                                        <Pressable style={{ flex: 1 }} onPress={() => openHistory(m)}>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                                <Text style={[styles.memberName, { color: colors.text }]}>{m.member_name}</Text>
+                                                <ChevronRight size={14} color={colors.subtext} />
+                                            </View>
                                             <Text style={[styles.memberPoints, { color: colors.accent }]}>{m.points} ⭐</Text>
-                                        </View>
+                                        </Pressable>
                                         <View style={styles.pointBtns}>
                                             <Pressable style={[styles.ptBtn, { backgroundColor: '#10B98120' }]} onPress={() => addPoints(m, 1)}>
                                                 <Text style={{ color: '#10B981', fontWeight: '800' }}>+1</Text>
@@ -279,6 +356,74 @@ export const FamilyRewards: React.FC<RewardsProps> = ({ visible, onClose }) => {
                         </View>
                     </View></View>
                 </Modal>
+
+                {/* Points Reason Modal */}
+                <Modal visible={!!pointsMember} transparent animationType="fade">
+                    <View style={styles.overlay}><View style={[styles.popup, { backgroundColor: colors.card }]}>
+                        <Text style={[styles.popupTitle, { color: colors.text }]}>
+                            {pointsAmount > 0 ? '+' : ''}{pointsAmount} Punkte für {pointsMember?.member_name}
+                        </Text>
+                        <TextInput
+                            style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
+                            value={pointsReason}
+                            onChangeText={setPointsReason}
+                            placeholder="Grund angeben..."
+                            placeholderTextColor={colors.subtext}
+                            autoFocus
+                        />
+                        <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+                            <Pressable style={[styles.cancelBtn, { borderColor: colors.border }]} onPress={() => setPointsMember(null)}>
+                                <Text style={{ color: colors.subtext }}>Abbrechen</Text>
+                            </Pressable>
+                            <Pressable style={[styles.saveBtn, { backgroundColor: colors.accent, opacity: pointsReason.trim() ? 1 : 0.4 }]} onPress={confirmAddPoints}>
+                                <Text style={{ color: '#fff', fontWeight: '700' }}>Bestätigen</Text>
+                            </Pressable>
+                        </View>
+                    </View></View>
+                </Modal>
+
+                {/* History Modal */}
+                <Modal visible={!!historyMember} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setHistoryMember(null)}>
+                    <View style={[styles.container, { backgroundColor: colors.background }]}>
+                        <View style={[styles.header, { borderBottomColor: colors.border }]}>
+                            <Pressable onPress={() => setHistoryMember(null)}><X size={24} color={colors.subtext} /></Pressable>
+                            <Text style={[styles.headerTitle, { color: colors.text }]}>{historyMember?.member_name}</Text>
+                            <View style={{ width: 24 }} />
+                        </View>
+                        <View style={{ alignItems: 'center', paddingVertical: 16 }}>
+                            <Text style={[styles.memberPoints, { color: colors.accent, fontSize: 28 }]}>{historyMember?.points} ⭐</Text>
+                            <Text style={{ color: colors.subtext, fontSize: 13, marginTop: 2 }}>Aktueller Punktestand</Text>
+                        </View>
+                        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+                            {historyLoading ? (
+                                <ActivityIndicator color={colors.accent} style={{ paddingVertical: 40 }} />
+                            ) : history.length === 0 ? (
+                                <View style={styles.emptyState}>
+                                    <Clock size={32} color={colors.subtext} />
+                                    <Text style={[styles.emptyText, { color: colors.subtext }]}>Noch kein Verlauf</Text>
+                                </View>
+                            ) : (
+                                history.map(h => (
+                                    <View key={h.id} style={[styles.historyItem, { borderColor: colors.border }]}>
+                                        <View style={[styles.historyDot, { backgroundColor: h.points > 0 ? '#10B981' : '#EF4444' }]} />
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={[{ fontSize: 14, fontWeight: '600' }, { color: colors.text }]}>{h.reason}</Text>
+                                            <View style={{ flexDirection: 'row', gap: 8, marginTop: 2 }}>
+                                                <Text style={{ fontSize: 11, color: colors.subtext }}>{formatDate(h.created_at)}</Text>
+                                                <Text style={{ fontSize: 11, color: colors.subtext, textTransform: 'capitalize' }}>
+                                                    {h.type === 'manual' ? '🔧 Manuell' : h.type === 'task' ? '✅ Aufgabe' : '🎁 Eingelöst'}
+                                                </Text>
+                                            </View>
+                                        </View>
+                                        <Text style={{ fontSize: 16, fontWeight: '800', color: h.points > 0 ? '#10B981' : '#EF4444' }}>
+                                            {h.points > 0 ? '+' : ''}{h.points}
+                                        </Text>
+                                    </View>
+                                ))
+                            )}
+                        </ScrollView>
+                    </View>
+                </Modal>
             </View>
         </Modal>
     );
@@ -312,4 +457,6 @@ const styles = StyleSheet.create({
     emojiBtn: { width: 40, height: 40, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
     cancelBtn: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 12, borderWidth: 1 },
     saveBtn: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 12 },
+    historyItem: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, borderBottomWidth: 0.5 },
+    historyDot: { width: 8, height: 8, borderRadius: 4 },
 });

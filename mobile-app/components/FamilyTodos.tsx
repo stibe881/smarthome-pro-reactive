@@ -175,6 +175,14 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
                             points: todo.points,
                         });
                     }
+                    // Log to history
+                    await supabase.from('reward_history').insert({
+                        household_id: householdId,
+                        member_name: memberName,
+                        points: pointDelta,
+                        reason: nowCompleted ? `✅ "${todo.title}" erledigt` : `↩️ "${todo.title}" rückgängig`,
+                        type: 'task',
+                    });
                 }
             }
         } catch (e: any) {

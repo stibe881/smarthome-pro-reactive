@@ -81,6 +81,24 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
+-- 3d. Create reward_history table for point transaction log
+CREATE TABLE IF NOT EXISTS reward_history (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  household_id UUID REFERENCES households(id) ON DELETE CASCADE NOT NULL,
+  member_name TEXT NOT NULL,
+  points INTEGER NOT NULL,
+  reason TEXT NOT NULL,
+  type TEXT DEFAULT 'manual',  -- 'manual', 'task', 'redeem'
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE reward_history ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+  CREATE POLICY "rw_reward_history" ON reward_history
+    FOR ALL USING (household_id IN (SELECT household_id FROM family_members WHERE user_id = auth.uid()))
+    WITH CHECK (household_id IN (SELECT household_id FROM family_members WHERE user_id = auth.uid()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
 ALTER TABLE family_todos ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Household members can view todos" ON family_todos
