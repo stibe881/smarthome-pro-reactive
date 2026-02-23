@@ -1,12 +1,28 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { View, Text, Pressable, Modal, FlatList, ScrollView, StyleSheet, Alert, AppState } from 'react-native';
-import { Bell, Check, CheckCheck, X, Trash2 } from 'lucide-react-native';
+import {
+    Bell, Check, CheckCheck, X, Trash2,
+    Shield, Baby, Calendar, CloudLightning, Eye, Zap, House, Thermometer, Droplets,
+    DoorOpen, DoorClosed, BellRing, Sun, Moon, ShoppingCart,
+    BatteryMedium, Lock, Camera, Wind, Fan, Waves,
+} from 'lucide-react-native';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useHomeAssistant } from '../contexts/HomeAssistantContext';
 import { supabase } from '../lib/supabase';
+
+// Icon lookup map – must match the names used in NotificationTypesManager
+const ICON_MAP: Record<string, any> = {
+    'bell': Bell, 'bell-ring': BellRing, 'shield': Shield, 'lock': Lock,
+    'door-open': DoorOpen, 'door-closed': DoorClosed, 'camera': Camera,
+    'baby': Baby, 'calendar': Calendar, 'cloud-lightning': CloudLightning,
+    'sun': Sun, 'moon': Moon, 'wind': Wind, 'eye': Eye, 'zap': Zap,
+    'home': House, 'thermometer': Thermometer, 'droplets': Droplets,
+    'waves': Waves, 'fan': Fan, 'shopping-cart': ShoppingCart, 'battery': BatteryMedium,
+};
+const getIconComponent = (iconName: string) => ICON_MAP[iconName] || Bell;
 
 const USER_NOTIF_PREFS_CACHE_KEY = '@smarthome_user_notif_prefs';
 
@@ -46,6 +62,7 @@ export interface StoredNotification {
     body: string;
     timestamp: number;
     isRead: boolean;
+    categoryKey?: string; // from push data or keyword matching
 }
 
 interface NotificationBellProps {
@@ -65,6 +82,9 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
     const [dynamicPrefs, setDynamicPrefs] = useState<Record<string, boolean>>({});
     const dynamicPrefsRef = React.useRef<Record<string, boolean>>({});
     dynamicPrefsRef.current = dynamicPrefs;
+
+    // Notification types from Supabase (for icon/color display)
+    const [notifTypes, setNotifTypes] = useState<Record<string, { icon: string; color: string }>>({});
 
     // Which filter chips to show (only categories present in data)
     const presentCategories = useMemo(() => {
@@ -101,7 +121,8 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
                     title: n.title,
                     body: n.body,
                     timestamp: new Date(n.created_at).getTime(),
-                    isRead: n.is_read
+                    isRead: n.is_read,
+                    categoryKey: (n as any).category_key || getCatKey(n.title) || undefined,
                 }));
                 setNotifications(formatted);
                 // Update badge
@@ -258,7 +279,7 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
             // 1. Fetch active notification types (to get category_key -> id mapping)
             const { data: types } = await supabase
                 .from('notification_types')
-                .select('id, category_key, is_active')
+                .select('id, category_key, is_active, icon, color')
                 .eq('is_active', true);
 
             // 2. Fetch user preferences
@@ -275,13 +296,16 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
                 }
 
                 const categoryPrefs: Record<string, boolean> = {};
+                const typeDisplay: Record<string, { icon: string; color: string }> = {};
                 for (const t of types) {
                     // If user has a preference, use it; otherwise default to enabled
                     categoryPrefs[t.category_key] = prefById[t.id] ?? true;
+                    typeDisplay[t.category_key] = { icon: t.icon || 'bell', color: t.color || '#3B82F6' };
                 }
 
                 console.log('🔔 Dynamic prefs loaded:', JSON.stringify(categoryPrefs));
                 setDynamicPrefs(categoryPrefs);
+                setNotifTypes(typeDisplay);
                 // Cache for use in notification handler (HomeAssistantContext)
                 await AsyncStorage.setItem(USER_NOTIF_PREFS_CACHE_KEY, JSON.stringify(categoryPrefs));
             }
@@ -319,7 +343,8 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
                         title: split.title,
                         body: split.body,
                         timestamp: new Date(split.created_at).getTime(),
-                        isRead: split.is_read
+                        isRead: split.is_read,
+                        categoryKey: (split as any).category_key || getCatKey(split.title) || undefined,
                     };
                     setNotifications(prev => [newNotif, ...prev]);
                     // Let the loadNotifications handle badge generally, or update here
@@ -565,7 +590,10 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
                                 data={displayedNotifications}
                                 keyExtractor={item => item.id}
                                 renderItem={({ item }) => {
-                                    const catColor = getCatColor(item.title);
+                                    const catKey = item.categoryKey || getCatKey(item.title);
+                                    const typeInfo = catKey ? notifTypes[catKey] : null;
+                                    const catColor = typeInfo?.color || getCatColor(item.title);
+                                    const IconComp = typeInfo ? getIconComponent(typeInfo.icon) : Bell;
                                     return (
                                         <Pressable
                                             onPress={() => markAsRead(item.id)}
@@ -579,6 +607,9 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
                                                 }
                                             ]}
                                         >
+                                            <View style={[styles.notifIcon, { backgroundColor: catColor + '20' }]}>
+                                                <IconComp size={18} color={catColor} />
+                                            </View>
                                             <View style={styles.notifContent}>
                                                 <Text
                                                     style={[
@@ -737,5 +768,13 @@ const styles = StyleSheet.create({
         height: 8,
         borderRadius: 4,
         marginLeft: 12,
+    },
+    notifIcon: {
+        width: 36,
+        height: 36,
+        borderRadius: 10,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
     },
 });
