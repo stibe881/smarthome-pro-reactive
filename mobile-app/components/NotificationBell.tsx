@@ -384,12 +384,16 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
         const catchDelivered = async () => {
             try {
                 const delivered = await Notifications.getPresentedNotificationsAsync();
+                if (delivered.length === 0) return;
                 for (const n of delivered) {
                     const { title, body, data } = n.request.content;
                     const id = n.request.identifier;
                     const pushCatKey = (data as any)?.category_key || '';
                     saveNotification(id, title || '', body || '', pushCatKey || undefined);
                 }
+                // Dismiss all processed notifications from the notification center
+                // to prevent re-processing on next mount/app foreground
+                await Notifications.dismissAllNotificationsAsync();
             } catch (e) {
                 console.warn('Failed to get delivered notifications:', e);
             }
