@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, Pressable, Modal, FlatList, ScrollView, StyleSheet, Alert } from 'react-native';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { View, Text, Pressable, Modal, FlatList, ScrollView, StyleSheet, Alert, AppState } from 'react-native';
 import { Bell, Check, CheckCheck, X, Trash2 } from 'lucide-react-native';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -110,7 +110,24 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
     // Add new notification to Supabase
     const addNotification = useCallback(async (title: string, body: string) => {
         if (!user) return;
+
         try {
+            // Dedup: check Supabase for recent notification with same title+body (last 5 min)
+            const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+            const { data: existing } = await supabase
+                .from('notifications')
+                .select('id')
+                .eq('user_id', user.id)
+                .eq('title', title)
+                .eq('body', body)
+                .gte('created_at', fiveMinAgo)
+                .limit(1);
+
+            if (existing && existing.length > 0) {
+                console.log('🔔 Skipping duplicate notification (DB check):', title);
+                return;
+            }
+
             const { data, error } = await supabase
                 .from('notifications')
                 .insert({
@@ -217,14 +234,6 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
         );
     }, [user]);
 
-    // Load on mount & Auth Change
-    useEffect(() => {
-        if (user) {
-            loadNotifications();
-            loadDynamicPrefs();
-        }
-    }, [user, loadNotifications]);
-
     // Load dynamic notification preferences from Supabase + cache in AsyncStorage
     const loadDynamicPrefs = useCallback(async () => {
         if (!user) return;
@@ -254,6 +263,7 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
                     categoryPrefs[t.category_key] = prefById[t.id] ?? true;
                 }
 
+                console.log('🔔 Dynamic prefs loaded:', JSON.stringify(categoryPrefs));
                 setDynamicPrefs(categoryPrefs);
                 // Cache for use in notification handler (HomeAssistantContext)
                 await AsyncStorage.setItem(USER_NOTIF_PREFS_CACHE_KEY, JSON.stringify(categoryPrefs));
@@ -262,6 +272,14 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
             console.warn('Failed to load dynamic notification prefs:', e);
         }
     }, [user]);
+
+    // Load on mount & Auth Change
+    useEffect(() => {
+        if (user) {
+            loadNotifications();
+            loadDynamicPrefs();
+        }
+    }, [user, loadNotifications, loadDynamicPrefs]);
 
     // Sub to Realtime
     useEffect(() => {
@@ -350,7 +368,9 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
         if (processedIds.current.has(id)) return;
         processedIds.current.add(id);
         // Only save if this category is enabled in settings
-        if (!isCategoryEnabledRef.current(title, pushCategoryKey)) return;
+        const enabled = isCategoryEnabledRef.current(title, pushCategoryKey);
+        console.log(`🔔 saveNotification: title="${title}", catKey="${pushCategoryKey}", enabled=${enabled}`);
+        if (!enabled) return;
         addNotificationRef.current(title || 'Benachrichtigung', body || '');
     }, []);
 
@@ -378,28 +398,40 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
         return () => sub.remove();
     }, [saveNotification]);
 
-    // 3) APP OPEN: Catch all delivered notifications from notification center
-    useEffect(() => {
+    // 3) APP OPEN + FOREGROUND RETURN: Catch delivered notifications from notification center
+    const catchDelivered = useCallback(async () => {
         if (!user) return;
-        const catchDelivered = async () => {
-            try {
-                const delivered = await Notifications.getPresentedNotificationsAsync();
-                if (delivered.length === 0) return;
-                for (const n of delivered) {
-                    const { title, body, data } = n.request.content;
-                    const id = n.request.identifier;
-                    const pushCatKey = (data as any)?.category_key || '';
-                    saveNotification(id, title || '', body || '', pushCatKey || undefined);
-                }
-                // Dismiss all processed notifications from the notification center
-                // to prevent re-processing on next mount/app foreground
-                await Notifications.dismissAllNotificationsAsync();
-            } catch (e) {
-                console.warn('Failed to get delivered notifications:', e);
+        try {
+            const delivered = await Notifications.getPresentedNotificationsAsync();
+            if (delivered.length === 0) return;
+            for (const n of delivered) {
+                const { title, body, data } = n.request.content;
+                const id = n.request.identifier;
+                const pushCatKey = (data as any)?.category_key || '';
+                saveNotification(id, title || '', body || '', pushCatKey || undefined);
             }
-        };
-        catchDelivered();
+            // Dismiss all processed notifications from the notification center
+            await Notifications.dismissAllNotificationsAsync();
+        } catch (e) {
+            console.warn('Failed to get delivered notifications:', e);
+        }
     }, [user, saveNotification]);
+
+    // Run on mount
+    useEffect(() => {
+        catchDelivered();
+    }, [catchDelivered]);
+
+    // Run when app returns to foreground (handles Expo Go limitation + background pushes)
+    useEffect(() => {
+        const sub = AppState.addEventListener('change', (nextState) => {
+            if (nextState === 'active') {
+                catchDelivered();
+                loadNotifications();
+            }
+        });
+        return () => sub.remove();
+    }, [catchDelivered, loadNotifications]);
 
     const unreadCount = notifications.filter(n => !n.isRead).length;
 

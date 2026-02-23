@@ -762,10 +762,12 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
                     // Per-category check using cached dynamic preferences
                     try {
                         const categoryKey = (notification.request.content.data as any)?.category_key;
+                        console.log(`🔔 handleNotification: title="${notification.request.content.title}", categoryKey="${categoryKey}"`);
                         if (categoryKey) {
                             const cachedPrefs = await AsyncStorage.getItem('@smarthome_user_notif_prefs');
                             if (cachedPrefs) {
                                 const prefs = JSON.parse(cachedPrefs);
+                                console.log(`🔔 Cached prefs for "${categoryKey}":`, prefs[categoryKey]);
                                 if (prefs[categoryKey] === false) {
                                     console.log(`🔕 Suppressing push for disabled category: ${categoryKey}`);
                                     return {
