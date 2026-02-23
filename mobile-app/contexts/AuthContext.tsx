@@ -15,6 +15,7 @@ interface AuthContextType {
     avatarUrl: string | null;
     updateProfilePicture: (uri: string) => Promise<void>;
     userRole: 'admin' | 'user' | 'guest' | null;
+    hasPlannerAccess: boolean;
     isBiometricsSupported: boolean;
     isBiometricsEnabled: boolean;
     toggleBiometrics: () => Promise<void>;
@@ -54,6 +55,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const [session, setSession] = useState<Session | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [userRole, setUserRole] = useState<'admin' | 'user' | 'guest' | null>(null);
+    const [hasPlannerAccess, setHasPlannerAccess] = useState(true);
     const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
     const [mustChangePassword, setMustChangePassword] = useState(false);
     const [needsSetup, setNeedsSetup] = useState(false);
@@ -160,12 +162,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     // Function to fetch user role
     const fetchUserRole = async (userId: string) => {
-        // Check family_members first for guest role
+        // Check family_members first for guest role and planner access
         const { data: memberData } = await supabase
             .from('family_members')
-            .select('role')
+            .select('role, planner_access')
             .eq('user_id', userId)
             .single();
+
+        // Set planner access (default true for admins, respect DB for others)
+        if (memberData) {
+            setHasPlannerAccess(memberData.role === 'admin' ? true : (memberData.planner_access !== false));
+        }
 
         if (memberData?.role === 'guest') {
             setUserRole('guest');
@@ -368,6 +375,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 savePushTokenToSupabase(session.user.id);
             } else {
                 setUserRole(null);
+                setHasPlannerAccess(true);
                 setAvatarUrl(null);
                 setMustChangePassword(false);
             }
@@ -533,6 +541,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             session,
             isLoading,
             userRole,
+            hasPlannerAccess,
             avatarUrl,
             updateProfilePicture,
             isBiometricsSupported,

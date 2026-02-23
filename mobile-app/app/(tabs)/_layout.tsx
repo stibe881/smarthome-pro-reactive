@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { LayoutGrid, DoorOpen, PlayCircle, Users, Settings } from 'lucide-react-native';
+import { LayoutGrid, DoorOpen, PlayCircle, CalendarDays, Settings } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useKidsMode } from '../../contexts/KidsContext';
@@ -10,8 +10,9 @@ export default function TabLayout() {
     const insets = useSafeAreaInsets();
     const { colors } = useTheme();
     const { isKidsModeActive } = useKidsMode();
-    const { userRole } = useAuth();
+    const { userRole, hasPlannerAccess } = useAuth();
     const isGuest = userRole === 'guest';
+    const hideFamilyTab = isGuest || !hasPlannerAccess;
 
     return (
         <Tabs
@@ -44,6 +45,14 @@ export default function TabLayout() {
                     title: 'Medien',
                     tabBarIcon: ({ color }) => <PlayCircle size={24} stroke={color} />,
                     href: isGuest ? null : undefined,
+                }}
+            />
+            <Tabs.Screen
+                name="family"
+                options={{
+                    title: 'Familie',
+                    tabBarIcon: ({ color }) => <CalendarDays size={24} stroke={color} />,
+                    href: hideFamilyTab ? null : undefined,
                 }}
             />
             <Tabs.Screen

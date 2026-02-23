@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, Pressable, ActivityIndicator, TextInput, Modal, Alert, KeyboardAvoidingView, Platform, StyleSheet, Switch, Image } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { Users, UserPlus, Mail, Crown, X, Send, Lock, Eye, EyeOff, Trash2, Key, Shield, ShieldOff, MoreVertical, Camera, UserCheck } from 'lucide-react-native';
+import { Users, UserPlus, Mail, Crown, X, Send, Lock, Eye, EyeOff, Trash2, Key, Shield, ShieldOff, MoreVertical, Camera, UserCheck, CalendarDays } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
@@ -16,6 +16,7 @@ interface FamilyMember {
     is_active: boolean;
     created_at: string;
     avatar_url?: string;
+    planner_access?: boolean;
 }
 
 interface Invitation {
@@ -40,6 +41,7 @@ export const FamilyManagement = ({ colors }: FamilyManagementProps) => {
     const [showPassword, setShowPassword] = useState(false);
     const [isInviting, setIsInviting] = useState(false);
     const [inviteRole, setInviteRole] = useState<'member' | 'guest'>('member');
+    const [invitePlannerAccess, setInvitePlannerAccess] = useState(true);
 
     // Administrative Modals
     const [selectedMember, setSelectedMember] = useState<FamilyMember | null>(null);
@@ -101,7 +103,7 @@ export const FamilyManagement = ({ colors }: FamilyManagementProps) => {
         try {
             console.log('[FamilyManagement] Invoking create-family-member...');
             const { data, error } = await supabase.functions.invoke('create-family-member', {
-                body: { email: inviteEmail.trim(), password: invitePassword, role: inviteRole },
+                body: { email: inviteEmail.trim(), password: invitePassword, role: inviteRole, planner_access: invitePlannerAccess },
             });
 
             console.log('[FamilyManagement] Response data:', JSON.stringify(data));
@@ -133,6 +135,7 @@ export const FamilyManagement = ({ colors }: FamilyManagementProps) => {
             setInviteEmail('');
             setInvitePassword('');
             setInviteRole('member');
+            setInvitePlannerAccess(true);
             loadFamilyData();
         } catch (error: any) {
             console.error('[FamilyManagement] Catch error:', error);
@@ -198,6 +201,20 @@ export const FamilyManagement = ({ colors }: FamilyManagementProps) => {
             Alert.alert('Fehler', e.message);
         } finally {
             setIsAdminActionLoading(false);
+        }
+    };
+
+    const handleTogglePlannerAccess = async (enabled: boolean) => {
+        if (!selectedMember) return;
+        try {
+            await supabase
+                .from('family_members')
+                .update({ planner_access: enabled })
+                .eq('user_id', selectedMember.user_id);
+            setSelectedMember({ ...selectedMember, planner_access: enabled });
+            loadFamilyData();
+        } catch (e: any) {
+            Alert.alert('Fehler', e.message);
         }
     };
 
@@ -354,6 +371,17 @@ export const FamilyManagement = ({ colors }: FamilyManagementProps) => {
                                         trackColor={{ false: '#334155', true: colors.accent }}
                                     />
                                 </View>
+                                <View style={[styles.adminRow, { marginTop: 12 }]}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                        <CalendarDays size={16} color={colors.subtext} />
+                                        <Text style={[styles.label, { color: colors.text, marginBottom: 0 }]}>Familienplaner</Text>
+                                    </View>
+                                    <Switch
+                                        value={selectedMember.planner_access !== false}
+                                        onValueChange={handleTogglePlannerAccess}
+                                        trackColor={{ false: '#334155', true: '#10B981' }}
+                                    />
+                                </View>
                             </View>
 
                             <View style={[styles.adminSection, { borderTopColor: colors.border }]}>
@@ -459,6 +487,17 @@ export const FamilyManagement = ({ colors }: FamilyManagementProps) => {
                                 Gäste sehen nur die Steuerungen, die du ihnen zuweist.
                             </Text>
                         )}
+                        <View style={[styles.adminRow, { marginBottom: 16, paddingHorizontal: 4 }]}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                <CalendarDays size={16} color={colors.subtext} />
+                                <Text style={[styles.label, { color: colors.text, marginBottom: 0 }]}>Familienplaner</Text>
+                            </View>
+                            <Switch
+                                value={invitePlannerAccess}
+                                onValueChange={setInvitePlannerAccess}
+                                trackColor={{ false: '#334155', true: '#10B981' }}
+                            />
+                        </View>
                         <Pressable onPress={handleInvite} disabled={isInviting} style={[styles.submitBtn, { backgroundColor: colors.accent, marginTop: 8 }]}>
                             {isInviting ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>Hinzufügen</Text>}
                         </Pressable>
