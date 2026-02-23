@@ -34,6 +34,12 @@ function getCatKey(title: string): string | null {
 
 const NOTIFICATION_HISTORY_KEY = '@smarthome_notification_history';
 
+// expo-notifications returns date in seconds on iOS, milliseconds on Android
+function toJsDate(epochDate: number): Date {
+    // If the value looks like seconds (< 1e12), convert to ms
+    return new Date(epochDate < 1e12 ? epochDate * 1000 : epochDate);
+}
+
 export interface StoredNotification {
     id: string;
     title: string;
@@ -391,7 +397,7 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
             const { title, body, data } = notification.request.content;
             const id = notification.request.identifier;
             const pushCatKey = (data as any)?.category_key || '';
-            const deliveredAt = new Date(notification.date);
+            const deliveredAt = toJsDate(notification.date);
             console.log('🔔 FOREGROUND push:', title, 'category_key:', pushCatKey);
             saveNotification(id, title || '', body || '', pushCatKey || undefined, deliveredAt);
         });
@@ -404,7 +410,7 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
             const { title, body, data } = response.notification.request.content;
             const id = response.notification.request.identifier;
             const pushCatKey = (data as any)?.category_key || '';
-            const deliveredAt = new Date(response.notification.date);
+            const deliveredAt = toJsDate(response.notification.date);
             console.log('🔔 TAPPED push:', title, 'category_key:', pushCatKey);
             saveNotification(id, title || '', body || '', pushCatKey || undefined, deliveredAt);
         });
@@ -421,7 +427,7 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
                 const { title, body, data } = n.request.content;
                 const id = n.request.identifier;
                 const pushCatKey = (data as any)?.category_key || '';
-                const deliveredAt = new Date(n.date);
+                const deliveredAt = toJsDate(n.date);
                 saveNotification(id, title || '', body || '', pushCatKey || undefined, deliveredAt);
             }
             // Dismiss all processed notifications from the notification center

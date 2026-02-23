@@ -23,7 +23,7 @@ Deno.serve(async (req) => {
       console.log('Raw body:', rawBody)
       const parsed = JSON.parse(rawBody)
       title = parsed.title || ''
-      body = parsed.body || ''
+      body = parsed.body || parsed.message || ''
       data = parsed.data || {}
       category_key = parsed.category_key || ''
     } catch (parseError) {
@@ -41,7 +41,7 @@ Deno.serve(async (req) => {
     // Trim empty category_key
     if (category_key) category_key = category_key.trim()
 
-    // 1. Get all push tokens via push_tokens table, joined with family_members for user identity
+    // 1. Get all push tokens, joined with family_members for notifications_enabled flag
     const { data: tokenRows, error: tokenError } = await supabase
       .from('push_tokens')
       .select('user_id, token')
@@ -67,6 +67,21 @@ Deno.serve(async (req) => {
       seen.add(t.token)
       return true
     })
+
+    // Filter out users who have disabled all notifications (master switch)
+    const { data: memberFlags } = await supabase
+      .from('family_members')
+      .select('user_id, notifications_enabled')
+
+    if (memberFlags) {
+      const disabledUsers = new Set(
+        memberFlags.filter(m => m.notifications_enabled === false).map(m => m.user_id)
+      )
+      if (disabledUsers.size > 0) {
+        console.log('Users with notifications disabled:', [...disabledUsers])
+        allTokens = allTokens.filter(t => !disabledUsers.has(t.user_id))
+      }
+    }
 
     let eligibleTokens = allTokens
 
@@ -150,6 +165,9 @@ Deno.serve(async (req) => {
     const isCritical = notifType?.is_critical ?? false
     const notifSound = notifType?.sound ?? 'default'
 
+    // Extract badge from data if provided (HA sends it nested in data)
+    const badgeCount = data?.badge ?? null
+
     const messages = tokens.map(token => ({
       to: token,
       sound: notifSound || undefined,
@@ -157,6 +175,7 @@ Deno.serve(async (req) => {
       body: body || '',
       data: { ...(data || {}), ...(category_key ? { category_key } : {}) },
       priority: 'high',
+      ...(badgeCount !== null ? { badge: badgeCount } : {}),
       ...(isCritical ? { channelId: 'critical' } : {}),
     }))
 

@@ -415,6 +415,22 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
         setNotificationSettingsState(newSettings);
         await AsyncStorage.setItem(NOTIF_SETTINGS_KEY, JSON.stringify(newSettings));
 
+        // 2. Sync master switch to Supabase for server-side filtering
+        if (newSettings.enabled !== notificationSettings.enabled) {
+            try {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (user) {
+                    await supabase
+                        .from('family_members')
+                        .update({ notifications_enabled: newSettings.enabled })
+                        .eq('user_id', user.id);
+                    console.log(`🔔 Synced master switch to Supabase: ${newSettings.enabled}`);
+                }
+            } catch (e) {
+                console.warn('Failed to sync master switch to Supabase:', e);
+            }
+        }
+
         console.log('UpdateNotifSettings called. Connected:', isConnected, 'HelperIds:', helperIds);
 
         // 2. Sync with HA Helpers if connected and user is known
