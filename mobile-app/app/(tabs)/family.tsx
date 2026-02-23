@@ -5,7 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import {
     CalendarDays, CheckSquare, ShoppingCart, MessageSquare,
     ChevronRight, Users, UtensilsCrossed, Trophy, Phone,
-    Clock, Luggage, Target, LayoutList,
+    Clock, Luggage, Target, LayoutList, BookOpen, MapPin, FolderLock,
 } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -22,11 +22,14 @@ import { FamilyRoutines } from '../../components/FamilyRoutines';
 import { FamilyPackingLists } from '../../components/FamilyPackingLists';
 import { FamilyCountdowns } from '../../components/FamilyCountdowns';
 import { WeeklyOverview } from '../../components/WeeklyOverview';
+import { FamilyRecipes } from '../../components/FamilyRecipes';
+import { FamilyLocations } from '../../components/FamilyLocations';
+import { FamilyDocuments } from '../../components/FamilyDocuments';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = (SCREEN_WIDTH - 48) / 2;
 
-type ModuleKey = 'calendar' | 'todos' | 'shopping' | 'pinboard' | 'meals' | 'rewards' | 'contacts' | 'routines' | 'packing' | 'countdowns' | 'weekly';
+type ModuleKey = 'calendar' | 'todos' | 'shopping' | 'pinboard' | 'meals' | 'rewards' | 'contacts' | 'routines' | 'packing' | 'countdowns' | 'weekly' | 'recipes' | 'locations' | 'documents';
 
 interface ModuleStats {
     todayEvents: number;
@@ -130,6 +133,11 @@ export default function FamilyScreen() {
             subtitle: 'Tagesabläufe',
             icon: Clock, gradient: ['#14B8A6', '#0D9488'], emoji: '⏰',
         },
+        {
+            key: 'locations', title: 'Standort',
+            subtitle: 'Familie finden',
+            icon: MapPin, gradient: ['#F97316', '#EA580C'], emoji: '📍',
+        },
     ];
 
     const UTILITY_MODULES: { key: ModuleKey; title: string; subtitle: string; icon: any; gradient: [string, string]; emoji: string }[] = [
@@ -147,6 +155,16 @@ export default function FamilyScreen() {
             key: 'weekly', title: 'Wochenübersicht',
             subtitle: 'Alles auf einen Blick',
             icon: LayoutList, gradient: ['#6366F1', '#4F46E5'], emoji: '📋',
+        },
+        {
+            key: 'recipes', title: 'Rezeptbuch',
+            subtitle: 'Familienrezepte',
+            icon: BookOpen, gradient: ['#F59E0B', '#D97706'], emoji: '📖',
+        },
+        {
+            key: 'documents', title: 'Dokumentsafe',
+            subtitle: 'Wichtige Dokumente',
+            icon: FolderLock, gradient: ['#64748B', '#475569'], emoji: '🔒',
         },
     ];
 
@@ -254,6 +272,9 @@ export default function FamilyScreen() {
             <FamilyPackingLists visible={activeModule === 'packing'} onClose={handleCloseModule} />
             <FamilyCountdowns visible={activeModule === 'countdowns'} onClose={handleCloseModule} />
             <WeeklyOverview visible={activeModule === 'weekly'} onClose={handleCloseModule} onOpenModule={(key) => setActiveModule(key as ModuleKey)} />
+            <FamilyRecipes visible={activeModule === 'recipes'} onClose={handleCloseModule} />
+            <FamilyLocations visible={activeModule === 'locations'} onClose={handleCloseModule} />
+            <FamilyDocuments visible={activeModule === 'documents'} onClose={handleCloseModule} />
         </SafeAreaView>
     );
 }

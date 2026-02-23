@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import {
     Plus, X, Check, Circle, CheckCircle2, Trash2, ChevronDown,
-    User, Calendar, Flag,
+    User, Calendar, Flag, Repeat,
 } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -22,6 +22,7 @@ interface Todo {
     due_date: string | null;
     priority: string;
     points: number;
+    recurrence: string | null;
     created_at: string;
 }
 
@@ -38,6 +39,13 @@ const PRIORITIES = [
     { key: 'normal', label: 'Normal', color: '#3B82F6', icon: '●' },
     { key: 'high', label: 'Wichtig', color: '#F59E0B', icon: '⚡' },
     { key: 'urgent', label: 'Dringend', color: '#EF4444', icon: '🔥' },
+];
+
+const RECURRENCE_OPTIONS = [
+    { key: 'none', label: 'Einmalig', icon: '—' },
+    { key: 'daily', label: 'Täglich', icon: '📆' },
+    { key: 'weekly', label: 'Wöchentlich', icon: '📅' },
+    { key: 'monthly', label: 'Monatlich', icon: '🗓️' },
 ];
 
 const AVATAR_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EC4899', '#8B5CF6', '#06B6D4', '#EF4444', '#14B8A6'];
@@ -61,6 +69,7 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
     const [selectedMember, setSelectedMember] = useState<string | null>(null);
     const [showMemberPicker, setShowMemberPicker] = useState(false);
     const [newPoints, setNewPoints] = useState(0);
+    const [newRecurrence, setNewRecurrence] = useState('none');
 
     // Edit modal
     const [editTodo, setEditTodo] = useState<Todo | null>(null);
@@ -68,6 +77,7 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
     const [editPriority, setEditPriority] = useState('normal');
     const [editAssignee, setEditAssignee] = useState<string | null>(null);
     const [editPoints, setEditPoints] = useState(0);
+    const [editRecurrence, setEditRecurrence] = useState('none');
     const [isSavingEdit, setIsSavingEdit] = useState(false);
 
     const loadTodos = useCallback(async () => {
@@ -131,11 +141,13 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
                 assigned_to: selectedMember,
                 title: newTitle.trim(),
                 points: newPoints,
+                recurrence: newRecurrence === 'none' ? null : newRecurrence,
             });
             if (error) throw error;
             setNewTitle('');
             setSelectedMember(null);
             setNewPoints(0);
+            setNewRecurrence('none');
             loadTodos();
         } catch (e: any) {
             Alert.alert('Fehler', e.message);
@@ -185,6 +197,20 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
                     });
                 }
             }
+            // Auto-recreate recurring tasks
+            if (nowCompleted && todo.recurrence && todo.recurrence !== 'none') {
+                await supabase.from('family_todos').insert({
+                    household_id: householdId,
+                    created_by: todo.created_by,
+                    assigned_to: todo.assigned_to,
+                    title: todo.title,
+                    points: todo.points,
+                    priority: todo.priority,
+                    recurrence: todo.recurrence,
+                    completed: false,
+                });
+                loadTodos();
+            }
         } catch (e: any) {
             Alert.alert('Fehler', e.message);
         }
@@ -208,6 +234,7 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
         setEditPriority(todo.priority || 'normal');
         setEditAssignee(todo.assigned_to);
         setEditPoints(todo.points || 0);
+        setEditRecurrence(todo.recurrence || 'none');
     };
 
     const handleSaveEdit = async () => {
@@ -215,7 +242,7 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
         setIsSavingEdit(true);
         try {
             const { error } = await supabase.from('family_todos')
-                .update({ title: editTitle.trim(), priority: editPriority, assigned_to: editAssignee, points: editPoints })
+                .update({ title: editTitle.trim(), priority: editPriority, assigned_to: editAssignee, points: editPoints, recurrence: editRecurrence === 'none' ? null : editRecurrence })
                 .eq('id', editTodo.id);
             if (error) throw error;
             setEditTodo(null);
@@ -344,6 +371,21 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
                                     onPress={() => setNewPoints(p)}
                                 >
                                     <Text style={[styles.memberChipText, { color: newPoints === p ? (p < 0 ? '#EF4444' : colors.accent) : colors.subtext }]}>{p > 0 ? `+${p}` : p}</Text>
+                                </Pressable>
+                            ))}
+                        </ScrollView>
+                    </View>
+                    {/* Recurrence Row */}
+                    <View style={styles.assignRow}>
+                        <Text style={[styles.assignLabel, { color: colors.subtext }]}>🔄 Wiederholen:</Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 4 }}>
+                            {RECURRENCE_OPTIONS.map(r => (
+                                <Pressable
+                                    key={r.key}
+                                    style={[styles.memberChip, newRecurrence === r.key && { backgroundColor: colors.accent + '20', borderColor: colors.accent }]}
+                                    onPress={() => setNewRecurrence(r.key)}
+                                >
+                                    <Text style={[styles.memberChipText, { color: newRecurrence === r.key ? colors.accent : colors.subtext }]}>{r.icon} {r.label}</Text>
                                 </Pressable>
                             ))}
                         </ScrollView>
