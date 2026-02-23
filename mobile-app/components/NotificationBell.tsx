@@ -108,7 +108,7 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
     }, [user]);
 
     // Add new notification to Supabase
-    const addNotification = useCallback(async (title: string, body: string) => {
+    const addNotification = useCallback(async (title: string, body: string, deliveredAt?: Date) => {
         if (!user) return;
 
         try {
@@ -128,14 +128,20 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
                 return;
             }
 
+            const insertPayload: any = {
+                user_id: user.id,
+                title,
+                body,
+                is_read: false,
+            };
+            // Use actual delivery timestamp if available
+            if (deliveredAt) {
+                insertPayload.created_at = deliveredAt.toISOString();
+            }
+
             const { data, error } = await supabase
                 .from('notifications')
-                .insert({
-                    user_id: user.id,
-                    title,
-                    body,
-                    is_read: false
-                })
+                .insert(insertPayload)
                 .select()
                 .single();
 
@@ -149,15 +155,18 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
                     timestamp: new Date(data.created_at).getTime(),
                     isRead: data.is_read
                 };
-                setNotifications(prev => [newNotif, ...prev]);
-
-                // Update Badge
-                Notifications.setBadgeCountAsync((notifications.filter(n => !n.isRead).length) + 1);
+                setNotifications(prev => {
+                    const updated = [newNotif, ...prev];
+                    // Update badge with correct count
+                    const unread = updated.filter(n => !n.isRead).length;
+                    Notifications.setBadgeCountAsync(unread);
+                    return updated;
+                });
             }
         } catch (e) {
             console.warn('Failed to add notification:', e);
         }
-    }, [user, notifications]);
+    }, [user]);
 
     // Mark single notification as read
     const markAsRead = useCallback(async (id: string) => {
@@ -364,14 +373,14 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
     const isCategoryEnabledRef = React.useRef(isCategoryEnabled);
     isCategoryEnabledRef.current = isCategoryEnabled;
 
-    const saveNotification = useCallback((id: string, title: string, body: string, pushCategoryKey?: string) => {
+    const saveNotification = useCallback((id: string, title: string, body: string, pushCategoryKey?: string, deliveredAt?: Date) => {
         if (processedIds.current.has(id)) return;
         processedIds.current.add(id);
         // Only save if this category is enabled in settings
         const enabled = isCategoryEnabledRef.current(title, pushCategoryKey);
         console.log(`🔔 saveNotification: title="${title}", catKey="${pushCategoryKey}", enabled=${enabled}`);
         if (!enabled) return;
-        addNotificationRef.current(title || 'Benachrichtigung', body || '');
+        addNotificationRef.current(title || 'Benachrichtigung', body || '', deliveredAt);
     }, []);
 
     // 1) FOREGROUND: Listen for notifications while app is active
@@ -380,8 +389,9 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
             const { title, body, data } = notification.request.content;
             const id = notification.request.identifier;
             const pushCatKey = (data as any)?.category_key || '';
+            const deliveredAt = new Date(notification.date);
             console.log('🔔 FOREGROUND push:', title, 'category_key:', pushCatKey);
-            saveNotification(id, title || '', body || '', pushCatKey || undefined);
+            saveNotification(id, title || '', body || '', pushCatKey || undefined, deliveredAt);
         });
         return () => sub.remove();
     }, [saveNotification]);
@@ -392,8 +402,9 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
             const { title, body, data } = response.notification.request.content;
             const id = response.notification.request.identifier;
             const pushCatKey = (data as any)?.category_key || '';
+            const deliveredAt = new Date(response.notification.date);
             console.log('🔔 TAPPED push:', title, 'category_key:', pushCatKey);
-            saveNotification(id, title || '', body || '', pushCatKey || undefined);
+            saveNotification(id, title || '', body || '', pushCatKey || undefined, deliveredAt);
         });
         return () => sub.remove();
     }, [saveNotification]);
@@ -408,7 +419,8 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
                 const { title, body, data } = n.request.content;
                 const id = n.request.identifier;
                 const pushCatKey = (data as any)?.category_key || '';
-                saveNotification(id, title || '', body || '', pushCatKey || undefined);
+                const deliveredAt = new Date(n.date);
+                saveNotification(id, title || '', body || '', pushCatKey || undefined, deliveredAt);
             }
             // Dismiss all processed notifications from the notification center
             await Notifications.dismissAllNotificationsAsync();

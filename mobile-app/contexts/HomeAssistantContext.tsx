@@ -787,7 +787,7 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
                     return {
                         shouldShowAlert: true,
                         shouldPlaySound: true,
-                        shouldSetBadge: false,
+                        shouldSetBadge: true,
                         shouldShowBanner: true,
                         shouldShowList: true,
                     };
