@@ -405,7 +405,8 @@ export const FamilyPlanner: React.FC<FamilyPlannerProps> = ({ visible, onClose }
                         const date = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
                         const isSelected = isSameDay(date, selectedDate);
                         const isTodayDate = isToday(date);
-                        const hasEvents = hasEventsOnDay(date);
+                        const dayEvents = getEventsForDay(date);
+                        const uniqueColors = [...new Set(dayEvents.map(e => e.color))].slice(0, 3);
 
                         return (
                             <Pressable
@@ -424,8 +425,12 @@ export const FamilyPlanner: React.FC<FamilyPlannerProps> = ({ visible, onClose }
                                 ]}>
                                     {day}
                                 </Text>
-                                {hasEvents && (
-                                    <View style={[styles.eventDot, { backgroundColor: isSelected ? '#fff' : colors.accent }]} />
+                                {uniqueColors.length > 0 && (
+                                    <View style={{ flexDirection: 'row', gap: 2 }}>
+                                        {uniqueColors.map((c, idx) => (
+                                            <View key={idx} style={[styles.eventDot, { backgroundColor: isSelected ? '#fff' : c }]} />
+                                        ))}
+                                    </View>
                                 )}
                             </Pressable>
                         );
@@ -763,7 +768,7 @@ export const FamilyPlanner: React.FC<FamilyPlannerProps> = ({ visible, onClose }
                                             ))}
                                         </View>
                                         <Pressable
-                                            style={[styles.addBtn, { backgroundColor: colors.accent }]}
+                                            style={[styles.fullBtn, { backgroundColor: colors.accent }]}
                                             onPress={addCalendarSource}
                                         >
                                             <Plus size={18} color="#fff" />
@@ -872,5 +877,5 @@ const styles = StyleSheet.create({
     colorDot: { width: 28, height: 28, borderRadius: 14 },
 
     haBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
-    addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: 14 },
+    fullBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: 14 },
 });
