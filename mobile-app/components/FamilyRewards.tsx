@@ -299,15 +299,17 @@ export const FamilyRewards: React.FC<RewardsProps> = ({ visible, onClose }) => {
                                     <Text style={[styles.sectionTitle, { color: colors.text }]}>Belohnung einlösen</Text>
                                     {rewards.map(r => (
                                         <View key={r.id} style={[styles.rewardRedeemCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                                            <Text style={{ fontSize: 24 }}>{r.emoji}</Text>
-                                            <View style={{ flex: 1, marginLeft: 10 }}>
-                                                <Text style={[{ fontSize: 15, fontWeight: '600' }, { color: colors.text }]}>{r.title}</Text>
-                                                <Text style={{ color: colors.subtext, fontSize: 12 }}>{r.points_required} ⭐ benötigt</Text>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                                                <Text style={{ fontSize: 24 }}>{r.emoji}</Text>
+                                                <View style={{ flex: 1, marginLeft: 10 }}>
+                                                    <Text style={[{ fontSize: 15, fontWeight: '600' }, { color: colors.text }]} numberOfLines={1}>{r.title}</Text>
+                                                    <Text style={{ color: colors.subtext, fontSize: 12 }}>{r.points_required} ⭐ benötigt</Text>
+                                                </View>
                                             </View>
-                                            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                                            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
                                                 {members.map(m => (
                                                     <Pressable key={m.id} style={[styles.redeemBtn, { borderColor: m.points >= r.points_required ? '#10B981' : colors.border }]} onPress={() => redeemReward(m, r)}>
-                                                        <Text style={{ fontSize: 10, color: m.points >= r.points_required ? '#10B981' : colors.subtext }}>{m.member_name}</Text>
+                                                        <Text style={{ fontSize: 12, color: m.points >= r.points_required ? '#10B981' : colors.subtext }}>{m.member_name}</Text>
                                                     </Pressable>
                                                 ))}
                                             </ScrollView>
@@ -470,8 +472,8 @@ const styles = StyleSheet.create({
     pointBtns: { flexDirection: 'row', gap: 4 },
     ptBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
     sectionTitle: { fontSize: 16, fontWeight: '700', marginBottom: 10 },
-    rewardRedeemCard: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 14, borderWidth: 1, marginBottom: 8 },
-    redeemBtn: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1, marginLeft: 4 },
+    rewardRedeemCard: { padding: 14, borderRadius: 14, borderWidth: 1, marginBottom: 8 },
+    redeemBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, borderWidth: 1 },
     rewardCard: { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 16, borderWidth: 1, marginBottom: 8 },
     rewardTitle: { fontSize: 15, fontWeight: '600' },
     addFullBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: 14, marginTop: 8 },
