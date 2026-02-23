@@ -25,7 +25,8 @@ interface Todo {
 }
 
 interface FamilyMember {
-    user_id: string;
+    id: string;
+    user_id: string | null;
     email: string;
     display_name: string | null;
     planner_access: boolean;
@@ -86,7 +87,7 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
             let data: any[] | null = null;
             const { data: fullData, error: fullError } = await supabase
                 .from('family_members')
-                .select('user_id, email, display_name, planner_access')
+                .select('id, user_id, email, display_name, planner_access')
                 .eq('household_id', householdId)
                 .eq('is_active', true);
 
@@ -94,7 +95,7 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
                 // display_name column might not exist, try without
                 const { data: basicData } = await supabase
                     .from('family_members')
-                    .select('user_id, email, planner_access')
+                    .select('id, user_id, email, planner_access')
                     .eq('household_id', householdId)
                     .eq('is_active', true);
                 data = (basicData || []).map(m => ({ ...m, display_name: null }));
@@ -163,21 +164,21 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
     const openCount = todos.filter(t => !t.completed).length;
     const doneCount = todos.filter(t => t.completed).length;
 
-    const getMemberName = (userId: string | null) => {
-        if (!userId) return null;
-        const m = members.find(m => m.user_id === userId);
+    const getMemberName = (memberId: string | null) => {
+        if (!memberId) return null;
+        const m = members.find(m => m.id === memberId || m.user_id === memberId);
         if (!m) return null;
         return m.display_name || m.email.split('@')[0];
     };
 
-    const getMemberColor = (userId: string | null) => {
-        if (!userId) return AVATAR_COLORS[0];
-        const idx = members.findIndex(m => m.user_id === userId);
+    const getMemberColor = (memberId: string | null) => {
+        if (!memberId) return AVATAR_COLORS[0];
+        const idx = members.findIndex(m => m.id === memberId || m.user_id === memberId);
         return AVATAR_COLORS[idx >= 0 ? idx % AVATAR_COLORS.length : 0];
     };
 
-    const getMemberInitial = (userId: string | null) => {
-        const name = getMemberName(userId);
+    const getMemberInitial = (memberId: string | null) => {
+        const name = getMemberName(memberId);
         return name ? name.substring(0, 1).toUpperCase() : '?';
     };
 
@@ -243,13 +244,13 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
                             </Pressable>
                             {members.map((m, idx) => {
                                 const color = AVATAR_COLORS[idx % AVATAR_COLORS.length];
-                                const isSelected = selectedMember === m.user_id;
+                                const isSelected = selectedMember === m.id;
                                 const name = m.display_name || m.email.split('@')[0];
                                 return (
                                     <Pressable
-                                        key={m.user_id}
+                                        key={m.id}
                                         style={[styles.memberChip, isSelected && { backgroundColor: color + '20', borderColor: color }]}
-                                        onPress={() => setSelectedMember(isSelected ? null : m.user_id)}
+                                        onPress={() => setSelectedMember(isSelected ? null : m.id)}
                                     >
                                         <View style={[styles.chipAvatar, { backgroundColor: color }]}>
                                             <Text style={styles.chipAvatarText}>{name.substring(0, 1).toUpperCase()}</Text>

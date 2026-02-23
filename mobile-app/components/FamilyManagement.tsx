@@ -118,11 +118,10 @@ export const FamilyManagement = ({ colors }: FamilyManagementProps) => {
                 return;
             }
 
-            // Create a child entry - no auth user needed, just a family_member row
-            const childId = crypto?.randomUUID?.() || `child-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+            // Create a child entry - no auth user needed
             const { error } = await supabase.from('family_members').insert({
                 household_id: myMember.household_id,
-                user_id: childId,
+                user_id: null,
                 email: `${childName.trim().toLowerCase().replace(/\s+/g, '.')}@kind.lokal`,
                 display_name: childName.trim(),
                 role: 'child',
