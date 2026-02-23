@@ -21,6 +21,7 @@ interface Todo {
     completed: boolean;
     due_date: string | null;
     priority: string;
+    points: number;
     created_at: string;
 }
 
@@ -59,12 +60,14 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
     const [filter, setFilter] = useState<'all' | 'open' | 'done'>('open');
     const [selectedMember, setSelectedMember] = useState<string | null>(null);
     const [showMemberPicker, setShowMemberPicker] = useState(false);
+    const [newPoints, setNewPoints] = useState(0);
 
     // Edit modal
     const [editTodo, setEditTodo] = useState<Todo | null>(null);
     const [editTitle, setEditTitle] = useState('');
     const [editPriority, setEditPriority] = useState('normal');
     const [editAssignee, setEditAssignee] = useState<string | null>(null);
+    const [editPoints, setEditPoints] = useState(0);
     const [isSavingEdit, setIsSavingEdit] = useState(false);
 
     const loadTodos = useCallback(async () => {
@@ -127,10 +130,12 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
                 created_by: user?.id,
                 assigned_to: selectedMember,
                 title: newTitle.trim(),
+                points: newPoints,
             });
             if (error) throw error;
             setNewTitle('');
             setSelectedMember(null);
+            setNewPoints(0);
             loadTodos();
         } catch (e: any) {
             Alert.alert('Fehler', e.message);
@@ -141,10 +146,37 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
 
     const handleToggle = async (todo: Todo) => {
         try {
+            const nowCompleted = !todo.completed;
             await supabase.from('family_todos')
-                .update({ completed: !todo.completed })
+                .update({ completed: nowCompleted })
                 .eq('id', todo.id);
-            setTodos(prev => prev.map(t => t.id === todo.id ? { ...t, completed: !t.completed } : t));
+            setTodos(prev => prev.map(t => t.id === todo.id ? { ...t, completed: nowCompleted } : t));
+
+            // Award/revoke points when toggling completion
+            if (todo.points && todo.points !== 0 && todo.assigned_to && householdId) {
+                const memberName = getMemberName(todo.assigned_to);
+                if (memberName) {
+                    const pointDelta = nowCompleted ? todo.points : -todo.points;
+                    // Try to update existing reward_points row
+                    const { data: existing } = await supabase
+                        .from('reward_points')
+                        .select('id, points')
+                        .eq('household_id', householdId)
+                        .eq('member_name', memberName)
+                        .single();
+                    if (existing) {
+                        await supabase.from('reward_points')
+                            .update({ points: existing.points + pointDelta })
+                            .eq('id', existing.id);
+                    } else if (nowCompleted) {
+                        await supabase.from('reward_points').insert({
+                            household_id: householdId,
+                            member_name: memberName,
+                            points: todo.points,
+                        });
+                    }
+                }
+            }
         } catch (e: any) {
             Alert.alert('Fehler', e.message);
         }
@@ -167,6 +199,7 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
         setEditTitle(todo.title);
         setEditPriority(todo.priority || 'normal');
         setEditAssignee(todo.assigned_to);
+        setEditPoints(todo.points || 0);
     };
 
     const handleSaveEdit = async () => {
@@ -174,7 +207,7 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
         setIsSavingEdit(true);
         try {
             const { error } = await supabase.from('family_todos')
-                .update({ title: editTitle.trim(), priority: editPriority, assigned_to: editAssignee })
+                .update({ title: editTitle.trim(), priority: editPriority, assigned_to: editAssignee, points: editPoints })
                 .eq('id', editTodo.id);
             if (error) throw error;
             setEditTodo(null);
@@ -292,6 +325,21 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
                             })}
                         </ScrollView>
                     </View>
+                    {/* Points Row */}
+                    <View style={styles.assignRow}>
+                        <Text style={[styles.assignLabel, { color: colors.subtext }]}>⭐ Punkte:</Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 4 }}>
+                            {[-5, -1, 0, 1, 2, 3, 5, 10].map(p => (
+                                <Pressable
+                                    key={p}
+                                    style={[styles.memberChip, newPoints === p && { backgroundColor: (p < 0 ? '#EF4444' : colors.accent) + '20', borderColor: p < 0 ? '#EF4444' : colors.accent }]}
+                                    onPress={() => setNewPoints(p)}
+                                >
+                                    <Text style={[styles.memberChipText, { color: newPoints === p ? (p < 0 ? '#EF4444' : colors.accent) : colors.subtext }]}>{p > 0 ? `+${p}` : p}</Text>
+                                </Pressable>
+                            ))}
+                        </ScrollView>
+                    </View>
                 </View>
 
                 {/* List */}
@@ -348,6 +396,12 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
                                                 <View style={[styles.assigneeBadge, { backgroundColor: assigneeColor + '15' }]}>
                                                     <User size={10} color={assigneeColor} />
                                                     <Text style={[styles.assigneeText, { color: assigneeColor }]}>{assigneeName}</Text>
+                                                </View>
+                                            )}
+                                            {todo.points !== 0 && (
+                                                <View style={[styles.prioBadge, { backgroundColor: todo.points > 0 ? '#F59E0B15' : '#EF444415' }]}>
+                                                    <Text style={{ fontSize: 10 }}>⭐</Text>
+                                                    <Text style={[styles.prioText, { color: todo.points > 0 ? '#F59E0B' : '#EF4444' }]}>{todo.points > 0 ? `+${todo.points}` : todo.points}</Text>
                                                 </View>
                                             )}
                                         </View>
@@ -430,6 +484,22 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
                                         </Pressable>
                                     );
                                 })}
+                            </ScrollView>
+                        </View>
+
+                        {/* Points */}
+                        <View>
+                            <Text style={[styles.editLabel, { color: colors.subtext }]}>⭐ Punkte</Text>
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+                                {[-5, -3, -1, 0, 1, 2, 3, 5, 10].map(p => (
+                                    <Pressable
+                                        key={p}
+                                        style={[styles.editPrioBtn, editPoints === p && { backgroundColor: (p < 0 ? '#EF4444' : '#F59E0B') + '20', borderColor: p < 0 ? '#EF4444' : '#F59E0B' }]}
+                                        onPress={() => setEditPoints(p)}
+                                    >
+                                        <Text style={[styles.editPrioText, { color: editPoints === p ? (p < 0 ? '#EF4444' : '#F59E0B') : colors.subtext }]}>{p > 0 ? `+${p}` : p}</Text>
+                                    </Pressable>
+                                ))}
                             </ScrollView>
                         </View>
 

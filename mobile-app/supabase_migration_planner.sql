@@ -58,8 +58,28 @@ CREATE TABLE IF NOT EXISTS family_todos (
   completed BOOLEAN DEFAULT false,
   due_date DATE,
   priority TEXT DEFAULT 'normal',
+  points INTEGER DEFAULT 0,  -- points awarded on completion (can be negative)
   created_at TIMESTAMPTZ DEFAULT now()
 );
+
+-- 3b. Add points column if table already exists
+ALTER TABLE family_todos ADD COLUMN IF NOT EXISTS points INTEGER DEFAULT 0;
+
+-- 3c. Create reward_points table for tracking member points
+CREATE TABLE IF NOT EXISTS reward_points (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  household_id UUID REFERENCES households(id) ON DELETE CASCADE NOT NULL,
+  member_name TEXT NOT NULL,
+  points INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE reward_points ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+  CREATE POLICY "rw_reward_points" ON reward_points
+    FOR ALL USING (household_id IN (SELECT household_id FROM family_members WHERE user_id = auth.uid()))
+    WITH CHECK (household_id IN (SELECT household_id FROM family_members WHERE user_id = auth.uid()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE family_todos ENABLE ROW LEVEL SECURITY;
 
