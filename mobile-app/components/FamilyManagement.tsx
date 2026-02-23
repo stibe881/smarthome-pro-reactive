@@ -317,6 +317,9 @@ export const FamilyManagement = ({ colors }: FamilyManagementProps) => {
                                 ) : <Text style={[styles.memberRole, { color: colors.subtext }]}>Mitglied</Text>}
                                 {member.email === user?.email && <Text style={[styles.meTag, { color: colors.subtext }]}>• Du</Text>}
                                 {member.is_active === false && <Text style={[styles.meTag, { color: colors.error }]}>• Deaktiviert</Text>}
+                                {member.planner_access !== false && member.is_active !== false && (
+                                    <View style={[styles.adminBadge, { backgroundColor: 'rgba(16, 185, 129, 0.15)' }]}><CalendarDays size={10} color="#10B981" /><Text style={[styles.adminText, { color: '#10B981' }]}>Planner</Text></View>
+                                )}
                             </View>
                         </View>
                         {userRole === 'admin' && member.email !== user?.email && <MoreVertical size={18} color={colors.subtext} />}
