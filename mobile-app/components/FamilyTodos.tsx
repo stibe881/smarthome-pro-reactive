@@ -60,6 +60,13 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
     const [selectedMember, setSelectedMember] = useState<string | null>(null);
     const [showMemberPicker, setShowMemberPicker] = useState(false);
 
+    // Edit modal
+    const [editTodo, setEditTodo] = useState<Todo | null>(null);
+    const [editTitle, setEditTitle] = useState('');
+    const [editPriority, setEditPriority] = useState('normal');
+    const [editAssignee, setEditAssignee] = useState<string | null>(null);
+    const [isSavingEdit, setIsSavingEdit] = useState(false);
+
     const loadTodos = useCallback(async () => {
         if (!householdId) return;
         setIsLoading(true);
@@ -153,6 +160,30 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
                 }
             }
         ]);
+    };
+
+    const openEdit = (todo: Todo) => {
+        setEditTodo(todo);
+        setEditTitle(todo.title);
+        setEditPriority(todo.priority || 'normal');
+        setEditAssignee(todo.assigned_to);
+    };
+
+    const handleSaveEdit = async () => {
+        if (!editTodo || !editTitle.trim()) return;
+        setIsSavingEdit(true);
+        try {
+            const { error } = await supabase.from('family_todos')
+                .update({ title: editTitle.trim(), priority: editPriority, assigned_to: editAssignee })
+                .eq('id', editTodo.id);
+            if (error) throw error;
+            setEditTodo(null);
+            loadTodos();
+        } catch (e: any) {
+            Alert.alert('Fehler', e.message);
+        } finally {
+            setIsSavingEdit(false);
+        }
     };
 
     const filteredTodos = todos.filter(t => {
@@ -279,25 +310,26 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
                             const assigneeName = getMemberName(todo.assigned_to);
                             const assigneeColor = getMemberColor(todo.assigned_to);
                             return (
-                                <Pressable
+                                <View
                                     key={todo.id}
                                     style={[styles.todoItem, { borderColor: colors.border, backgroundColor: colors.card }]}
-                                    onPress={() => handleToggle(todo)}
                                 >
-                                    <View style={styles.todoCheck}>
+                                    {/* Checkbox - toggles completion */}
+                                    <Pressable onPress={() => handleToggle(todo)} style={styles.todoCheck} hitSlop={10}>
                                         {todo.completed ? (
                                             <CheckCircle2 size={22} color={colors.accent} fill={colors.accent + '30'} />
                                         ) : (
                                             <Circle size={22} color={colors.subtext} />
                                         )}
-                                    </View>
+                                    </Pressable>
                                     {/* Assignee Avatar */}
                                     {todo.assigned_to && (
                                         <View style={[styles.todoAvatar, { backgroundColor: assigneeColor }]}>
                                             <Text style={styles.todoAvatarText}>{getMemberInitial(todo.assigned_to)}</Text>
                                         </View>
                                     )}
-                                    <View style={styles.todoContent}>
+                                    {/* Content - opens edit */}
+                                    <Pressable style={styles.todoContent} onPress={() => openEdit(todo)}>
                                         <Text style={[
                                             styles.todoTitle,
                                             { color: todo.completed ? colors.subtext : colors.text },
@@ -319,16 +351,99 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
                                                 </View>
                                             )}
                                         </View>
-                                    </View>
+                                    </Pressable>
                                     <Pressable onPress={() => handleDelete(todo)} hitSlop={12}>
                                         <Trash2 size={14} color={colors.subtext} />
                                     </Pressable>
-                                </Pressable>
+                                </View>
                             );
                         })
                     )}
                 </ScrollView>
             </View>
+
+            {/* Edit Modal */}
+            <Modal visible={!!editTodo} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setEditTodo(null)}>
+                <View style={[styles.container, { backgroundColor: colors.background }]}>
+                    <View style={[styles.header, { borderBottomColor: colors.border }]}>
+                        <Pressable onPress={() => setEditTodo(null)}><X size={24} color={colors.subtext} /></Pressable>
+                        <Text style={[styles.headerTitle, { color: colors.text }]}>Aufgabe bearbeiten</Text>
+                        <Pressable onPress={handleSaveEdit} disabled={isSavingEdit}>
+                            {isSavingEdit ? <ActivityIndicator size="small" color={colors.accent} /> : <Check size={24} color={colors.accent} />}
+                        </Pressable>
+                    </View>
+                    <ScrollView style={{ padding: 16 }} contentContainerStyle={{ gap: 16 }}>
+                        {/* Title */}
+                        <View>
+                            <Text style={[styles.editLabel, { color: colors.subtext }]}>Titel</Text>
+                            <TextInput
+                                style={[styles.editInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
+                                value={editTitle}
+                                onChangeText={setEditTitle}
+                                placeholder="Aufgabe..."
+                                placeholderTextColor={colors.subtext}
+                                autoFocus
+                            />
+                        </View>
+
+                        {/* Priority */}
+                        <View>
+                            <Text style={[styles.editLabel, { color: colors.subtext }]}>Priorität</Text>
+                            <View style={{ flexDirection: 'row', gap: 8 }}>
+                                {PRIORITIES.map(p => (
+                                    <Pressable
+                                        key={p.key}
+                                        style={[styles.editPrioBtn, editPriority === p.key && { backgroundColor: p.color + '20', borderColor: p.color }]}
+                                        onPress={() => setEditPriority(p.key)}
+                                    >
+                                        <Text style={{ fontSize: 12 }}>{p.icon}</Text>
+                                        <Text style={[styles.editPrioText, { color: editPriority === p.key ? p.color : colors.subtext }]}>{p.label}</Text>
+                                    </Pressable>
+                                ))}
+                            </View>
+                        </View>
+
+                        {/* Assignee */}
+                        <View>
+                            <Text style={[styles.editLabel, { color: colors.subtext }]}>Zugewiesen an</Text>
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+                                <Pressable
+                                    style={[styles.memberChip, !editAssignee && { backgroundColor: colors.accent + '20', borderColor: colors.accent }]}
+                                    onPress={() => setEditAssignee(null)}
+                                >
+                                    <Text style={[styles.memberChipText, { color: !editAssignee ? colors.accent : colors.subtext }]}>Niemand</Text>
+                                </Pressable>
+                                {members.map((m, idx) => {
+                                    const color = AVATAR_COLORS[idx % AVATAR_COLORS.length];
+                                    const isSelected = editAssignee === m.id;
+                                    const name = m.display_name || m.email.split('@')[0];
+                                    return (
+                                        <Pressable
+                                            key={m.id}
+                                            style={[styles.memberChip, isSelected && { backgroundColor: color + '20', borderColor: color }]}
+                                            onPress={() => setEditAssignee(isSelected ? null : m.id)}
+                                        >
+                                            <View style={[styles.chipAvatar, { backgroundColor: color }]}>
+                                                <Text style={styles.chipAvatarText}>{name.substring(0, 1).toUpperCase()}</Text>
+                                            </View>
+                                            <Text style={[styles.memberChipText, { color: isSelected ? color : colors.subtext }]}>{name}</Text>
+                                        </Pressable>
+                                    );
+                                })}
+                            </ScrollView>
+                        </View>
+
+                        {/* Delete */}
+                        <Pressable
+                            onPress={() => { if (editTodo) { handleDelete(editTodo); setEditTodo(null); } }}
+                            style={[styles.editDeleteBtn]}
+                        >
+                            <Trash2 size={16} color="#EF4444" />
+                            <Text style={{ color: '#EF4444', fontWeight: '600', fontSize: 15 }}>Aufgabe löschen</Text>
+                        </Pressable>
+                    </ScrollView>
+                </View>
+            </Modal>
         </Modal>
     );
 };
@@ -384,4 +499,18 @@ const styles = StyleSheet.create({
     prioText: { fontSize: 10, fontWeight: '600' },
     assigneeBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 6, paddingVertical: 1, borderRadius: 6 },
     assigneeText: { fontSize: 10, fontWeight: '600' },
+
+    editLabel: { fontSize: 13, fontWeight: '700', marginBottom: 6 },
+    editInput: {
+        fontSize: 16, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 12, borderWidth: 1,
+    },
+    editPrioBtn: {
+        flexDirection: 'row', alignItems: 'center', gap: 4,
+        paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, borderWidth: 1, borderColor: 'transparent',
+    },
+    editPrioText: { fontSize: 12, fontWeight: '600' },
+    editDeleteBtn: {
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+        paddingVertical: 14, marginTop: 16, borderRadius: 12, backgroundColor: 'rgba(239,68,68,0.08)',
+    },
 });
