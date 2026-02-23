@@ -4,7 +4,7 @@ import {
     Bell, Check, CheckCheck, X, Trash2,
     Shield, Baby, Calendar, CloudLightning, Eye, Zap, House, Thermometer, Droplets,
     DoorOpen, DoorClosed, BellRing, Sun, Moon, ShoppingCart,
-    BatteryMedium, Lock, Camera, Wind, Fan, Waves,
+    BatteryMedium, Lock, Camera, Wind, Fan, Waves, Bot,
 } from 'lucide-react-native';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -21,6 +21,7 @@ const ICON_MAP: Record<string, any> = {
     'sun': Sun, 'moon': Moon, 'wind': Wind, 'eye': Eye, 'zap': Zap,
     'home': House, 'thermometer': Thermometer, 'droplets': Droplets,
     'waves': Waves, 'fan': Fan, 'shopping-cart': ShoppingCart, 'battery': BatteryMedium,
+    'bot': Bot,
 };
 const getIconComponent = (iconName: string) => ICON_MAP[iconName] || Bell;
 
