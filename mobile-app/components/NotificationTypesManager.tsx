@@ -13,7 +13,7 @@ import {
     Volume2, VolumeX, AlertTriangle,
     // Extended icon set
     DoorOpen, DoorClosed, BellRing, Sun, Moon, ShoppingCart,
-    BatteryMedium, Lock, Camera, Wind, Fan, Waves, Bot,
+    BatteryMedium, Lock, Camera, Wind, Fan, Waves, Disc3,
 } from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
 
@@ -41,7 +41,7 @@ const ICON_OPTIONS = [
     { name: 'fan', label: 'Tumbler', Component: Fan },
     { name: 'shopping-cart', label: 'Einkauf', Component: ShoppingCart },
     { name: 'battery', label: 'Akku', Component: BatteryMedium },
-    { name: 'bot', label: 'Saugroboter', Component: Bot },
+    { name: 'bot', label: 'Saugroboter', Component: Disc3 },
 ];
 
 const COLOR_OPTIONS = [
