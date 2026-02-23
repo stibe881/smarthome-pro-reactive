@@ -10,22 +10,37 @@ import { supabase } from '../lib/supabase';
 import {
     X, Plus, Trash2, ChevronRight, Bell, Shield, Baby, Calendar,
     CloudLightning, Eye, Zap, House, Thermometer, Droplets, Edit3, Copy, Check,
-    Volume2, VolumeX, AlertTriangle
+    Volume2, VolumeX, AlertTriangle,
+    // Extended icon set
+    DoorOpen, DoorClosed, BellRing, Sun, Moon, ShoppingCart,
+    BatteryMedium, Lock, Camera, Wind, Fan, Waves,
 } from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
 
 // Available icons for selection
 const ICON_OPTIONS = [
     { name: 'bell', label: 'Glocke', Component: Bell },
+    { name: 'bell-ring', label: 'Türklingel', Component: BellRing },
     { name: 'shield', label: 'Schild', Component: Shield },
+    { name: 'lock', label: 'Schloss', Component: Lock },
+    { name: 'door-open', label: 'Tür offen', Component: DoorOpen },
+    { name: 'door-closed', label: 'Tür zu', Component: DoorClosed },
+    { name: 'camera', label: 'Kamera', Component: Camera },
     { name: 'baby', label: 'Baby', Component: Baby },
     { name: 'calendar', label: 'Kalender', Component: Calendar },
     { name: 'cloud-lightning', label: 'Gewitter', Component: CloudLightning },
+    { name: 'sun', label: 'Sonne', Component: Sun },
+    { name: 'moon', label: 'Mond', Component: Moon },
+    { name: 'wind', label: 'Wind', Component: Wind },
     { name: 'eye', label: 'Auge', Component: Eye },
     { name: 'zap', label: 'Blitz', Component: Zap },
     { name: 'home', label: 'Haus', Component: House },
     { name: 'thermometer', label: 'Temperatur', Component: Thermometer },
     { name: 'droplets', label: 'Wasser', Component: Droplets },
+    { name: 'waves', label: 'Waschmaschine', Component: Waves },
+    { name: 'fan', label: 'Tumbler', Component: Fan },
+    { name: 'shopping-cart', label: 'Einkauf', Component: ShoppingCart },
+    { name: 'battery', label: 'Akku', Component: BatteryMedium },
 ];
 
 const COLOR_OPTIONS = [
