@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, Pressable, ActivityIndicator, TextInput, Modal, Alert, KeyboardAvoidingView, Platform, StyleSheet, Switch, Image } from 'react-native';
-import { supabase } from '../lib/supabase';
+import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useHousehold } from '../hooks/useHousehold';
+import { supabase } from '../lib/supabase';
 import { Users, UserPlus, Mail, Crown, X, Send, Lock, Eye, EyeOff, Trash2, Key, Shield, ShieldOff, MoreVertical, Camera, UserCheck, CalendarDays } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
@@ -33,6 +35,7 @@ interface FamilyManagementProps {
 
 export const FamilyManagement = ({ colors }: FamilyManagementProps) => {
     const { user, userRole, resetMemberPassword, removeMember, toggleMemberAccess } = useAuth();
+    const { householdId } = useHousehold();
     const [members, setMembers] = useState<FamilyMember[]>([]);
     const [invitations, setInvitations] = useState<Invitation[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -217,18 +220,46 @@ export const FamilyManagement = ({ colors }: FamilyManagementProps) => {
 
     const handleRemoveMember = async () => {
         if (!selectedMember) return;
+        const memberLabel = selectedMember.display_name || selectedMember.email || 'Mitglied';
         Alert.alert(
-            'Mitglied entfernen',
-            `Möchtest du ${selectedMember.email} wirklich aus der Familie entfernen?`,
+            'Mitglied endgültig entfernen',
+            `"${memberLabel}" wird aus der Familie entfernt und alle zugehörigen Daten (Aufgaben, Punkte, Verlauf) werden gelöscht. Fortfahren?`,
             [
                 { text: 'Abbrechen', style: 'cancel' },
                 {
-                    text: 'Entfernen',
+                    text: 'Endgültig entfernen',
                     style: 'destructive',
                     onPress: async () => {
                         setIsAdminActionLoading(true);
                         try {
-                            await removeMember(selectedMember.user_id || selectedMember.id);
+                            const memberId = selectedMember.id;
+                            const memberName = selectedMember.display_name || selectedMember.email?.split('@')[0] || '';
+
+                            // 1. Clean up todos assigned to this member
+                            await supabase.from('family_todos')
+                                .update({ assigned_to: null })
+                                .eq('assigned_to', memberId);
+
+                            // 2. Clean up reward_points
+                            if (householdId && memberName) {
+                                await supabase.from('reward_points')
+                                    .delete()
+                                    .eq('household_id', householdId)
+                                    .eq('member_name', memberName);
+
+                                // 3. Clean up reward_history
+                                await supabase.from('reward_history')
+                                    .delete()
+                                    .eq('household_id', householdId)
+                                    .eq('member_name', memberName);
+                            }
+
+                            // 4. Delete the family member itself
+                            const { error } = await supabase.from('family_members')
+                                .delete()
+                                .eq('id', memberId);
+                            if (error) throw error;
+
                             loadFamilyData();
                             setShowAdminModal(false);
                         } catch (e: any) {
