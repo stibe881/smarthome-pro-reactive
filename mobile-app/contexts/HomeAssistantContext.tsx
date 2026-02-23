@@ -268,6 +268,7 @@ interface HomeAssistantContextType {
     entities: EntityState[];
     isConnected: boolean;
     isConnecting: boolean;
+    hasEverConnected: boolean;
     error: string | null;
     haBaseUrl: string | null;
     authToken: string | null; // Expose token
@@ -370,6 +371,7 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
     const [entities, setEntities] = useState<EntityState[]>([]);
     const [isConnected, setIsConnected] = useState(false);
     const [isConnecting, setIsConnecting] = useState(false);
+    const [hasEverConnected, setHasEverConnected] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [haBaseUrl, setHaBaseUrl] = useState<string | null>(null);
     const [authToken, setAuthToken] = useState<string | null>(null); // State for token
@@ -1338,6 +1340,9 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
 
             const success = await serviceRef.current!.connect(cleanUrl, creds.token);
             setIsConnected(success);
+            if (success) {
+                setHasEverConnected(true);
+            }
             if (!success) { // If connection failed, clear the token and URL
                 setError('Verbindung fehlgeschlagen');
                 setHaBaseUrl(null);
@@ -1397,6 +1402,7 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
                 if (!serviceRef.current?.isConnected()) {
                     console.log('🔌 Reconnecting to Home Assistant...');
                     setIsConnecting(true); // Prevent "Not Connected" flash
+                    setIsConnected(false); // Will be set back to true on successful reconnect
                     connect();
                 }
                 // Process any pending widget actions
@@ -1540,6 +1546,7 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
         entities,
         isConnected,
         isConnecting,
+        hasEverConnected,
         error,
         haBaseUrl,
         authToken, // Expose

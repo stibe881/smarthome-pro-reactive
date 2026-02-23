@@ -553,6 +553,7 @@ export default function Dashboard() {
         entities,
         isConnected,
         isConnecting,
+        hasEverConnected,
         connect,
         toggleLight,
         activateScene,
@@ -995,7 +996,7 @@ export default function Dashboard() {
         return 'Guten Abend';
     };
 
-    if (!isConnected && !isConnecting) {
+    if (!isConnected && !isConnecting && !hasEverConnected) {
         return (
             <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
                 {/* Background Image Layer */}

@@ -1320,6 +1320,7 @@ export default function Rooms() {
         entities,
         isConnected,
         isConnecting,
+        hasEverConnected,
         toggleLight,
         setLightBrightness,
         openCover,
@@ -2057,7 +2058,7 @@ export default function Rooms() {
 
     const closeModal = useCallback(() => setSelectedRoom(null), []);
 
-    if (!isConnected && !isConnecting) {
+    if (!isConnected && !isConnecting && !hasEverConnected) {
         return (
             <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
                 <View style={[styles.emptyState, { backgroundColor: colors.background }]}>
