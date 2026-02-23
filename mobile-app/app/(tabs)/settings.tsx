@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { useHomeAssistant } from '../../contexts/HomeAssistantContext';
 import { useTheme, THEMES, ThemeType, AutoThemeConfig, THEME_DISPLAY_NAMES, DARK_THEMES, LIGHT_THEMES } from '../../contexts/ThemeContext';
-import { Wifi, WifiOff, Save, LogOut, User, Server, Key, CheckCircle, XCircle, Shield, Bell, Palette, ChevronRight, LucideIcon, X, ScanFace, MapPin, Smartphone, Search, Calendar, Trash2, Users, Eye, EyeOff, Sun, Moon, Store, Camera, RotateCw, Cloud, CloudRain, ShoppingCart, DoorOpen } from 'lucide-react-native';
+import { Wifi, WifiOff, Save, LogOut, User, Server, Key, CheckCircle, XCircle, Shield, Bell, Palette, ChevronRight, LucideIcon, X, ScanFace, MapPin, Smartphone, Search, Calendar, Trash2, Users, Eye, EyeOff, Sun, Moon, Store, Camera, RotateCw, Cloud, CloudRain, ShoppingCart, DoorOpen, DoorClosed, BellRing, Wind, Fan, Waves, BatteryMedium, Lock } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -47,18 +47,30 @@ const APP_ICON_VARIANTS = [
     { key: 'Pride', label: 'Pride 🌈', color: 'rainbow', preview: require('../../assets/icons/icon-pride.png') },
 ];
 
-// Icon mapping for dynamic notification types
+// Icon mapping for dynamic notification types – must match ICON_OPTIONS in NotificationTypesManager
 const DYNAMIC_ICON_MAP: Record<string, any> = {
     bell: Bell,
+    'bell-ring': BellRing,
     shield: Shield,
+    lock: Lock,
+    'door-open': DoorOpen,
+    'door-closed': DoorClosed,
+    camera: Camera,
     baby: Baby,
     calendar: Calendar,
     'cloud-lightning': CloudLightning,
+    sun: Sun,
+    moon: Moon,
+    wind: Wind,
     eye: Eye,
     zap: Zap,
     home: HomeLucide,
     thermometer: Thermometer,
     droplets: Droplets,
+    waves: Waves,
+    fan: Fan,
+    'shopping-cart': ShoppingCart,
+    battery: BatteryMedium,
     'scan-face': ScanFace,
     'check-circle': CheckCircle,
     'map-pin': MapPin,
