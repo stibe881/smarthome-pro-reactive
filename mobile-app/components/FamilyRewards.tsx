@@ -393,6 +393,32 @@ export const FamilyRewards: React.FC<RewardsProps> = ({ visible, onClose }) => {
                         <View style={{ alignItems: 'center', paddingVertical: 16 }}>
                             <Text style={[styles.memberPoints, { color: colors.accent, fontSize: 28 }]}>{historyMember?.points} ⭐</Text>
                             <Text style={{ color: colors.subtext, fontSize: 13, marginTop: 2 }}>Aktueller Punktestand</Text>
+                            <Pressable
+                                style={{ marginTop: 10, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10, backgroundColor: '#EF444415' }}
+                                onPress={() => {
+                                    if (!historyMember || !householdId) return;
+                                    Alert.alert('Zurücksetzen', `Punkte von ${historyMember.member_name} auf 0 setzen?`, [
+                                        { text: 'Abbrechen', style: 'cancel' },
+                                        {
+                                            text: 'Zurücksetzen', style: 'destructive', onPress: async () => {
+                                                await supabase.from('reward_points').update({ points: 0 }).eq('id', historyMember.id);
+                                                await supabase.from('reward_history').insert({
+                                                    household_id: householdId,
+                                                    member_name: historyMember.member_name,
+                                                    points: -historyMember.points,
+                                                    reason: '🔄 Punkte zurückgesetzt',
+                                                    type: 'manual',
+                                                });
+                                                setHistoryMember({ ...historyMember, points: 0 });
+                                                openHistory({ ...historyMember, points: 0 });
+                                                loadData();
+                                            }
+                                        },
+                                    ]);
+                                }}
+                            >
+                                <Text style={{ color: '#EF4444', fontSize: 13, fontWeight: '600' }}>🔄 Zurücksetzen</Text>
+                            </Pressable>
                         </View>
                         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
                             {historyLoading ? (
