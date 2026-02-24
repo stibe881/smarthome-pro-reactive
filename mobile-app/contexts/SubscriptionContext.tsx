@@ -3,11 +3,11 @@ import { Platform } from 'react-native';
 import Purchases, { LOG_LEVEL, CustomerInfo } from 'react-native-purchases';
 import RevenueCatUI, { PAYWALL_RESULT } from 'react-native-purchases-ui';
 
-const ENTITLEMENT_ID = 'HomePilot Pro Pro';
+const ENTITLEMENT_ID = 'HomePilot_Pro';
 
-// Platform-specific API keys
-const IOS_API_KEY = 'test_FTsATuCXhLJHoWNsdFqjwygtzMR';
-const ANDROID_API_KEY = 'test_FTsATuCXhLJHoWNsdFqjwygtzMR';
+// Production API keys
+const IOS_API_KEY = 'appl_nPeSIqjNBSFmpjnYREyHBhSonth';
+const ANDROID_API_KEY = 'appl_nPeSIqjNBSFmpjnYREyHBhSonth';
 
 interface SubscriptionContextType {
     isProUser: boolean;
