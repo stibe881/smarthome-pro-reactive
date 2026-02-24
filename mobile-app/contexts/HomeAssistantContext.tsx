@@ -597,6 +597,10 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
         }
     };
 
+    // Debounce timer for batching rapid entity updates
+    const stateChangeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const isInitialLoad = useRef(true);
+
     const handleStateChange = useCallback((newEntities: any[]) => {
 
         // MY_POSITION_MAPPING by entity_id for reliable matching
@@ -630,7 +634,18 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
             };
         });
 
-        setEntities(mapped);
+        // Initial full load: apply immediately for fast startup
+        if (isInitialLoad.current) {
+            isInitialLoad.current = false;
+            setEntities(mapped);
+            return;
+        }
+
+        // Incremental updates: debounce to batch rapid-fire state changes (battery optimization)
+        if (stateChangeTimer.current) clearTimeout(stateChangeTimer.current);
+        stateChangeTimer.current = setTimeout(() => {
+            setEntities(mapped);
+        }, 500);
     }, []);
 
     // Timestamp tracking to prevent race conditions (HA state vs Local Optimistic state)
@@ -1399,6 +1414,7 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
         const subscriptionAppState = AppState.addEventListener('change', nextAppState => {
             if (nextAppState === 'active') {
                 // console.log('📱 App came to foreground. Checking connection...');
+                serviceRef.current?.resumeFromBackground();
                 if (!serviceRef.current?.isConnected()) {
                     console.log('🔌 Reconnecting to Home Assistant...');
                     setIsConnecting(true); // Prevent "Not Connected" flash
@@ -1412,6 +1428,9 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
                         return svc.callService(domain, service, entityId, data);
                     });
                 }
+            } else {
+                // Battery optimization: pause pings and reconnects when backgrounded
+                serviceRef.current?.pauseForBackground();
             }
         });
 
@@ -1542,7 +1561,7 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
         return await serviceRef.current.fetchCalendarEvents(entityId, start, end);
     }, []);
 
-    const value = {
+    const value = useMemo(() => ({
         entities,
         isConnected,
         isConnecting,
@@ -1680,7 +1699,16 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
                 console.error('Failed to save dashboard config:', e);
             }
         }
-    };
+    }), [entities, isConnected, isConnecting, hasEverConnected, error, haBaseUrl, authToken,
+        notificationSettings, isGeofencingActive, shoppingListVisible, isDoorbellRinging,
+        dashboardConfig, isHAInitialized, expoPushToken,
+        connect, disconnect, callService, fetchCalendarEvents,
+        toggleLight, setLightBrightness, openCover, closeCover, setCoverPosition, stopCover,
+        setCoverTiltPosition, pressButton, startVacuum, pauseVacuum, returnVacuum,
+        activateScene, setClimateTemperature, setClimateHvacMode, playMedia, browseMedia,
+        saveCredentials, getCredentials, getEntityPictureUrl,
+        updateNotificationSettings, setHomeLocation, startShoppingGeofencing,
+    ]);
 
     return (
         <HomeAssistantContext.Provider value={value}>

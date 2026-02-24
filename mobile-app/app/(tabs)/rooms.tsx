@@ -2033,7 +2033,7 @@ export default function Rooms() {
             } else {
                 setRemainingTime(left);
             }
-        }, 1000); // Check every second for smoother UI update, but display minutes
+        }, 30000); // Check every 30s — display only shows whole minutes
         return () => clearInterval(interval);
     }, [sleepTimerEnd]);
 

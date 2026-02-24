@@ -117,7 +117,7 @@ export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
     const [refreshTrigger, setRefreshTrigger] = React.useState(Date.now());
     React.useEffect(() => {
         if (!visible || fullscreenCamera) return;
-        const interval = setInterval(() => setRefreshTrigger(Date.now()), 1500);
+        const interval = setInterval(() => setRefreshTrigger(Date.now()), 5000);
         return () => clearInterval(interval);
     }, [visible, fullscreenCamera]);
 
@@ -125,7 +125,7 @@ export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
     const [fullscreenRefresh, setFullscreenRefresh] = React.useState(Date.now());
     React.useEffect(() => {
         if (!fullscreenCamera) return;
-        const interval = setInterval(() => setFullscreenRefresh(Date.now()), 750);
+        const interval = setInterval(() => setFullscreenRefresh(Date.now()), 2000);
         return () => clearInterval(interval);
     }, [fullscreenCamera]);
 

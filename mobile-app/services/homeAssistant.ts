@@ -9,6 +9,9 @@ export class HomeAssistantService {
     private onConnectionChange: ((isConnected: boolean) => void) | null = null;
     private connectionTimeout: ReturnType<typeof setTimeout> | null = null;
     private pingInterval: ReturnType<typeof setInterval> | null = null;
+    private reconnectAttempt = 0;
+    private static readonly RECONNECT_BASE = 5000;
+    private static readonly RECONNECT_MAX = 60000;
 
     constructor(onStateChange: (entities: any[]) => void) {
         this.onStateChange = onStateChange;
@@ -105,6 +108,7 @@ export class HomeAssistantService {
                             this.connectionTimeout = null;
                         }
                         this.startPingInterval();
+                        this.reconnectAttempt = 0; // Reset backoff on successful connection
                         this.subscribeToStates();
                         if (this.onConnectionChange) this.onConnectionChange(true);
                         resolve(true);
@@ -142,12 +146,17 @@ export class HomeAssistantService {
                     if (this.onConnectionChange) this.onConnectionChange(false);
 
                     if (this.shouldReconnect && this.credentials) {
-                        // console.log("🔄 Auto-Reconnecting in 5s...");
+                        const delay = Math.min(
+                            HomeAssistantService.RECONNECT_BASE * Math.pow(2, this.reconnectAttempt),
+                            HomeAssistantService.RECONNECT_MAX
+                        );
+                        this.reconnectAttempt++;
+                        console.log(`🔄 Reconnecting in ${delay / 1000}s (attempt ${this.reconnectAttempt})`);
                         this.reconnectTimer = setTimeout(() => {
                             if (this.shouldReconnect && this.credentials) {
                                 this.connect(this.credentials.url, this.credentials.token);
                             }
-                        }, 5000);
+                        }, delay);
                     }
                     
                     // Only resolve false if we are in the initial connection phase
@@ -183,6 +192,25 @@ export class HomeAssistantService {
         this.handlers.clear();
         this.messageId = 1;
         if (this.onConnectionChange) this.onConnectionChange(false);
+    }
+
+    // Battery optimization: pause all background activity when app is backgrounded
+    pauseForBackground() {
+        this.stopPingInterval();
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
+    }
+
+    // Battery optimization: resume activity when app returns to foreground
+    resumeFromBackground() {
+        if (this.isConnected()) {
+            this.startPingInterval();
+        } else if (this.shouldReconnect && this.credentials) {
+            this.reconnectAttempt = 0; // Fresh start after resume
+            this.connect(this.credentials.url, this.credentials.token);
+        }
     }
 
     isConnected(): boolean {
@@ -235,8 +263,8 @@ export class HomeAssistantService {
             }
         });
 
-        // Subscribe to all events for specific event handling (e.g., doorbell)
-        this.send({ type: 'subscribe_events' }, (data) => {
+        // Subscribe only to call_service events for doorbell detection (instead of ALL events)
+        this.send({ type: 'subscribe_events', event_type: 'call_service' }, (data) => {
             if (data.type === 'event' && this.onEventCallback) {
                 this.onEventCallback(data.event);
             }

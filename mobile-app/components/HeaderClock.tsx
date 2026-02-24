@@ -8,7 +8,7 @@ export default function HeaderClock() {
     useEffect(() => {
         const timer = setInterval(() => {
             setTime(new Date());
-        }, 1000);
+        }, 60000); // Update every 60s — display only shows HH:MM
         return () => clearInterval(timer);
     }, []);
 
