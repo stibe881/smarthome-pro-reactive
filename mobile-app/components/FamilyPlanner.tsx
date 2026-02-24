@@ -17,6 +17,8 @@ import { supabase } from '../lib/supabase';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const IS_TABLET = SCREEN_WIDTH > 600;
+const CALENDAR_WIDTH = IS_TABLET ? Math.min(SCREEN_WIDTH - 32, 500) : SCREEN_WIDTH;
 
 interface PlannerEvent {
     id: string;
@@ -883,14 +885,14 @@ const styles = StyleSheet.create({
     monthTitle: { fontSize: 18, fontWeight: '800', letterSpacing: 0.3 },
 
     // Weekday row
-    weekdayRow: { flexDirection: 'row', paddingHorizontal: 12, marginTop: 12 },
+    weekdayRow: { flexDirection: 'row', paddingHorizontal: 12, marginTop: 12, maxWidth: IS_TABLET ? 500 : undefined, alignSelf: IS_TABLET ? 'center' as const : undefined },
     weekdayCell: { flex: 1, alignItems: 'center', paddingVertical: 4 },
     weekdayText: { fontSize: 12, fontWeight: '700' },
 
     // Calendar grid
-    calendarGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 12, marginTop: 4 },
+    calendarGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 12, marginTop: 4, maxWidth: IS_TABLET ? 500 : undefined, alignSelf: IS_TABLET ? 'center' as const : undefined },
     dayCell: {
-        width: (SCREEN_WIDTH - 24) / 7, height: 44,
+        width: (CALENDAR_WIDTH - 24) / 7, height: IS_TABLET ? 36 : 44,
         justifyContent: 'center', alignItems: 'center',
     },
     dayText: { fontSize: 15, fontWeight: '500' },
