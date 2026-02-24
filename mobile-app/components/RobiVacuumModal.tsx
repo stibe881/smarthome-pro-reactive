@@ -266,25 +266,26 @@ export default function RobiVacuumModal({
 
             {/* Map Zoom Overlay — absolute positioned, no nested Modal */}
             {showMapZoom && (
-                <View key={`zoom-${zoomKey}`} style={styles.mapZoomOverlay}>
+                <View style={styles.mapZoomOverlay}>
                     <View style={styles.mapZoomContainer}>
-                        {mapUrl && (
-                            <ScrollView
-                                maximumZoomScale={5}
-                                minimumZoomScale={1}
-                                centerContent
-                                bouncesZoom
-                                showsHorizontalScrollIndicator={false}
-                                showsVerticalScrollIndicator={false}
-                                contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center' }}
-                            >
-                                <Image
-                                    source={{ uri: mapUrl }}
-                                    style={styles.mapZoomImage}
-                                    resizeMode="contain"
-                                />
-                            </ScrollView>
-                        )}
+                        <ScrollView
+                            key={`sv-${zoomKey}`}
+                            maximumZoomScale={5}
+                            minimumZoomScale={1}
+                            zoomScale={1}
+                            contentOffset={{ x: 0, y: 0 }}
+                            centerContent
+                            bouncesZoom
+                            showsHorizontalScrollIndicator={false}
+                            showsVerticalScrollIndicator={false}
+                        >
+                            <Image
+                                key={`img-${zoomKey}`}
+                                source={{ uri: mapUrl + (mapUrl!.includes('?') ? '&' : '?') + '_z=' + zoomKey }}
+                                style={{ width: SCREEN_WIDTH - 32, height: SCREEN_HEIGHT * 0.7 }}
+                                resizeMode="contain"
+                            />
+                        </ScrollView>
                     </View>
                     <Pressable onPress={() => setShowMapZoom(false)} style={styles.mapZoomClose}>
                         <X size={24} color="#fff" />
