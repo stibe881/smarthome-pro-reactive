@@ -9,6 +9,7 @@ import {
 } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useSubscription } from '../../contexts/SubscriptionContext';
 import { useHousehold } from '../../hooks/useHousehold';
 import { supabase } from '../../lib/supabase';
 import { FamilyPlanner } from '../../components/FamilyPlanner';
@@ -41,6 +42,7 @@ export default function FamilyScreen() {
     const { colors } = useTheme();
     const { user } = useAuth();
     const { householdId } = useHousehold();
+    const { isProUser, presentPaywall } = useSubscription();
 
     const [activeModule, setActiveModule] = useState<ModuleKey | null>(null);
     const [stats, setStats] = useState<ModuleStats>({ todayEvents: 0, openTodos: 0, recentPins: 0 });
@@ -87,6 +89,18 @@ export default function FamilyScreen() {
     const handleCloseModule = () => {
         setActiveModule(null);
         loadStats();
+    };
+
+    const handleModulePress = async (key: ModuleKey) => {
+        if (isProUser) {
+            setActiveModule(key);
+            return;
+        }
+        // Not subscribed — show paywall
+        const purchased = await presentPaywall();
+        if (purchased) {
+            setActiveModule(key);
+        }
     };
 
     const MAIN_MODULES: { key: ModuleKey; title: string; subtitle: string; icon: any; gradient: [string, string]; emoji: string }[] = [
@@ -184,7 +198,7 @@ export default function FamilyScreen() {
                     styles.moduleCard,
                     { transform: [{ scale: pressed ? 0.96 : 1 }] }
                 ]}
-                onPress={() => setActiveModule(mod.key)}
+                onPress={() => handleModulePress(mod.key)}
             >
                 <LinearGradient
                     colors={mod.gradient}
