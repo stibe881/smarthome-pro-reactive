@@ -41,12 +41,6 @@ export default function RobiVacuumModal({
     const [activeTab, setActiveTab] = useState<TabKey>('cleaning');
     const [selectedRooms, setSelectedRooms] = useState<number[]>([]);
     const [showMapZoom, setShowMapZoom] = useState(false);
-    const [mapOpenCount, setMapOpenCount] = useState(0);
-
-    const openMapZoom = () => {
-        setMapOpenCount(c => c + 1);
-        setShowMapZoom(true);
-    };
 
     const vacuum = entities.find(e => e.entity_id === entityId);
 
@@ -122,7 +116,7 @@ export default function RobiVacuumModal({
         <>
             <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: 20 }}>
                 {mapCamera && mapUrl && (
-                    <Pressable onPress={openMapZoom} style={styles.mapContainer}>
+                    <Pressable onPress={() => setShowMapZoom(true)} style={styles.mapContainer}>
                         <Image
                             source={{ uri: mapUrl }}
                             style={styles.mapImage}
@@ -270,32 +264,33 @@ export default function RobiVacuumModal({
             </View>
 
             {/* Map Zoom Modal */}
-            <Modal visible={showMapZoom} animationType="fade" transparent onRequestClose={() => setShowMapZoom(false)}>
-                <View style={styles.mapZoomOverlay}>
-                    <View style={styles.mapZoomContainer}>
-                        {mapUrl && (
-                            <ScrollView
-                                key={`map-${mapOpenCount}`}
-                                maximumZoomScale={5}
-                                minimumZoomScale={1}
-                                centerContent
-                                showsHorizontalScrollIndicator={false}
-                                showsVerticalScrollIndicator={false}
-                                contentContainerStyle={{ flex: 1 }}
-                            >
-                                <Image
-                                    source={{ uri: mapUrl }}
-                                    style={styles.mapZoomImage}
-                                    resizeMode="contain"
-                                />
-                            </ScrollView>
-                        )}
+            {showMapZoom && (
+                <Modal visible animationType="fade" transparent onRequestClose={() => setShowMapZoom(false)}>
+                    <View style={styles.mapZoomOverlay}>
+                        <View style={styles.mapZoomContainer}>
+                            {mapUrl && (
+                                <ScrollView
+                                    maximumZoomScale={5}
+                                    minimumZoomScale={1}
+                                    centerContent
+                                    showsHorizontalScrollIndicator={false}
+                                    showsVerticalScrollIndicator={false}
+                                    contentContainerStyle={{ flex: 1 }}
+                                >
+                                    <Image
+                                        source={{ uri: mapUrl }}
+                                        style={styles.mapZoomImage}
+                                        resizeMode="contain"
+                                    />
+                                </ScrollView>
+                            )}
+                        </View>
+                        <Pressable onPress={() => setShowMapZoom(false)} style={styles.mapZoomClose}>
+                            <X size={24} color="#fff" />
+                        </Pressable>
                     </View>
-                    <Pressable onPress={() => setShowMapZoom(false)} style={styles.mapZoomClose}>
-                        <X size={24} color="#fff" />
-                    </Pressable>
-                </View>
-            </Modal>
+                </Modal>
+            )}
         </Modal>
     );
 }
