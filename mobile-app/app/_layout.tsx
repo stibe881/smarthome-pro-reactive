@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from "../contexts/AuthContext";
 import { HomeAssistantProvider, useHomeAssistant } from "../contexts/HomeAssistantContext";
 import { ThemeProvider, useTheme } from "../contexts/ThemeContext";
 import { KidsProvider } from "../contexts/KidsContext";
+import { SleepTimerProvider } from "../hooks/useSleepTimer";
 import { useEffect } from "react";
 import { View, ActivityIndicator } from "react-native";
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -81,10 +82,12 @@ export default function Layout() {
             <ThemeProvider>
                 <AuthProvider>
                     <HomeAssistantProvider>
-                        <KidsProvider>
-                            <SunThemeBridge />
-                            <RootLayoutNav />
-                        </KidsProvider>
+                        <SleepTimerProvider>
+                            <KidsProvider>
+                                <SunThemeBridge />
+                                <RootLayoutNav />
+                            </KidsProvider>
+                        </SleepTimerProvider>
                     </HomeAssistantProvider>
                 </AuthProvider>
             </ThemeProvider>
