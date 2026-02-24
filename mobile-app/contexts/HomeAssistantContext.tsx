@@ -132,8 +132,7 @@ if (Platform.OS !== 'web') TaskManager.defineTask(SHOPPING_TASK, async ({ data, 
             if (matchingShop) {
                 console.log(`🛒 At Shop: ${matchingShop}`);
 
-                // Check if we already notified for this shop visit
-                // (entry is reset when leaving the shop area → re-entering triggers new notification)
+                // Check entry data for dwell time tracking
                 const entryDataStr = await AsyncStorage.getItem(SHOP_ENTRY_KEY);
                 let entryData = entryDataStr ? JSON.parse(entryDataStr) : null;
 
@@ -141,30 +140,45 @@ if (Platform.OS !== 'web') TaskManager.defineTask(SHOPPING_TASK, async ({ data, 
                     && entryData.shop === matchingShop
                     && entryData.notified === true;
 
-                if (!alreadyNotified) {
-                    // NOTIFY immediately!
-                    console.log(`🛒 Sending shopping notification for ${matchingShop}`);
-                    await Notifications.scheduleNotificationAsync({
-                        content: {
-                            title: "Haushalt",
-                            body: "Schau doch kurz in eure Einkaufsliste",
-                            sound: true,
-                            categoryIdentifier: 'SHOPPING_ACTION',
-                            data: { action: 'open_list' }
-                        },
-                        trigger: null
-                    });
-
-                    // Mark as notified
-                    await AsyncStorage.setItem(SHOP_ENTRY_KEY, JSON.stringify({
-                        shop: matchingShop, timestamp: Date.now(), notified: true
-                    }));
-                } else {
+                if (alreadyNotified) {
                     console.log(`🛒 Already notified for ${matchingShop}, cooldown active`);
+                    return;
+                }
+
+                // Check if this is a continued visit to the same shop
+                if (entryData && entryData.shop === matchingShop && !entryData.notified) {
+                    // Same shop, check dwell time (3 minutes = 180000ms)
+                    const elapsed = Date.now() - entryData.timestamp;
+                    if (elapsed >= 180000) {
+                        // 3 minutes elapsed → send notification
+                        console.log(`🛒 Dwell time reached (${Math.round(elapsed / 1000)}s) — sending shopping notification for ${matchingShop}`);
+                        await Notifications.scheduleNotificationAsync({
+                            content: {
+                                title: "Haushalt",
+                                body: "Schau doch kurz in eure Einkaufsliste",
+                                sound: true,
+                                categoryIdentifier: 'SHOPPING_ACTION',
+                                data: { action: 'open_list' }
+                            },
+                            trigger: null
+                        });
+
+                        // Mark as notified
+                        await AsyncStorage.setItem(SHOP_ENTRY_KEY, JSON.stringify({
+                            shop: matchingShop, timestamp: entryData.timestamp, notified: true
+                        }));
+                    } else {
+                        console.log(`🛒 At ${matchingShop} for ${Math.round(elapsed / 1000)}s — waiting for 3min dwell time`);
+                    }
+                } else {
+                    // New shop visit — record entry timestamp, don't notify yet
+                    console.log(`🛒 Entered shop area: ${matchingShop} — starting 3min dwell timer`);
+                    await AsyncStorage.setItem(SHOP_ENTRY_KEY, JSON.stringify({
+                        shop: matchingShop, timestamp: Date.now(), notified: false
+                    }));
                 }
             } else {
                 // Not at a known shop -> Reset entry
-                // Only reset if we are confident (maybe give it a grace period? For simplicity: reset).
                 await AsyncStorage.removeItem(SHOP_ENTRY_KEY);
             }
         } catch (e) {
