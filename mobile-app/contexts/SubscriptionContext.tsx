@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { Platform } from 'react-native';
-import Purchases, { LOG_LEVEL, CustomerInfo } from 'react-native-purchases';
-import RevenueCatUI, { PAYWALL_RESULT } from 'react-native-purchases-ui';
+import { Platform, Alert } from 'react-native';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 
 const ENTITLEMENT_ID = 'HomePilot_Pro';
 
@@ -9,10 +8,13 @@ const ENTITLEMENT_ID = 'HomePilot_Pro';
 const IOS_API_KEY = 'appl_nPeSIqjNBSFmpjnYREyHBhSonth';
 const ANDROID_API_KEY = 'appl_nPeSIqjNBSFmpjnYREyHBhSonth';
 
+// Check if native modules are available (not Expo Go)
+const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+const isNativeAvailable = !isExpoGo && Platform.OS !== 'web';
+
 interface SubscriptionContextType {
     isProUser: boolean;
     isLoading: boolean;
-    customerInfo: CustomerInfo | null;
     presentPaywall: () => Promise<boolean>;
     restorePurchases: () => Promise<boolean>;
     refreshStatus: () => Promise<void>;
@@ -21,7 +23,6 @@ interface SubscriptionContextType {
 const SubscriptionContext = createContext<SubscriptionContextType>({
     isProUser: false,
     isLoading: true,
-    customerInfo: null,
     presentPaywall: async () => false,
     restorePurchases: async () => false,
     refreshStatus: async () => { },
@@ -32,18 +33,25 @@ export function useSubscription() {
 }
 
 export function SubscriptionProvider({ children }: { children: React.ReactNode }) {
-    const [isProUser, setIsProUser] = useState(false);
-    const [isLoading, setIsLoading] = useState(true);
-    const [customerInfo, setCustomerInfo] = useState<CustomerInfo | null>(null);
+    // In Expo Go / Web: always grant access (dev mode)
+    const [isProUser, setIsProUser] = useState(!isNativeAvailable);
+    const [isLoading, setIsLoading] = useState(isNativeAvailable);
 
-    // Initialize RevenueCat
     useEffect(() => {
+        if (!isNativeAvailable) {
+            console.log('📱 RevenueCat: Skipped (Expo Go / Web) — Pro features unlocked for dev');
+            setIsLoading(false);
+            return;
+        }
+
+        let Purchases: typeof import('react-native-purchases').default;
+
         const init = async () => {
             try {
-                if (Platform.OS === 'web') {
-                    setIsLoading(false);
-                    return;
-                }
+                // Dynamic import to avoid crash in Expo Go
+                const purchasesModule = require('react-native-purchases');
+                Purchases = purchasesModule.default;
+                const { LOG_LEVEL } = purchasesModule;
 
                 Purchases.setLogLevel(LOG_LEVEL.VERBOSE);
 
@@ -53,52 +61,44 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
                     Purchases.configure({ apiKey: ANDROID_API_KEY });
                 }
 
-                // Get initial customer info
                 const info = await Purchases.getCustomerInfo();
-                updateProStatus(info);
+                const hasEntitlement = typeof info.entitlements.active[ENTITLEMENT_ID] !== 'undefined';
+                setIsProUser(hasEntitlement);
+                setIsLoading(false);
+
+                // Listen for updates
+                Purchases.addCustomerInfoUpdateListener((info: any) => {
+                    const active = typeof info.entitlements.active[ENTITLEMENT_ID] !== 'undefined';
+                    setIsProUser(active);
+                });
             } catch (e) {
-                console.error('RevenueCat init error:', e);
+                console.warn('RevenueCat init error:', e);
                 setIsLoading(false);
             }
         };
 
         init();
-
-        // Listen for customer info updates (purchases, renewals, cancellations)
-        const customerInfoUpdated = (info: CustomerInfo) => {
-            updateProStatus(info);
-        };
-        Purchases.addCustomerInfoUpdateListener(customerInfoUpdated);
-
-        return () => {
-            Purchases.removeCustomerInfoUpdateListener(customerInfoUpdated);
-        };
     }, []);
 
-    const updateProStatus = (info: CustomerInfo) => {
-        const hasEntitlement = typeof info.entitlements.active[ENTITLEMENT_ID] !== 'undefined';
-        setIsProUser(hasEntitlement);
-        setCustomerInfo(info);
-        setIsLoading(false);
-    };
-
     const presentPaywall = useCallback(async (): Promise<boolean> => {
+        if (!isNativeAvailable) {
+            Alert.alert('Dev Mode', 'Paywall nicht verfügbar in Expo Go. Pro Features sind freigeschaltet.');
+            return true;
+        }
         try {
-            const result: PAYWALL_RESULT = await RevenueCatUI.presentPaywall();
+            const RevenueCatUI = require('react-native-purchases-ui').default;
+            const { PAYWALL_RESULT } = require('react-native-purchases-ui');
+            const Purchases = require('react-native-purchases').default;
 
-            switch (result) {
-                case PAYWALL_RESULT.PURCHASED:
-                case PAYWALL_RESULT.RESTORED:
-                    // Refresh status after purchase
-                    const info = await Purchases.getCustomerInfo();
-                    updateProStatus(info);
-                    return true;
-                case PAYWALL_RESULT.NOT_PRESENTED:
-                case PAYWALL_RESULT.ERROR:
-                case PAYWALL_RESULT.CANCELLED:
-                default:
-                    return false;
+            const result = await RevenueCatUI.presentPaywall();
+
+            if (result === PAYWALL_RESULT.PURCHASED || result === PAYWALL_RESULT.RESTORED) {
+                const info = await Purchases.getCustomerInfo();
+                const hasEntitlement = typeof info.entitlements.active[ENTITLEMENT_ID] !== 'undefined';
+                setIsProUser(hasEntitlement);
+                return true;
             }
+            return false;
         } catch (e) {
             console.error('Paywall error:', e);
             return false;
@@ -106,10 +106,13 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     }, []);
 
     const restorePurchases = useCallback(async (): Promise<boolean> => {
+        if (!isNativeAvailable) return true;
         try {
+            const Purchases = require('react-native-purchases').default;
             const info = await Purchases.restorePurchases();
-            updateProStatus(info);
-            return typeof info.entitlements.active[ENTITLEMENT_ID] !== 'undefined';
+            const has = typeof info.entitlements.active[ENTITLEMENT_ID] !== 'undefined';
+            setIsProUser(has);
+            return has;
         } catch (e) {
             console.error('Restore purchases error:', e);
             return false;
@@ -117,10 +120,12 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     }, []);
 
     const refreshStatus = useCallback(async () => {
+        if (!isNativeAvailable) return;
         try {
-            if (Platform.OS === 'web') return;
+            const Purchases = require('react-native-purchases').default;
             const info = await Purchases.getCustomerInfo();
-            updateProStatus(info);
+            const has = typeof info.entitlements.active[ENTITLEMENT_ID] !== 'undefined';
+            setIsProUser(has);
         } catch (e) {
             console.error('Refresh status error:', e);
         }
@@ -130,7 +135,6 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
         <SubscriptionContext.Provider value={{
             isProUser,
             isLoading,
-            customerInfo,
             presentPaywall,
             restorePurchases,
             refreshStatus,
@@ -139,3 +143,4 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
         </SubscriptionContext.Provider>
     );
 }
+
