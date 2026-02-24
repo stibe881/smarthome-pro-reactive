@@ -265,10 +265,11 @@ export default function RobiVacuumModal({
 
             {/* Map Zoom Modal */}
             <Modal visible={showMapZoom} animationType="fade" transparent onRequestClose={() => setShowMapZoom(false)}>
-                <Pressable style={styles.mapZoomOverlay} onPress={() => setShowMapZoom(false)}>
+                <View style={styles.mapZoomOverlay}>
                     <View style={styles.mapZoomContainer}>
                         {mapUrl && (
                             <ScrollView
+                                key={showMapZoom ? 'open' : 'closed'}
                                 maximumZoomScale={5}
                                 minimumZoomScale={1}
                                 centerContent
@@ -284,10 +285,10 @@ export default function RobiVacuumModal({
                             </ScrollView>
                         )}
                     </View>
-                    <Pressable onPress={() => setShowMapZoom(false)} style={styles.mapZoomClose} onStartShouldSetResponder={() => true}>
+                    <Pressable onPress={() => setShowMapZoom(false)} style={styles.mapZoomClose}>
                         <X size={24} color="#fff" />
                     </Pressable>
-                </Pressable>
+                </View>
             </Modal>
         </Modal>
     );
