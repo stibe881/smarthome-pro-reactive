@@ -41,6 +41,12 @@ export default function RobiVacuumModal({
     const [activeTab, setActiveTab] = useState<TabKey>('cleaning');
     const [selectedRooms, setSelectedRooms] = useState<number[]>([]);
     const [showMapZoom, setShowMapZoom] = useState(false);
+    const [mapOpenCount, setMapOpenCount] = useState(0);
+
+    const openMapZoom = () => {
+        setMapOpenCount(c => c + 1);
+        setShowMapZoom(true);
+    };
 
     const vacuum = entities.find(e => e.entity_id === entityId);
 
@@ -116,7 +122,7 @@ export default function RobiVacuumModal({
         <>
             <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: 20 }}>
                 {mapCamera && mapUrl && (
-                    <Pressable onPress={() => setShowMapZoom(true)} style={styles.mapContainer}>
+                    <Pressable onPress={openMapZoom} style={styles.mapContainer}>
                         <Image
                             source={{ uri: mapUrl }}
                             style={styles.mapImage}
@@ -269,7 +275,7 @@ export default function RobiVacuumModal({
                     <View style={styles.mapZoomContainer}>
                         {mapUrl && (
                             <ScrollView
-                                key={showMapZoom ? 'open' : 'closed'}
+                                key={`map-${mapOpenCount}`}
                                 maximumZoomScale={5}
                                 minimumZoomScale={1}
                                 centerContent
