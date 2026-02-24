@@ -264,14 +264,23 @@ export default function RobiVacuumModal({
                 <Pressable style={styles.mapZoomOverlay} onPress={() => setShowMapZoom(false)}>
                     <View style={styles.mapZoomContainer}>
                         {mapUrl && (
-                            <Image
-                                source={{ uri: mapUrl }}
-                                style={styles.mapZoomImage}
-                                resizeMode="contain"
-                            />
+                            <ScrollView
+                                maximumZoomScale={5}
+                                minimumZoomScale={1}
+                                centerContent
+                                showsHorizontalScrollIndicator={false}
+                                showsVerticalScrollIndicator={false}
+                                contentContainerStyle={{ flex: 1 }}
+                            >
+                                <Image
+                                    source={{ uri: mapUrl }}
+                                    style={styles.mapZoomImage}
+                                    resizeMode="contain"
+                                />
+                            </ScrollView>
                         )}
                     </View>
-                    <Pressable onPress={() => setShowMapZoom(false)} style={styles.mapZoomClose}>
+                    <Pressable onPress={() => setShowMapZoom(false)} style={styles.mapZoomClose} onStartShouldSetResponder={() => true}>
                         <X size={24} color="#fff" />
                     </Pressable>
                 </Pressable>
@@ -318,7 +327,7 @@ const styles = StyleSheet.create({
 
     cleanBtn: {
         flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
-        marginTop: 24, backgroundColor: '#3B82F6', borderRadius: 16,
+        marginTop: 10, backgroundColor: '#3B82F6', borderRadius: 16,
         paddingVertical: 16, paddingHorizontal: 24,
         shadowColor: '#3B82F6', shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.3, shadowRadius: 8, elevation: 8,
