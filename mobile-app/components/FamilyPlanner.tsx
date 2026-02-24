@@ -229,7 +229,17 @@ export const FamilyPlanner: React.FC<FamilyPlannerProps> = ({ visible, onClose }
 
     const isToday = (date: Date) => isSameDay(date, new Date());
 
-    const allEvents = [...events, ...haEvents];
+    // Deduplicate: filter out HA events that match a Supabase event (same title + same day)
+    const dedupedHaEvents = haEvents.filter(ha => {
+        const haStart = ha.start_date?.slice(0, 10);
+        const haTitle = ha.title.toLowerCase().trim();
+        return !events.some(e => {
+            const eStart = e.start_date?.slice(0, 10);
+            return e.title.toLowerCase().trim() === haTitle && eStart === haStart;
+        });
+    });
+
+    const allEvents = [...events, ...dedupedHaEvents];
 
     const getEventsForDay = (date: Date) =>
         allEvents.filter(e => {
