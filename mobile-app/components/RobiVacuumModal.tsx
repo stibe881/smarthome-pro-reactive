@@ -1,7 +1,6 @@
-import React, { useState, useRef } from 'react';
-import { View, Text, Modal, StyleSheet, Pressable, ScrollView, Image, Alert, Dimensions, Animated } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, Modal, StyleSheet, Pressable, ScrollView, Image, Alert, Dimensions } from 'react-native';
 import { useHomeAssistant } from '../contexts/HomeAssistantContext';
-import { PinchGestureHandler, State, GestureHandlerRootView } from 'react-native-gesture-handler';
 import {
     X, Play, Pause, Home,
     Bath, Armchair, Monitor, Refrigerator, BedDouble,
@@ -28,44 +27,6 @@ const ROOMS = [
 ];
 
 type TabKey = 'cleaning' | 'dock';
-
-// Pinch-to-zoom component with fully controlled Animated state
-function MapZoomContent({ uri }: { uri: string }) {
-    const scale = useRef(new Animated.Value(1)).current;
-    const lastScale = useRef(1);
-
-    const onPinchEvent = Animated.event(
-        [{ nativeEvent: { scale: scale } }],
-        { useNativeDriver: true }
-    );
-
-    const onPinchStateChange = (event: any) => {
-        if (event.nativeEvent.oldState === State.ACTIVE) {
-            // Clamp scale between 1 and 5
-            let newScale = lastScale.current * event.nativeEvent.scale;
-            if (newScale < 1) newScale = 1;
-            if (newScale > 5) newScale = 5;
-            lastScale.current = newScale;
-            scale.setOffset(newScale);
-            scale.setValue(1);
-        }
-    };
-
-    return (
-        <PinchGestureHandler
-            onGestureEvent={onPinchEvent}
-            onHandlerStateChange={onPinchStateChange}
-        >
-            <Animated.View style={{ flex: 1, transform: [{ scale }] }}>
-                <Image
-                    source={{ uri }}
-                    style={styles.mapZoomImage}
-                    resizeMode="contain"
-                />
-            </Animated.View>
-        </PinchGestureHandler>
-    );
-}
 
 export default function RobiVacuumModal({
     visible,
@@ -302,20 +263,32 @@ export default function RobiVacuumModal({
                 {activeTab === 'cleaning' ? renderCleaningTab() : renderDockTab()}
             </View>
 
-            {/* Map Zoom Modal */}
+            {/* Map Zoom Overlay — absolute positioned, no nested Modal */}
             {showMapZoom && (
-                <Modal visible animationType="fade" transparent onRequestClose={() => setShowMapZoom(false)}>
-                    <GestureHandlerRootView style={{ flex: 1 }}>
-                        <View style={styles.mapZoomOverlay}>
-                            <View style={styles.mapZoomContainer}>
-                                {mapUrl && <MapZoomContent uri={mapUrl} />}
-                            </View>
-                            <Pressable onPress={() => setShowMapZoom(false)} style={styles.mapZoomClose}>
-                                <X size={24} color="#fff" />
-                            </Pressable>
-                        </View>
-                    </GestureHandlerRootView>
-                </Modal>
+                <View style={styles.mapZoomOverlay}>
+                    <View style={styles.mapZoomContainer}>
+                        {mapUrl && (
+                            <ScrollView
+                                maximumZoomScale={5}
+                                minimumZoomScale={1}
+                                centerContent
+                                bouncesZoom
+                                showsHorizontalScrollIndicator={false}
+                                showsVerticalScrollIndicator={false}
+                                contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center' }}
+                            >
+                                <Image
+                                    source={{ uri: mapUrl }}
+                                    style={styles.mapZoomImage}
+                                    resizeMode="contain"
+                                />
+                            </ScrollView>
+                        )}
+                    </View>
+                    <Pressable onPress={() => setShowMapZoom(false)} style={styles.mapZoomClose}>
+                        <X size={24} color="#fff" />
+                    </Pressable>
+                </View>
             )}
         </Modal>
     );
@@ -372,8 +345,10 @@ const styles = StyleSheet.create({
 
     // Map Zoom
     mapZoomOverlay: {
-        flex: 1, backgroundColor: 'rgba(0,0,0,0.9)',
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(0,0,0,0.95)',
         justifyContent: 'center', alignItems: 'center',
+        zIndex: 999,
     },
     mapZoomContainer: {
         width: SCREEN_WIDTH - 32, height: SCREEN_HEIGHT * 0.7,
