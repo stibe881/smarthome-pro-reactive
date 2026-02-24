@@ -72,7 +72,7 @@ export const FamilyPlanner: React.FC<FamilyPlannerProps> = ({ visible, onClose }
     const { colors } = useTheme();
     const { user } = useAuth();
     const { householdId } = useHousehold();
-    const { entities, fetchCalendarEvents } = useHomeAssistant();
+    const { entities, fetchCalendarEvents, callService } = useHomeAssistant();
     const insets = useSafeAreaInsets();
 
     const [selectedDate, setSelectedDate] = useState(new Date());
@@ -91,6 +91,7 @@ export const FamilyPlanner: React.FC<FamilyPlannerProps> = ({ visible, onClose }
     const [formColor, setFormColor] = useState('#3B82F6');
     const [formCategory, setFormCategory] = useState('event');
     const [isSaving, setIsSaving] = useState(false);
+    const [formSyncCalendar, setFormSyncCalendar] = useState<string | null>(null);
     const [showDatePicker, setShowDatePicker] = useState<'start' | 'end' | 'startTime' | 'endTime' | null>(null);
 
     // HA Calendar integration
@@ -263,6 +264,7 @@ export const FamilyPlanner: React.FC<FamilyPlannerProps> = ({ visible, onClose }
         setFormAllDay(false);
         setFormColor('#3B82F6');
         setFormCategory('event');
+        setFormSyncCalendar(null);
         setShowCreateModal(true);
     };
 
@@ -275,6 +277,7 @@ export const FamilyPlanner: React.FC<FamilyPlannerProps> = ({ visible, onClose }
         setFormAllDay(event.all_day);
         setFormColor(event.color);
         setFormCategory(event.category);
+        setFormSyncCalendar(null);
         setShowCreateModal(true);
     };
 
@@ -309,8 +312,42 @@ export const FamilyPlanner: React.FC<FamilyPlannerProps> = ({ visible, onClose }
                 if (error) throw error;
             }
 
+            // Sync to HA calendar if selected
+            if (formSyncCalendar) {
+                try {
+                    const serviceData: any = {
+                        summary: formTitle.trim(),
+                    };
+                    if (formDescription.trim()) {
+                        serviceData.description = formDescription.trim();
+                    }
+                    if (formAllDay) {
+                        // HA expects YYYY-MM-DD for all-day events
+                        const startStr = formStartDate.toISOString().split('T')[0];
+                        const endDate = formEndDate || new Date(formStartDate.getTime() + 86400000);
+                        const endStr = endDate.toISOString().split('T')[0];
+                        serviceData.start_date = startStr;
+                        serviceData.end_date = endStr;
+                    } else {
+                        // HA expects YYYY-MM-DD HH:MM:SS for timed events
+                        const pad = (n: number) => n.toString().padStart(2, '0');
+                        const fmtDT = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:00`;
+                        serviceData.start_date_time = fmtDT(formStartDate);
+                        const endDT = formEndDate || new Date(formStartDate.getTime() + 3600000);
+                        serviceData.end_date_time = fmtDT(endDT);
+                    }
+                    callService('calendar', 'create_event', formSyncCalendar, serviceData);
+                } catch (syncErr) {
+                    console.warn('HA calendar sync failed:', syncErr);
+                }
+            }
+
             setShowCreateModal(false);
             loadEvents();
+            // Reload HA events after a short delay to pick up the synced event
+            if (formSyncCalendar) {
+                setTimeout(() => loadHaEvents(), 2000);
+            }
         } catch (e: any) {
             Alert.alert('Fehler', e.message);
         } finally {
@@ -666,6 +703,42 @@ export const FamilyPlanner: React.FC<FamilyPlannerProps> = ({ visible, onClose }
                                     />
                                 ))}
                             </View>
+
+                            {/* Calendar Sync */}
+                            {calendarSources.length > 0 && (
+                                <>
+                                    <Text style={[styles.formLabel, { color: colors.subtext, marginTop: 20 }]}>Kalender synchronisieren</Text>
+                                    <View style={styles.categoryRow}>
+                                        <Pressable
+                                            style={[
+                                                styles.categoryOption,
+                                                { borderColor: formSyncCalendar === null ? colors.accent : colors.border, backgroundColor: formSyncCalendar === null ? colors.accent + '15' : colors.card }
+                                            ]}
+                                            onPress={() => setFormSyncCalendar(null)}
+                                        >
+                                            <Text style={{ fontSize: 16 }}>🚫</Text>
+                                            <Text style={{ fontSize: 11, fontWeight: '600', color: formSyncCalendar === null ? colors.accent : colors.subtext, marginTop: 2 }}>Nicht sync.</Text>
+                                        </Pressable>
+                                        {calendarSources.filter(s => s.enabled).map(src => {
+                                            const labelInfo = CALENDAR_LABELS.find(l => l.key === src.label) || CALENDAR_LABELS[6];
+                                            const isSelected = formSyncCalendar === src.entity_id;
+                                            return (
+                                                <Pressable
+                                                    key={src.id}
+                                                    style={[
+                                                        styles.categoryOption,
+                                                        { borderColor: isSelected ? labelInfo.color : colors.border, backgroundColor: isSelected ? labelInfo.color + '15' : colors.card }
+                                                    ]}
+                                                    onPress={() => setFormSyncCalendar(src.entity_id)}
+                                                >
+                                                    <Text style={{ fontSize: 16 }}>{labelInfo.icon}</Text>
+                                                    <Text style={{ fontSize: 11, fontWeight: '600', color: isSelected ? labelInfo.color : colors.subtext, marginTop: 2 }}>{labelInfo.label}</Text>
+                                                </Pressable>
+                                            );
+                                        })}
+                                    </View>
+                                </>
+                            )}
 
                             <View style={{ height: 40 }} />
                         </ScrollView>
