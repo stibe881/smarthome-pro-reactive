@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
-import { View, Text, Modal, StyleSheet, Pressable, ScrollView, Image, useWindowDimensions, ActivityIndicator, TextInput, Alert, Switch, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, Modal, StyleSheet, Pressable, ScrollView, Image, useWindowDimensions, ActivityIndicator, TextInput, Alert, Switch, KeyboardAvoidingView, Platform, AppState } from 'react-native';
 import { X, Video as VideoIcon, Maximize2, Settings, Pencil, Trash2, Plus, Check, ChevronUp, ChevronDown, Volume2, VolumeX } from 'lucide-react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useHomeAssistant } from '../contexts/HomeAssistantContext';
@@ -113,20 +113,28 @@ export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
             .filter(Boolean);
     }, [entities, cameraConfigs]);
 
-    // Auto-Refresh for grid view
+    // Auto-Refresh for grid view (Battery: 10s interval, pauses when backgrounded)
     const [refreshTrigger, setRefreshTrigger] = React.useState(Date.now());
     React.useEffect(() => {
         if (!visible || fullscreenCamera) return;
-        const interval = setInterval(() => setRefreshTrigger(Date.now()), 5000);
-        return () => clearInterval(interval);
+        let interval: ReturnType<typeof setInterval> | null = null;
+        const start = () => { interval = setInterval(() => setRefreshTrigger(Date.now()), 10000); };
+        const stop = () => { if (interval) { clearInterval(interval); interval = null; } };
+        start();
+        const sub = AppState.addEventListener('change', (s) => { s === 'active' ? start() : stop(); });
+        return () => { stop(); sub.remove(); };
     }, [visible, fullscreenCamera]);
 
-    // Faster refresh for fullscreen
+    // Faster refresh for fullscreen (Battery: pauses when backgrounded)
     const [fullscreenRefresh, setFullscreenRefresh] = React.useState(Date.now());
     React.useEffect(() => {
         if (!fullscreenCamera) return;
-        const interval = setInterval(() => setFullscreenRefresh(Date.now()), 2000);
-        return () => clearInterval(interval);
+        let interval: ReturnType<typeof setInterval> | null = null;
+        const start = () => { interval = setInterval(() => setFullscreenRefresh(Date.now()), 2000); };
+        const stop = () => { if (interval) { clearInterval(interval); interval = null; } };
+        start();
+        const sub = AppState.addEventListener('change', (s) => { s === 'active' ? start() : stop(); });
+        return () => { stop(); sub.remove(); };
     }, [fullscreenCamera]);
 
     // Orientation handling

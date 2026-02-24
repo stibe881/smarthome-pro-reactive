@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, ScrollView, Pressable, Image, useWindowDimensions, StyleSheet, Alert, Modal, FlatList, Linking, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, Pressable, Image, useWindowDimensions, StyleSheet, Alert, Modal, FlatList, Linking, ActivityIndicator, AppState } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useHomeAssistant } from '../../contexts/HomeAssistantContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -1000,13 +1000,20 @@ const HeroPlayer = ({ player, massPlayer, imageUrl, massImageUrl, onSelect, onSp
 
     useEffect(() => {
         if (!isPlaying || !mediaDuration) return;
-        const interval = setInterval(() => {
-            setCurrentPosition((prev: number) => {
-                const next = prev + 1;
-                return next > mediaDuration ? mediaDuration : next;
-            });
-        }, 1000);
-        return () => clearInterval(interval);
+        let interval: ReturnType<typeof setInterval> | null = null;
+        const start = () => {
+            interval = setInterval(() => {
+                setCurrentPosition((prev: number) => {
+                    const next = prev + 1;
+                    return next > mediaDuration ? mediaDuration : next;
+                });
+            }, 1000);
+        };
+        const stop = () => { if (interval) { clearInterval(interval); interval = null; } };
+        start();
+        // Battery: pause progress bar timer when app is backgrounded
+        const sub = AppState.addEventListener('change', (s) => { s === 'active' ? start() : stop(); });
+        return () => { stop(); sub.remove(); };
     }, [isPlaying, mediaDuration, positionUpdatedAt]);
 
     const progress = mediaDuration > 0 ? Math.min(currentPosition / mediaDuration, 1) : 0;

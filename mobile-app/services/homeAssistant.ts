@@ -25,13 +25,13 @@ export class HomeAssistantService {
     private startPingInterval() {
         if (this.pingInterval) clearInterval(this.pingInterval);
         
-        // Ping every 30 seconds (Battery-Friendly Keep-Alive)
+        // Ping every 45 seconds (Battery-Friendly Keep-Alive, HA recommends 30-60s)
         this.pingInterval = setInterval(() => {
             if (this.isConnected()) {
                 const id = this.messageId++;
                 this.socket?.send(JSON.stringify({ id, type: 'ping' }));
             }
-        }, 30000);
+        }, 45000);
     }
 
     private stopPingInterval() {
