@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { View, Text, Modal, StyleSheet, Pressable, ScrollView, Image, Alert, Dimensions, Animated } from 'react-native';
 import { useHomeAssistant } from '../contexts/HomeAssistantContext';
-import { PinchGestureHandler, State } from 'react-native-gesture-handler';
+import { PinchGestureHandler, State, GestureHandlerRootView } from 'react-native-gesture-handler';
 import {
     X, Play, Pause, Home,
     Bath, Armchair, Monitor, Refrigerator, BedDouble,
@@ -305,14 +305,16 @@ export default function RobiVacuumModal({
             {/* Map Zoom Modal */}
             {showMapZoom && (
                 <Modal visible animationType="fade" transparent onRequestClose={() => setShowMapZoom(false)}>
-                    <View style={styles.mapZoomOverlay}>
-                        <View style={styles.mapZoomContainer}>
-                            {mapUrl && <MapZoomContent uri={mapUrl} />}
+                    <GestureHandlerRootView style={{ flex: 1 }}>
+                        <View style={styles.mapZoomOverlay}>
+                            <View style={styles.mapZoomContainer}>
+                                {mapUrl && <MapZoomContent uri={mapUrl} />}
+                            </View>
+                            <Pressable onPress={() => setShowMapZoom(false)} style={styles.mapZoomClose}>
+                                <X size={24} color="#fff" />
+                            </Pressable>
                         </View>
-                        <Pressable onPress={() => setShowMapZoom(false)} style={styles.mapZoomClose}>
-                            <X size={24} color="#fff" />
-                        </Pressable>
-                    </View>
+                    </GestureHandlerRootView>
                 </Modal>
             )}
         </Modal>
