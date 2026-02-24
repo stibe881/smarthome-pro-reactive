@@ -113,69 +113,73 @@ export default function RobiVacuumModal({
     const mapUrl = mapCamera ? getEntityPictureUrl(mapCamera.attributes.entity_picture) : null;
 
     const renderCleaningTab = () => (
-        <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: 40 }}>
-            {mapCamera && mapUrl && (
-                <Pressable onPress={() => setShowMapZoom(true)} style={styles.mapContainer}>
-                    <Image
-                        source={{ uri: mapUrl }}
-                        style={styles.mapImage}
-                        resizeMode="contain"
-                    />
-                </Pressable>
-            )}
+        <>
+            <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: 20 }}>
+                {mapCamera && mapUrl && (
+                    <Pressable onPress={() => setShowMapZoom(true)} style={styles.mapContainer}>
+                        <Image
+                            source={{ uri: mapUrl }}
+                            style={styles.mapImage}
+                            resizeMode="contain"
+                        />
+                    </Pressable>
+                )}
 
-            <View style={styles.controlsRow}>
-                <Pressable onPress={() => handleAction('start')} style={[styles.controlBtn, { backgroundColor: '#3B82F6' }]}>
-                    <Play size={24} color="#fff" fill="#fff" />
-                </Pressable>
-                <Pressable onPress={() => handleAction('pause')} style={[styles.controlBtn, { backgroundColor: '#F59E0B' }]}>
-                    <Pause size={24} color="#fff" fill="#fff" />
-                </Pressable>
-                <Pressable onPress={() => handleAction('return_to_base')} style={[styles.controlBtn, { backgroundColor: '#10B981' }]}>
-                    <Home size={24} color="#fff" />
-                </Pressable>
-            </View>
+                <View style={styles.controlsRow}>
+                    <Pressable onPress={() => handleAction('start')} style={[styles.controlBtn, { backgroundColor: '#3B82F6' }]}>
+                        <Play size={24} color="#fff" fill="#fff" />
+                    </Pressable>
+                    <Pressable onPress={() => handleAction('pause')} style={[styles.controlBtn, { backgroundColor: '#F59E0B' }]}>
+                        <Pause size={24} color="#fff" fill="#fff" />
+                    </Pressable>
+                    <Pressable onPress={() => handleAction('return_to_base')} style={[styles.controlBtn, { backgroundColor: '#10B981' }]}>
+                        <Home size={24} color="#fff" />
+                    </Pressable>
+                </View>
 
-            <Text style={styles.sectionTitle}>RAUM REINIGEN</Text>
-            <View style={styles.grid}>
-                {ROOMS.map((room) => {
-                    const Icon = room.icon;
-                    const isSelected = selectedRooms.includes(room.id);
-                    return (
-                        <Pressable
-                            key={room.id}
-                            style={[
-                                styles.roomBtn,
-                                isSelected && { borderColor: '#3B82F6', backgroundColor: '#3B82F6' + '20' },
-                            ]}
-                            onPress={() => toggleRoom(room.id)}
-                        >
-                            {isSelected && (
-                                <View style={styles.checkBadge}>
-                                    <Check size={12} color="#fff" />
+                <Text style={styles.sectionTitle}>RAUM REINIGEN</Text>
+                <View style={styles.grid}>
+                    {ROOMS.map((room) => {
+                        const Icon = room.icon;
+                        const isSelected = selectedRooms.includes(room.id);
+                        return (
+                            <Pressable
+                                key={room.id}
+                                style={[
+                                    styles.roomBtn,
+                                    isSelected && { borderColor: '#3B82F6', backgroundColor: '#3B82F6' + '20' },
+                                ]}
+                                onPress={() => toggleRoom(room.id)}
+                            >
+                                {isSelected && (
+                                    <View style={styles.checkBadge}>
+                                        <Check size={12} color="#fff" />
+                                    </View>
+                                )}
+                                <View style={styles.roomIcon}>
+                                    <Icon size={24} color={isSelected ? '#3B82F6' : '#fff'} />
                                 </View>
-                            )}
-                            <View style={styles.roomIcon}>
-                                <Icon size={24} color={isSelected ? '#3B82F6' : '#fff'} />
-                            </View>
-                            <Text style={[styles.roomName, isSelected && { color: '#3B82F6' }]}>
-                                {room.name}
-                            </Text>
-                        </Pressable>
-                    );
-                })}
-            </View>
+                                <Text style={[styles.roomName, isSelected && { color: '#3B82F6' }]}>
+                                    {room.name}
+                                </Text>
+                            </Pressable>
+                        );
+                    })}
+                </View>
+            </ScrollView>
 
-            {/* Clean button */}
+            {/* Clean button - fixed at bottom */}
             {selectedRooms.length > 0 && (
-                <Pressable onPress={cleanSelectedRooms} style={styles.cleanBtn}>
-                    <Play size={20} color="#fff" fill="#fff" />
-                    <Text style={styles.cleanBtnText}>
-                        {selectedRooms.length === 1 ? '1 Raum reinigen' : `${selectedRooms.length} Räume reinigen`}
-                    </Text>
-                </Pressable>
+                <View style={styles.cleanBtnWrapper}>
+                    <Pressable onPress={cleanSelectedRooms} style={styles.cleanBtn}>
+                        <Play size={20} color="#fff" fill="#fff" />
+                        <Text style={styles.cleanBtnText}>
+                            {selectedRooms.length === 1 ? '1 Raum reinigen' : `${selectedRooms.length} Räume reinigen`}
+                        </Text>
+                    </Pressable>
+                </View>
             )}
-        </ScrollView>
+        </>
     );
 
     const renderDockTab = () => (
@@ -325,9 +329,13 @@ const styles = StyleSheet.create({
     roomIcon: { marginBottom: 8 },
     roomName: { color: '#E2E8F0', fontSize: 12, fontWeight: '600', textAlign: 'center' },
 
+    cleanBtnWrapper: {
+        paddingHorizontal: 20, paddingBottom: 24, paddingTop: 8,
+        backgroundColor: '#020617',
+    },
     cleanBtn: {
         flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
-        marginTop: 10, backgroundColor: '#3B82F6', borderRadius: 16,
+        backgroundColor: '#3B82F6', borderRadius: 16,
         paddingVertical: 16, paddingHorizontal: 24,
         shadowColor: '#3B82F6', shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.3, shadowRadius: 8, elevation: 8,
