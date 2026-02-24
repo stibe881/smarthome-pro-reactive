@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { View, Text, Modal, Pressable, StyleSheet } from 'react-native';
-import { X, Clock, Moon, Square } from 'lucide-react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { X, Moon, Square } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
-import { useHomeAssistant } from '../contexts/HomeAssistantContext';
+import { useSleepTimer } from '../hooks/useSleepTimer';
 
 const DURATIONS = [15, 30, 45, 60, 90];
 
@@ -14,59 +13,7 @@ interface SleepTimerModalProps {
 
 export default function SleepTimerModal({ visible, onClose }: SleepTimerModalProps) {
     const { colors } = useTheme();
-    const { callService, entities } = useHomeAssistant();
-
-    const [timerEnd, setTimerEnd] = useState<number | null>(null);
-    const [activeDuration, setActiveDuration] = useState<number | null>(null);
-    const [remaining, setRemaining] = useState<number | null>(null);
-
-    // Sync with script state — reset if HA script is off
-    useEffect(() => {
-        const script = entities.find(e => e.entity_id === 'script.sleep_timer');
-        if (script && script.state === 'off') {
-            setTimerEnd(null);
-            setActiveDuration(null);
-            setRemaining(null);
-        }
-    }, [entities]);
-
-    // Countdown
-    useEffect(() => {
-        if (!timerEnd) return;
-        const tick = () => {
-            const left = Math.ceil((timerEnd - Date.now()) / 60000);
-            if (left <= 0) {
-                setRemaining(0);
-                setTimerEnd(null);
-            } else {
-                setRemaining(left);
-            }
-        };
-        tick();
-        const interval = setInterval(tick, 30000);
-        return () => clearInterval(interval);
-    }, [timerEnd]);
-
-    const startTimer = (min: number) => {
-        const now = Date.now();
-        setTimerEnd(now + min * 60000);
-        setActiveDuration(min);
-        setRemaining(min);
-        callService('script', 'turn_on', 'script.sleep_timer', {
-            variables: { duration: min, entity_id: 'media_player.shield_schlafzimmer' }
-        });
-    };
-
-    const stopTimer = () => {
-        setTimerEnd(null);
-        setActiveDuration(null);
-        setRemaining(null);
-        callService('script', 'turn_on', 'script.sleep_timer_cancel', {
-            variables: { entity_id: 'media_player.shield_schlafzimmer' }
-        });
-    };
-
-    const isRunning = !!timerEnd;
+    const { isRunning, remaining, activeDuration, startTimer, stopTimer } = useSleepTimer();
 
     return (
         <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>

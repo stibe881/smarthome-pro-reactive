@@ -18,6 +18,7 @@ import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import Slider from '@react-native-community/slider';
 import LightControlModal from '../../components/LightControlModal';
+import { useSleepTimer } from '../../hooks/useSleepTimer';
 import ShutterControlModal from '../../components/ShutterControlModal';
 import { RoomEditModal } from '../../components/RoomEditModal';
 import { RoomContentEditModal, loadRoomOverride, applyRoomOverrides } from '../../components/RoomContentEditModal';
@@ -2006,55 +2007,16 @@ export default function Rooms() {
 
     const activeRoomData = useMemo(() => rooms.find(r => r.name === selectedRoom), [rooms, selectedRoom]);
 
-    // Sleep Timer Logic
-    const [sleepTimerEnd, setSleepTimerEnd] = useState<number | null>(null);
-    const [activeDuration, setActiveDuration] = useState<number | null>(null);
-    const [remainingTime, setRemainingTime] = useState<number | null>(null);
-
-    // Sync with script state
-    useEffect(() => {
-        const script = entities.find(e => e.entity_id === 'script.sleep_timer');
-        if (script && script.state === 'off') {
-            setSleepTimerEnd(null);
-            setActiveDuration(null);
-            setRemainingTime(null);
-        }
-    }, [entities]);
-
-    // Countdown interval
-    useEffect(() => {
-        if (!sleepTimerEnd) return;
-        const interval = setInterval(() => {
-            const now = Date.now();
-            const left = Math.ceil((sleepTimerEnd - now) / 60000);
-            if (left <= 0) {
-                setRemainingTime(0);
-                setSleepTimerEnd(null); // Expired locally
-            } else {
-                setRemainingTime(left);
-            }
-        }, 30000); // Check every 30s — display only shows whole minutes
-        return () => clearInterval(interval);
-    }, [sleepTimerEnd]);
+    // Sleep Timer Logic — shared with homescreen via useSleepTimer hook
+    const sharedSleepTimer = useSleepTimer();
 
     const sleepTimerState = useMemo(() => ({
-        activeDuration,
-        remaining: remainingTime,
-        isRunning: !!sleepTimerEnd,
-        startTimer: (min: number) => {
-            const now = Date.now();
-            setSleepTimerEnd(now + min * 60000);
-            setActiveDuration(min);
-            setRemainingTime(min);
-            api.callService('script', 'turn_on', 'script.sleep_timer', { variables: { duration: min, entity_id: 'media_player.shield_schlafzimmer' } });
-        },
-        stopTimer: () => {
-            setSleepTimerEnd(null);
-            setActiveDuration(null);
-            setRemainingTime(null);
-            api.callService('script', 'turn_on', 'script.sleep_timer_cancel', { variables: { entity_id: 'media_player.shield_schlafzimmer' } });
-        }
-    }), [activeDuration, remainingTime, sleepTimerEnd, api]);
+        activeDuration: sharedSleepTimer.activeDuration,
+        remaining: sharedSleepTimer.remaining,
+        isRunning: sharedSleepTimer.isRunning,
+        startTimer: sharedSleepTimer.startTimer,
+        stopTimer: sharedSleepTimer.stopTimer,
+    }), [sharedSleepTimer]);
 
     const closeModal = useCallback(() => setSelectedRoom(null), []);
 
