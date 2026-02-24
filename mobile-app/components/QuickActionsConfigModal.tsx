@@ -13,7 +13,7 @@ interface QuickActionConfig {
     iconName: string;
     color: string;
     description: string;
-    type: 'script' | 'button' | 'switch' | 'cover_open' | 'cover_close' | 'vacuum_start' | 'vacuum_home' | 'lights_off' | 'lights_on';
+    type: 'script' | 'button' | 'switch' | 'cover_open' | 'cover_close' | 'vacuum_start' | 'vacuum_home' | 'lights_off' | 'lights_on' | 'sleep_timer';
     entityId?: string;
 }
 
@@ -32,6 +32,7 @@ const BUILTIN_ACTIONS: { type: string; label: string; description: string }[] = 
     { type: 'vacuum_home', label: 'Saugroboter Basis', description: 'Schickt den Saugroboter zurück.' },
     { type: 'lights_off', label: 'Alle Lichter aus', description: 'Schaltet alle Lichter im Haus aus.' },
     { type: 'lights_on', label: 'Alle Lichter an', description: 'Schaltet alle Lichter im Haus an.' },
+    { type: 'sleep_timer', label: 'Sleep Timer', description: 'TV-Ausschalt-Timer mit wählbarer Dauer.' },
 ];
 
 const COLOR_PRESETS = ['#F59E0B', '#EC4899', '#60A5FA', '#3B82F6', '#10B981', '#8B5CF6', '#EF4444', '#F97316', '#14B8A6', '#6366F1'];

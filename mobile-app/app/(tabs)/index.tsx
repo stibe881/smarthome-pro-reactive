@@ -31,6 +31,7 @@ import ActionFeedbackModal from '../../components/ActionFeedbackModal';
 import QuickActionInfoModal, { QuickActionInfo } from '../../components/QuickActionInfoModal';
 import ShutterControlModal from '../../components/ShutterControlModal';
 import NotificationBell from '../../components/NotificationBell';
+import SleepTimerModal from '../../components/SleepTimerModal';
 import { EntityState } from '../../contexts/HomeAssistantContext';
 
 interface HeroStatCardProps {
@@ -122,14 +123,14 @@ interface QuickActionConfig {
     iconName: string;
     color: string;
     description: string;
-    type: 'script' | 'button' | 'switch' | 'cover_open' | 'cover_close' | 'vacuum_start' | 'vacuum_home' | 'lights_off' | 'lights_on';
+    type: 'script' | 'button' | 'switch' | 'cover_open' | 'cover_close' | 'vacuum_start' | 'vacuum_home' | 'lights_off' | 'lights_on' | 'sleep_timer';
     entityId?: string; // for script/button/switch types
 }
 
 const ICON_MAP: Record<string, LucideIcon> = {
     Sun, Moon, Clapperboard, Blinds, Bot, BedDouble, Lightbulb, Power,
     Home, Star, Shield, Fan, Bell, Zap, Music, Play, Lock, Unlock,
-    DoorOpen, DoorClosed, RefreshCw, Clock, Video, Baby, PartyPopper,
+    DoorOpen, DoorClosed, RefreshCw, Clock, Video, Baby, PartyPopper, Tv,
 };
 
 const DEFAULT_QUICK_ACTIONS: QuickActionConfig[] = [
@@ -529,6 +530,7 @@ export default function Dashboard() {
     const [showWeatherForecast, setShowWeatherForecast] = useState(false);
     const [activeFeedback, setActiveFeedback] = useState<'sleep' | 'morning' | 'movie' | 'covers_open' | 'covers_close' | 'vacuum' | 'shop_debug' | null>(null);
     const [quickActionInfo, setQuickActionInfo] = useState<QuickActionInfo | null>(null);
+    const [showSleepTimer, setShowSleepTimer] = useState(false);
 
     const handleCalendarPress = (calendar: any) => {
         // Logic: if birthday (geburtstage_2), else use the clicked calendar's ID
@@ -1416,6 +1418,9 @@ export default function Dashboard() {
                                     case 'lights_on':
                                         handleAllLightsOn();
                                         break;
+                                    case 'sleep_timer':
+                                        setShowSleepTimer(true);
+                                        break;
                                 }
                             };
 
@@ -1867,6 +1872,11 @@ export default function Dashboard() {
             <ConnectionWizard
                 visible={showWizard}
                 onClose={() => setShowWizard(false)}
+            />
+
+            <SleepTimerModal
+                visible={showSleepTimer}
+                onClose={() => setShowSleepTimer(false)}
             />
         </SafeAreaView >
     );
