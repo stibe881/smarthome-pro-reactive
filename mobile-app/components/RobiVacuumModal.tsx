@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, Modal, StyleSheet, Pressable, ScrollView, Image, Alert, Dimensions } from 'react-native';
 import { useHomeAssistant } from '../contexts/HomeAssistantContext';
 import {
@@ -27,6 +27,37 @@ const ROOMS = [
 ];
 
 type TabKey = 'cleaning' | 'dock';
+
+// Separate component so it fully remounts each time the popup opens
+function MapZoomContent({ uri }: { uri: string }) {
+    const scrollRef = useRef<ScrollView>(null);
+
+    useEffect(() => {
+        // Force reset scroll position and zoom on mount
+        setTimeout(() => {
+            scrollRef.current?.scrollTo({ x: 0, y: 0, animated: false });
+        }, 50);
+    }, []);
+
+    return (
+        <ScrollView
+            ref={scrollRef}
+            maximumZoomScale={5}
+            minimumZoomScale={1}
+            zoomScale={1}
+            centerContent
+            showsHorizontalScrollIndicator={false}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ flex: 1 }}
+        >
+            <Image
+                source={{ uri }}
+                style={styles.mapZoomImage}
+                resizeMode="contain"
+            />
+        </ScrollView>
+    );
+}
 
 export default function RobiVacuumModal({
     visible,
@@ -268,22 +299,7 @@ export default function RobiVacuumModal({
                 <Modal visible animationType="fade" transparent onRequestClose={() => setShowMapZoom(false)}>
                     <View style={styles.mapZoomOverlay}>
                         <View style={styles.mapZoomContainer}>
-                            {mapUrl && (
-                                <ScrollView
-                                    maximumZoomScale={5}
-                                    minimumZoomScale={1}
-                                    centerContent
-                                    showsHorizontalScrollIndicator={false}
-                                    showsVerticalScrollIndicator={false}
-                                    contentContainerStyle={{ flex: 1 }}
-                                >
-                                    <Image
-                                        source={{ uri: mapUrl }}
-                                        style={styles.mapZoomImage}
-                                        resizeMode="contain"
-                                    />
-                                </ScrollView>
-                            )}
+                            {mapUrl && <MapZoomContent uri={mapUrl} />}
                         </View>
                         <Pressable onPress={() => setShowMapZoom(false)} style={styles.mapZoomClose}>
                             <X size={24} color="#fff" />
