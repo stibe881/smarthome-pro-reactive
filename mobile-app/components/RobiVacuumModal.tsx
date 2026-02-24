@@ -1,6 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, Modal, StyleSheet, Pressable, ScrollView, Image, Alert, Dimensions } from 'react-native';
+import React, { useState, useRef } from 'react';
+import { View, Text, Modal, StyleSheet, Pressable, ScrollView, Image, Alert, Dimensions, Animated } from 'react-native';
 import { useHomeAssistant } from '../contexts/HomeAssistantContext';
+import { PinchGestureHandler, State } from 'react-native-gesture-handler';
 import {
     X, Play, Pause, Home,
     Bath, Armchair, Monitor, Refrigerator, BedDouble,
@@ -28,34 +29,41 @@ const ROOMS = [
 
 type TabKey = 'cleaning' | 'dock';
 
-// Separate component so it fully remounts each time the popup opens
+// Pinch-to-zoom component with fully controlled Animated state
 function MapZoomContent({ uri }: { uri: string }) {
-    const scrollRef = useRef<ScrollView>(null);
+    const scale = useRef(new Animated.Value(1)).current;
+    const lastScale = useRef(1);
 
-    useEffect(() => {
-        // Force reset scroll position and zoom on mount
-        setTimeout(() => {
-            scrollRef.current?.scrollTo({ x: 0, y: 0, animated: false });
-        }, 50);
-    }, []);
+    const onPinchEvent = Animated.event(
+        [{ nativeEvent: { scale: scale } }],
+        { useNativeDriver: true }
+    );
+
+    const onPinchStateChange = (event: any) => {
+        if (event.nativeEvent.oldState === State.ACTIVE) {
+            // Clamp scale between 1 and 5
+            let newScale = lastScale.current * event.nativeEvent.scale;
+            if (newScale < 1) newScale = 1;
+            if (newScale > 5) newScale = 5;
+            lastScale.current = newScale;
+            scale.setOffset(newScale);
+            scale.setValue(1);
+        }
+    };
 
     return (
-        <ScrollView
-            ref={scrollRef}
-            maximumZoomScale={5}
-            minimumZoomScale={1}
-            zoomScale={1}
-            centerContent
-            showsHorizontalScrollIndicator={false}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ flex: 1 }}
+        <PinchGestureHandler
+            onGestureEvent={onPinchEvent}
+            onHandlerStateChange={onPinchStateChange}
         >
-            <Image
-                source={{ uri }}
-                style={styles.mapZoomImage}
-                resizeMode="contain"
-            />
-        </ScrollView>
+            <Animated.View style={{ flex: 1, transform: [{ scale }] }}>
+                <Image
+                    source={{ uri }}
+                    style={styles.mapZoomImage}
+                    resizeMode="contain"
+                />
+            </Animated.View>
+        </PinchGestureHandler>
     );
 }
 
