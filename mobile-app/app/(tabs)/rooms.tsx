@@ -1021,6 +1021,30 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, on
                     )}
 
                     <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+                        {/* Sleep Timer Active Banner */}
+                        {sleepTimerState.isRunning && (
+                            <Pressable
+                                onPress={sleepTimerState.stopTimer}
+                                style={{
+                                    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                                    marginHorizontal: 16, marginTop: 16, padding: 14, borderRadius: 14,
+                                    backgroundColor: '#8B5CF6' + '18', borderWidth: 1, borderColor: '#8B5CF6' + '30',
+                                }}
+                            >
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                                    <Timer size={20} color="#8B5CF6" />
+                                    <View>
+                                        <Text style={{ color: colors.text, fontWeight: '700', fontSize: 14 }}>
+                                            Sleep Timer — {sleepTimerState.remaining ?? 0} Min
+                                        </Text>
+                                        <Text style={{ color: colors.subtext, fontSize: 11, marginTop: 1 }}>
+                                            von {sleepTimerState.activeDuration} Min · Tippen zum Stoppen
+                                        </Text>
+                                    </View>
+                                </View>
+                                <Square size={18} color="#EF4444" />
+                            </Pressable>
+                        )}
                         {/* Dynamic sections based on group order */}
                         {(displayRoom._groupOrder || ['sensors', 'scripts', 'climates', 'lights', 'helpers', 'covers', 'mediaPlayers', 'cameras']).map((groupId: string) => {
                             // Skip hidden groups
