@@ -86,6 +86,7 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
     const [formSourceUrl, setFormSourceUrl] = useState('');
     const [isSaving, setIsSaving] = useState(false);
     const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null);
+    const [showCategoryPicker, setShowCategoryPicker] = useState(false);
 
     const loadRecipes = useCallback(async () => {
         if (!householdId) return;
@@ -326,6 +327,39 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
         Share.share({ message: text, title: recipe.title });
     };
 
+    const handleAssignCategory = async (recipe: Recipe, categoryKey: string) => {
+        try {
+            await supabase.from('family_recipes').update({ category: categoryKey }).eq('id', recipe.id);
+            setRecipes(prev => prev.map(r => r.id === recipe.id ? { ...r, category: categoryKey } : r));
+            if (selectedRecipe?.id === recipe.id) {
+                setSelectedRecipe(prev => prev ? { ...prev, category: categoryKey } : prev);
+            }
+            setShowCategoryPicker(false);
+        } catch (e: any) {
+            Alert.alert('Fehler', e.message);
+        }
+    };
+
+    const handlePlanRecipe = async (recipe: Recipe) => {
+        if (!householdId) return;
+        try {
+            const today = new Date().toISOString().split('T')[0];
+            const { error } = await supabase.from('family_planner').insert({
+                household_id: householdId,
+                created_by: user?.id,
+                title: recipe.title,
+                description: recipe.description || '',
+                type: 'recipe',
+                date: today,
+                recipe_id: recipe.id,
+            });
+            if (error) throw error;
+            Alert.alert('Geplant ✓', `"${recipe.title}" wurde zum Planer hinzugefügt.`);
+        } catch (e: any) {
+            Alert.alert('Fehler', e.message);
+        }
+    };
+
     if (!visible) return null;
 
     // --- LIST VIEW ---
@@ -491,13 +525,39 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
                     </View>
 
                     {/* Categories */}
-                    <View style={[styles.detailSection, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                    <Pressable
+                        style={[styles.detailSection, { backgroundColor: colors.card, borderColor: colors.border }]}
+                        onPress={() => setShowCategoryPicker(true)}
+                    >
                         <View style={styles.detailRow}>
                             <Tag size={18} color={colors.subtext} />
-                            <Text style={[styles.detailRowLabel, { color: colors.text }]}>Kategorien zuweisen</Text>
+                            <Text style={[styles.detailRowLabel, { color: colors.text }]}>
+                                {RECIPE_CATEGORIES.find(c => c.key === r.category)?.label || 'Kategorien zuweisen'}
+                            </Text>
                             <ChevronRight size={16} color={colors.subtext} />
                         </View>
-                    </View>
+                    </Pressable>
+
+                    {/* Category Picker */}
+                    <Modal visible={showCategoryPicker} transparent animationType="slide" onRequestClose={() => setShowCategoryPicker(false)}>
+                        <Pressable style={styles.overlay} onPress={() => setShowCategoryPicker(false)}>
+                            <View style={[styles.bottomSheet, { backgroundColor: colors.background }]}>
+                                <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
+                                <Text style={[styles.sheetTitle, { color: colors.text }]}>Kategorie wählen</Text>
+                                {RECIPE_CATEGORIES.map(cat => (
+                                    <Pressable
+                                        key={cat.key}
+                                        style={[styles.catPickerRow, r.category === cat.key && { backgroundColor: colors.accent + '15' }]}
+                                        onPress={() => handleAssignCategory(r, cat.key)}
+                                    >
+                                        <Text style={{ fontSize: 20 }}>{cat.emoji}</Text>
+                                        <Text style={[styles.catPickerLabel, { color: r.category === cat.key ? colors.accent : colors.text }]}>{cat.label}</Text>
+                                        {r.category === cat.key && <Check size={18} color={colors.accent} />}
+                                    </Pressable>
+                                ))}
+                            </View>
+                        </Pressable>
+                    </Modal>
 
                     {/* Ingredients */}
                     {r.ingredients && r.ingredients.trim() && (
@@ -530,18 +590,21 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
                     )}
 
                     {/* More info */}
-                    <View style={[styles.detailSection, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                    <Pressable
+                        style={[styles.detailSection, { backgroundColor: colors.card, borderColor: colors.border }]}
+                        onPress={() => openEdit(r)}
+                    >
                         <View style={styles.detailRow}>
                             <BookOpen size={18} color={colors.subtext} />
                             <Text style={[styles.detailRowLabel, { color: colors.text }]}>Weitere Infos hinzufügen (Zeit, Foto...)</Text>
                             <ChevronRight size={16} color={colors.subtext} />
                         </View>
-                    </View>
+                    </Pressable>
                 </ScrollView>
 
                 {/* Plan recipe button */}
                 <View style={styles.planBtnWrap}>
-                    <Pressable style={[styles.planBtn, { backgroundColor: colors.accent }]}>
+                    <Pressable style={[styles.planBtn, { backgroundColor: colors.accent }]} onPress={() => handlePlanRecipe(r)}>
                         <ChefHat size={18} color="#fff" />
                         <Text style={styles.planBtnText}>Dieses Rezept planen</Text>
                     </Pressable>
@@ -869,4 +932,11 @@ const styles = StyleSheet.create({
         paddingVertical: 16, paddingHorizontal: 32, borderRadius: 28, width: '100%',
     },
     webSaveBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+
+    // Category picker
+    catPickerRow: {
+        flexDirection: 'row', alignItems: 'center', gap: 12,
+        paddingHorizontal: 20, paddingVertical: 14, borderRadius: 10,
+    },
+    catPickerLabel: { fontSize: 15, fontWeight: '500', flex: 1 },
 });

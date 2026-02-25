@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     View, Text, StyleSheet, Pressable, ScrollView, TextInput,
-    ActivityIndicator, Alert, Modal, Platform, Dimensions,
+    ActivityIndicator, Alert, Modal, Platform, Dimensions, Linking,
 } from 'react-native';
 import {
     X, Plus, Search, Trash2, Download, Upload, ArrowLeft,
@@ -61,6 +61,10 @@ export function FamilyDocuments({ visible, onClose }: FamilyDocumentsProps) {
     const [showCategorize, setShowCategorize] = useState(false);
     const [uploadCategory, setUploadCategory] = useState('private');
     const [uploadDescription, setUploadDescription] = useState('');
+    const [sortMode, setSortMode] = useState<'date_desc' | 'date_asc' | 'name_asc' | 'name_desc'>('date_desc');
+    const [viewAsList, setViewAsList] = useState(false);
+    const [showCreateFolder, setShowCreateFolder] = useState(false);
+    const [newFolderName, setNewFolderName] = useState('');
 
     const loadDocuments = useCallback(async () => {
         if (!householdId) return;
@@ -88,7 +92,14 @@ export function FamilyDocuments({ visible, onClose }: FamilyDocumentsProps) {
     }, [visible, loadDocuments]);
 
     const getDocCount = (folderKey: string) => documents.filter(d => d.category === folderKey).length;
-    const folderDocs = activeFolder ? documents.filter(d => d.category === activeFolder) : [];
+    const folderDocs = activeFolder ? documents.filter(d => d.category === activeFolder).sort((a, b) => {
+        switch (sortMode) {
+            case 'date_asc': return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+            case 'name_asc': return a.file_name.localeCompare(b.file_name);
+            case 'name_desc': return b.file_name.localeCompare(a.file_name);
+            default: return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        }
+    }) : [];
 
     const getFileIcon = (type: string) => {
         if (type.includes('image')) return '🖼️';
@@ -183,11 +194,44 @@ export function FamilyDocuments({ visible, onClose }: FamilyDocumentsProps) {
         }
     };
 
-    // Create folder (placeholder)
+    // Create folder
     const handleCreateFolder = () => {
         setShowUploadSheet(false);
         setShowOptionsSheet(false);
-        Alert.alert('Ordner erstellen', 'Diese Funktion wird bald verfügbar sein.');
+        setNewFolderName('');
+        setShowCreateFolder(true);
+    };
+
+    const confirmCreateFolder = () => {
+        const name = newFolderName.trim();
+        if (!name) {
+            Alert.alert('Fehler', 'Bitte gib einen Ordnernamen ein.');
+            return;
+        }
+        // Use the folder name as category key - jump into it
+        setShowCreateFolder(false);
+        setActiveFolder(name.toLowerCase().replace(/\s+/g, '_'));
+        Alert.alert('Ordner erstellt', `Der Ordner "${name}" wurde erstellt.`);
+    };
+
+    const getSortLabel = () => {
+        switch (sortMode) {
+            case 'date_desc': return 'Datum (neueste)';
+            case 'date_asc': return 'Datum (älteste)';
+            case 'name_asc': return 'Name (A-Z)';
+            case 'name_desc': return 'Name (Z-A)';
+        }
+    };
+
+    const cycleSortMode = () => {
+        const modes: typeof sortMode[] = ['date_desc', 'date_asc', 'name_asc', 'name_desc'];
+        const idx = modes.indexOf(sortMode);
+        setSortMode(modes[(idx + 1) % modes.length]);
+    };
+
+    const handleFeedback = () => {
+        setShowOptionsSheet(false);
+        Linking.openURL('mailto:info@gross-ict.ch?subject=Feedback%20HomePilot%20Dokumenten-Safe');
     };
 
     const confirmUpload = async () => {
@@ -311,17 +355,17 @@ export function FamilyDocuments({ visible, onClose }: FamilyDocumentsProps) {
                         <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Einen Ordner erstellen</Text>
                     </Pressable>
 
-                    <Pressable style={styles.sheetRow} onPress={() => setShowOptionsSheet(false)}>
+                    <Pressable style={styles.sheetRow} onPress={() => { setViewAsList(!viewAsList); setShowOptionsSheet(false); }}>
                         <List size={20} color={colors.subtext} />
-                        <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Ansicht: Liste</Text>
+                        <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Ansicht: {viewAsList ? 'Raster' : 'Liste'}</Text>
                     </Pressable>
 
-                    <Pressable style={styles.sheetRow} onPress={() => setShowOptionsSheet(false)}>
+                    <Pressable style={styles.sheetRow} onPress={() => { cycleSortMode(); setShowOptionsSheet(false); }}>
                         <ArrowUpDown size={20} color={colors.subtext} />
-                        <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Sortieren: Geändertes Datum (neuestes)</Text>
+                        <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Sortieren: {getSortLabel()}</Text>
                     </Pressable>
 
-                    <Pressable style={styles.sheetRow} onPress={() => setShowOptionsSheet(false)}>
+                    <Pressable style={styles.sheetRow} onPress={handleFeedback}>
                         <MessageCircle size={20} color={colors.subtext} />
                         <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Feedback geben</Text>
                     </Pressable>
@@ -463,6 +507,38 @@ export function FamilyDocuments({ visible, onClose }: FamilyDocumentsProps) {
 
             {/* Options Sheet */}
             {renderOptionsSheet()}
+
+            {/* Create Folder Modal */}
+            <Modal visible={showCreateFolder} transparent animationType="fade" onRequestClose={() => setShowCreateFolder(false)}>
+                <Pressable style={styles.overlay} onPress={() => setShowCreateFolder(false)}>
+                    <View style={[styles.categorizeSheet, { backgroundColor: colors.background }]}>
+                        <Text style={[styles.categorizeTitle, { color: colors.text }]}>Neuer Ordner</Text>
+                        <TextInput
+                            style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
+                            value={newFolderName}
+                            onChangeText={setNewFolderName}
+                            placeholder="Ordnername"
+                            placeholderTextColor={colors.subtext}
+                            autoFocus
+                            maxLength={50}
+                        />
+                        <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
+                            <Pressable
+                                style={[styles.btnSecondary, { borderColor: colors.border }]}
+                                onPress={() => setShowCreateFolder(false)}
+                            >
+                                <Text style={{ color: colors.text, fontWeight: '600' }}>Abbrechen</Text>
+                            </Pressable>
+                            <Pressable
+                                style={[styles.btnPrimary, { backgroundColor: colors.accent }]}
+                                onPress={confirmCreateFolder}
+                            >
+                                <Text style={{ color: '#fff', fontWeight: '600' }}>Erstellen</Text>
+                            </Pressable>
+                        </View>
+                    </View>
+                </Pressable>
+            </Modal>
 
             {/* Categorize File Modal */}
             <Modal visible={showCategorize} transparent animationType="fade" onRequestClose={() => setShowCategorize(false)}>
