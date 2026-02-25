@@ -148,6 +148,30 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
         } catch { return url; }
     };
 
+    // Scrape og:image, og:title, og:description from a URL
+    const fetchWebMeta = async (url: string): Promise<{ title?: string; image?: string; description?: string }> => {
+        try {
+            const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+            const html = await res.text();
+            const getMeta = (property: string): string | undefined => {
+                const regex = new RegExp(`<meta[^>]*(?:property|name)=["']${property}["'][^>]*content=["']([^"']*)["']`, 'i');
+                const match = html.match(regex);
+                if (match) return match[1];
+                // Try reversed attribute order
+                const regex2 = new RegExp(`<meta[^>]*content=["']([^"']*)["'][^>]*(?:property|name)=["']${property}["']`, 'i');
+                const match2 = html.match(regex2);
+                return match2 ? match2[1] : undefined;
+            };
+            const title = getMeta('og:title') || html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1];
+            const image = getMeta('og:image');
+            const description = getMeta('og:description') || getMeta('description');
+            return { title: title?.trim(), image, description: description?.trim() };
+        } catch (e) {
+            console.log('fetchWebMeta error:', e);
+            return {};
+        }
+    };
+
     const resetForm = () => {
         setFormTitle(''); setFormDescription(''); setFormIngredients('');
         setFormInstructions(''); setFormServings(''); setFormPrepTime('');
@@ -244,12 +268,17 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
         if (!formSourceUrl.trim() || !householdId) return Alert.alert('Fehler', 'Bitte gib eine URL ein.');
         setIsSaving(true);
         try {
-            const domain = getSourceDomain(formSourceUrl.trim());
+            const url = formSourceUrl.trim();
+            const domain = getSourceDomain(url);
+            // Try to scrape metadata from the page
+            const meta = await fetchWebMeta(url);
             const { error } = await supabase.from('family_recipes').insert({
                 household_id: householdId,
                 created_by: user?.id,
-                title: domain || 'Webrezept',
-                source_url: formSourceUrl.trim(),
+                title: meta.title || formTitle.trim() || domain || 'Webrezept',
+                description: meta.description || null,
+                image_url: meta.image || null,
+                source_url: url,
                 ingredients: '',
                 instructions: '',
                 servings: 4,
@@ -550,7 +579,13 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
                     <Text style={[styles.formRowLabel, { color: formImageUrl ? colors.text : colors.subtext }]}>
                         {formImageUrl ? 'Foto ändern' : 'Foto hinzufügen'}
                     </Text>
+                    {formImageUrl ? (
+                        <Image source={{ uri: formImageUrl }} style={{ width: 40, height: 40, borderRadius: 8 }} />
+                    ) : null}
                 </Pressable>
+                {formImageUrl ? (
+                    <Image source={{ uri: formImageUrl }} style={{ width: '100%', height: 180, borderRadius: 12, marginBottom: 4 }} resizeMode="cover" />
+                ) : null}
 
                 {/* Description */}
                 <Pressable style={[styles.formRow, { borderBottomColor: colors.border }]}>
