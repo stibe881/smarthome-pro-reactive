@@ -26,7 +26,7 @@ interface SubscriptionContextType {
     presentPaywall: () => Promise<boolean>;
     restorePurchases: () => Promise<boolean>;
     refreshStatus: () => Promise<void>;
-    resetUser: () => Promise<void>;
+    manageSubscriptions: () => Promise<void>;
 }
 
 const SubscriptionContext = createContext<SubscriptionContextType>({
@@ -36,7 +36,7 @@ const SubscriptionContext = createContext<SubscriptionContextType>({
     presentPaywall: async () => false,
     restorePurchases: async () => false,
     refreshStatus: async () => { },
-    resetUser: async () => { },
+    manageSubscriptions: async () => { },
 });
 
 export function useSubscription() {
@@ -146,20 +146,14 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
             console.error('Refresh status error:', e);
         }
     }, []);
-    const resetUser = useCallback(async () => {
+    const manageSubscriptions = useCallback(async () => {
         if (!isNativeAvailable) return;
         try {
             const Purchases = require('react-native-purchases').default;
-            await Purchases.logOut();
-            const info = await Purchases.getCustomerInfo();
-            const has = typeof info.entitlements.active[ENTITLEMENT_ID] !== 'undefined';
-            setIsProUser(has);
-            const activeEnts = Object.keys(info.entitlements.active);
-            setDebugInfo(`RESET! | userId: ${info.originalAppUserId} | hasEnt: ${has} | active: [${activeEnts.join(',')}]`);
-            Alert.alert('Reset', `Neuer User: ${info.originalAppUserId}\nhasEnt: ${has}`);
+            await Purchases.showManageSubscriptions();
         } catch (e) {
-            console.error('Reset user error:', e);
-            Alert.alert('Reset Error', String(e));
+            console.error('Manage subscriptions error:', e);
+            Alert.alert('Fehler', String(e));
         }
     }, []);
 
@@ -171,7 +165,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
             presentPaywall,
             restorePurchases,
             refreshStatus,
-            resetUser,
+            manageSubscriptions,
         }}>
             {children}
         </SubscriptionContext.Provider>
