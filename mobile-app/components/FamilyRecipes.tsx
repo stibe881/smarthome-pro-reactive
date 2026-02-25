@@ -371,7 +371,7 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
                     <Home size={22} color={colors.accent} />
                 </Pressable>
                 <Text style={[styles.headerTitle, { color: colors.text }]}>Rezeptbox</Text>
-                <Pressable hitSlop={12}>
+                <Pressable hitSlop={12} onPress={() => setShowNewPicker(true)}>
                     <MoreHorizontal size={22} color={colors.accent} />
                 </Pressable>
             </View>
@@ -665,12 +665,27 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
                 </Pressable>
 
                 {/* Categories - navigable row */}
-                <View style={[styles.formRow, { borderBottomColor: colors.border }]}>
+                <Pressable style={[styles.formRow, { borderBottomColor: colors.border }]} onPress={() => {
+                    const cats = RECIPE_CATEGORIES.map((c, i) => ({
+                        text: `${c.emoji} ${c.label}`,
+                        onPress: () => setFormCategory(c.key),
+                    }));
+                    Alert.alert('Kategorie wählen', undefined, [
+                        ...RECIPE_CATEGORIES.map(c => ({
+                            text: `${c.emoji} ${c.label}${formCategory === c.key ? ' ✓' : ''}`,
+                            onPress: () => setFormCategory(c.key),
+                        })),
+                        { text: 'Abbrechen', style: 'cancel' as const },
+                    ]);
+                }}>
                     <View style={[styles.formIcon, { backgroundColor: colors.accent + '15' }]}>
                         <Tag size={16} color={colors.accent} />
                     </View>
-                    <Text style={[styles.formRowLabel, { color: colors.text, fontWeight: '700' }]}>Kategorien</Text>
-                </View>
+                    <Text style={[styles.formRowLabel, { color: colors.text, fontWeight: '700', flex: 1 }]}>
+                        {RECIPE_CATEGORIES.find(c => c.key === formCategory)?.emoji} {RECIPE_CATEGORIES.find(c => c.key === formCategory)?.label || 'Kategorien'}
+                    </Text>
+                    <ChevronRight size={16} color={colors.subtext} />
+                </Pressable>
 
                 {/* Ingredients */}
                 <View style={[styles.formRow, { borderBottomColor: colors.border }]}>

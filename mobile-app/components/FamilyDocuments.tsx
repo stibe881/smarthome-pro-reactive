@@ -395,6 +395,32 @@ export function FamilyDocuments({ visible, onClose }: FamilyDocumentsProps) {
 
                 {isLoading ? (
                     <ActivityIndicator color={colors.accent} style={{ paddingVertical: 40 }} />
+                ) : viewAsList ? (
+                    <View style={{ gap: 8 }}>
+                        {FOLDERS.map(folder => {
+                            const count = getDocCount(folder.key);
+                            return (
+                                <Pressable
+                                    key={folder.key}
+                                    style={[styles.docCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+                                    onPress={() => setActiveFolder(folder.key)}
+                                >
+                                    <View style={[styles.folderBody, { backgroundColor: folder.bgColor, width: 44, height: 44, borderRadius: 12 }]}>
+                                        <Text style={{ fontSize: 22 }}>{folder.emoji}</Text>
+                                    </View>
+                                    <View style={{ flex: 1, marginLeft: 12 }}>
+                                        <Text style={[styles.docName, { color: colors.text }]}>{folder.label}</Text>
+                                        <Text style={{ color: colors.subtext, fontSize: 12, marginTop: 2 }}>
+                                            {count === 0 ? 'Leer' : `${count} ${count === 1 ? 'Datei' : 'Dateien'}`}
+                                        </Text>
+                                    </View>
+                                    <Pressable hitSlop={12} onPress={() => setShowOptionsSheet(true)}>
+                                        <MoreHorizontal size={16} color={colors.subtext} />
+                                    </Pressable>
+                                </Pressable>
+                            );
+                        })}
+                    </View>
                 ) : (
                     <View style={styles.folderGrid}>
                         {FOLDERS.map(folder => {
