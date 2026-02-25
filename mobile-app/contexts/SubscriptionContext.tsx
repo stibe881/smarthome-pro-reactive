@@ -12,6 +12,13 @@ const ANDROID_API_KEY = 'appl_nPeSIqjNBSFmpjnYREyHBhSonth';
 const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 const isNativeAvailable = !isExpoGo && Platform.OS !== 'web';
 
+console.log('🔑 Subscription Debug:', {
+    executionEnvironment: Constants.executionEnvironment,
+    isExpoGo,
+    isNativeAvailable,
+    platform: Platform.OS,
+});
+
 interface SubscriptionContextType {
     isProUser: boolean;
     isLoading: boolean;
@@ -63,6 +70,12 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
 
                 const info = await Purchases.getCustomerInfo();
                 const hasEntitlement = typeof info.entitlements.active[ENTITLEMENT_ID] !== 'undefined';
+                console.log('🔑 RevenueCat CustomerInfo:', {
+                    hasEntitlement,
+                    activeEntitlements: Object.keys(info.entitlements.active),
+                    allEntitlements: Object.keys(info.entitlements.all),
+                    appUserId: info.originalAppUserId,
+                });
                 setIsProUser(hasEntitlement);
                 setIsLoading(false);
 

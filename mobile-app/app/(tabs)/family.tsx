@@ -92,6 +92,7 @@ export default function FamilyScreen() {
     };
 
     const handleModulePress = async (key: ModuleKey) => {
+        console.log('🔑 handleModulePress:', { key, isProUser });
         if (isProUser) {
             setActiveModule(key);
             return;
