@@ -22,6 +22,7 @@ console.log('🔑 Subscription Debug:', {
 interface SubscriptionContextType {
     isProUser: boolean;
     isLoading: boolean;
+    debugInfo: string;
     presentPaywall: () => Promise<boolean>;
     restorePurchases: () => Promise<boolean>;
     refreshStatus: () => Promise<void>;
@@ -30,6 +31,7 @@ interface SubscriptionContextType {
 const SubscriptionContext = createContext<SubscriptionContextType>({
     isProUser: false,
     isLoading: true,
+    debugInfo: '',
     presentPaywall: async () => false,
     restorePurchases: async () => false,
     refreshStatus: async () => { },
@@ -43,10 +45,12 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     // In Expo Go / Web: always grant access (dev mode)
     const [isProUser, setIsProUser] = useState(!isNativeAvailable);
     const [isLoading, setIsLoading] = useState(isNativeAvailable);
+    const [debugInfo, setDebugInfo] = useState(`env: ${Constants.executionEnvironment}, native: ${isNativeAvailable}, expoGo: ${isExpoGo}`);
 
     useEffect(() => {
         if (!isNativeAvailable) {
             console.log('📱 RevenueCat: Skipped (Expo Go / Web) — Pro features unlocked for dev');
+            setDebugInfo(prev => prev + ' | SKIPPED (no native)');
             setIsLoading(false);
             return;
         }
@@ -70,12 +74,8 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
 
                 const info = await Purchases.getCustomerInfo();
                 const hasEntitlement = typeof info.entitlements.active[ENTITLEMENT_ID] !== 'undefined';
-                console.log('🔑 RevenueCat CustomerInfo:', {
-                    hasEntitlement,
-                    activeEntitlements: Object.keys(info.entitlements.active),
-                    allEntitlements: Object.keys(info.entitlements.all),
-                    appUserId: info.originalAppUserId,
-                });
+                const activeEnts = Object.keys(info.entitlements.active);
+                setDebugInfo(prev => prev + ` | userId: ${info.originalAppUserId} | hasEnt: ${hasEntitlement} | active: [${activeEnts.join(',')}]`);
                 setIsProUser(hasEntitlement);
                 setIsLoading(false);
 
@@ -149,6 +149,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
         <SubscriptionContext.Provider value={{
             isProUser,
             isLoading,
+            debugInfo,
             presentPaywall,
             restorePurchases,
             refreshStatus,
