@@ -309,7 +309,7 @@ export function FamilyDocuments({ visible, onClose }: FamilyDocumentsProps) {
     const renderUploadSheet = () => (
         <Modal visible={showUploadSheet} transparent animationType="slide" onRequestClose={() => setShowUploadSheet(false)}>
             <Pressable style={styles.overlay} onPress={() => setShowUploadSheet(false)}>
-                <View style={[styles.bottomSheet, { backgroundColor: colors.background }]}>
+                <Pressable style={[styles.bottomSheet, { backgroundColor: colors.background }]} onPress={() => { }}>
                     <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
                     <Text style={[styles.sheetTitle, { color: colors.text, borderBottomColor: colors.border }]}>Hochladen</Text>
 
@@ -332,7 +332,7 @@ export function FamilyDocuments({ visible, onClose }: FamilyDocumentsProps) {
                         <Camera size={20} color={colors.subtext} />
                         <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Foto oder Video aufnehmen</Text>
                     </Pressable>
-                </View>
+                </Pressable>
             </Pressable>
         </Modal>
     );
@@ -341,7 +341,7 @@ export function FamilyDocuments({ visible, onClose }: FamilyDocumentsProps) {
     const renderOptionsSheet = () => (
         <Modal visible={showOptionsSheet} transparent animationType="slide" onRequestClose={() => setShowOptionsSheet(false)}>
             <Pressable style={styles.overlay} onPress={() => setShowOptionsSheet(false)}>
-                <View style={[styles.bottomSheet, { backgroundColor: colors.background }]}>
+                <Pressable style={[styles.bottomSheet, { backgroundColor: colors.background }]} onPress={() => { }}>
                     <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
                     <Text style={[styles.sheetTitle, { color: colors.text, borderBottomColor: colors.border }]}>Optionen</Text>
 
@@ -369,7 +369,7 @@ export function FamilyDocuments({ visible, onClose }: FamilyDocumentsProps) {
                         <MessageCircle size={20} color={colors.subtext} />
                         <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Feedback geben</Text>
                     </Pressable>
-                </View>
+                </Pressable>
             </Pressable>
         </Modal>
     );

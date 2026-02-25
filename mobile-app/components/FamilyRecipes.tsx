@@ -450,7 +450,7 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
             {/* New Food Idea Picker (bottom sheet) */}
             <Modal visible={showNewPicker} transparent animationType="slide" onRequestClose={() => setShowNewPicker(false)}>
                 <Pressable style={styles.overlay} onPress={() => setShowNewPicker(false)}>
-                    <View style={[styles.bottomSheet, { backgroundColor: colors.background }]}>
+                    <Pressable style={[styles.bottomSheet, { backgroundColor: colors.background }]} onPress={() => { }}>
                         <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
                         <Text style={[styles.sheetTitle, { color: colors.text }]}>Neue Food-Idee</Text>
 
@@ -473,7 +473,7 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
                             </View>
                             <Text style={{ fontSize: 40 }}>📕</Text>
                         </Pressable>
-                    </View>
+                    </Pressable>
                 </Pressable>
             </Modal>
         </>
@@ -541,7 +541,7 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
                     {/* Category Picker */}
                     <Modal visible={showCategoryPicker} transparent animationType="slide" onRequestClose={() => setShowCategoryPicker(false)}>
                         <Pressable style={styles.overlay} onPress={() => setShowCategoryPicker(false)}>
-                            <View style={[styles.bottomSheet, { backgroundColor: colors.background }]}>
+                            <Pressable style={[styles.bottomSheet, { backgroundColor: colors.background }]} onPress={() => { }}>
                                 <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
                                 <Text style={[styles.sheetTitle, { color: colors.text }]}>Kategorie wählen</Text>
                                 {RECIPE_CATEGORIES.map(cat => (
@@ -555,7 +555,7 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
                                         {r.category === cat.key && <Check size={18} color={colors.accent} />}
                                     </Pressable>
                                 ))}
-                            </View>
+                            </Pressable>
                         </Pressable>
                     </Modal>
 
