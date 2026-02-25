@@ -97,7 +97,7 @@ export default function FamilyScreen() {
             '🔑 Subscription Debug',
             `isProUser: ${isProUser}\n\n${debugInfo}`,
             [
-                { text: 'Reset User', style: 'destructive', onPress: () => resetUser() },
+                { text: 'Paywall anzeigen', style: 'destructive', onPress: () => presentPaywall() },
                 {
                     text: 'OK (weiter)', onPress: async () => {
                         if (isProUser) {
