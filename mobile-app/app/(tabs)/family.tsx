@@ -102,29 +102,35 @@ export default function FamilyScreen() {
         }
     };
 
-    // Harmonious color palette — two tonal families:
-    // Cool: indigo → slate blue
-    // Warm accent: muted teal (matching the theme accent range)
+    // Friendly colors — one color per category
+    // Planung: warm blue | Familie: soft coral | Extras: gentle violet
+    const PLAN_GRADIENT: [string, string] = ['#3B82F6', '#2563EB'];
+    const PLAN_ICON = '#93C5FD';
+    const FAMILY_GRADIENT: [string, string] = ['#F472B6', '#EC4899'];
+    const FAMILY_ICON = '#FBCFE8';
+    const EXTRAS_GRADIENT: [string, string] = ['#8B5CF6', '#7C3AED'];
+    const EXTRAS_ICON = '#C4B5FD';
+
     const MAIN_MODULES: { key: ModuleKey; title: string; subtitle: string; icon: any; gradient: [string, string]; iconColor: string }[] = [
         {
             key: 'calendar', title: 'Kalender',
             subtitle: stats.todayEvents > 0 ? `${stats.todayEvents} Termine heute` : 'Keine Termine',
-            icon: CalendarDays, gradient: ['#4F46E5', '#3730A3'], iconColor: '#818CF8',
+            icon: CalendarDays, gradient: PLAN_GRADIENT, iconColor: PLAN_ICON,
         },
         {
             key: 'todos', title: 'Aufgaben',
             subtitle: stats.openTodos > 0 ? `${stats.openTodos} offen` : 'Alles erledigt ✓',
-            icon: CheckSquare, gradient: ['#3B82A0', '#2A6478'], iconColor: '#7DD3E8',
+            icon: CheckSquare, gradient: PLAN_GRADIENT, iconColor: PLAN_ICON,
         },
         {
             key: 'shopping', title: 'Einkaufsliste',
             subtitle: 'Gemeinsam einkaufen',
-            icon: ShoppingCart, gradient: ['#5B6AAD', '#444F85'], iconColor: '#A5B0E0',
+            icon: ShoppingCart, gradient: PLAN_GRADIENT, iconColor: PLAN_ICON,
         },
         {
             key: 'meals', title: 'Essensplaner',
             subtitle: 'Wochenplan',
-            icon: UtensilsCrossed, gradient: ['#6B7F5E', '#4F5F46'], iconColor: '#A3BD93',
+            icon: UtensilsCrossed, gradient: PLAN_GRADIENT, iconColor: PLAN_ICON,
         },
     ];
 
@@ -132,27 +138,27 @@ export default function FamilyScreen() {
         {
             key: 'pinboard', title: 'Pinnwand',
             subtitle: stats.recentPins > 0 ? `${stats.recentPins} Einträge` : 'Noch keine',
-            icon: MessageSquare, gradient: ['#8B6A9F', '#664D78'], iconColor: '#C4A8D8',
+            icon: MessageSquare, gradient: FAMILY_GRADIENT, iconColor: FAMILY_ICON,
         },
         {
             key: 'rewards', title: 'Belohnungen',
             subtitle: 'Punkte sammeln',
-            icon: Trophy, gradient: ['#7B6B4F', '#5C503A'], iconColor: '#C4AD82',
+            icon: Trophy, gradient: FAMILY_GRADIENT, iconColor: FAMILY_ICON,
         },
         {
             key: 'contacts', title: 'Kontakte',
             subtitle: 'Wichtige Nummern',
-            icon: Phone, gradient: ['#4A7C8A', '#365B65'], iconColor: '#80BCC8',
+            icon: Phone, gradient: FAMILY_GRADIENT, iconColor: FAMILY_ICON,
         },
         {
             key: 'routines', title: 'Routinen',
             subtitle: 'Tagesabläufe',
-            icon: Clock, gradient: ['#5A7A6E', '#425A50'], iconColor: '#8FB8A7',
+            icon: Clock, gradient: FAMILY_GRADIENT, iconColor: FAMILY_ICON,
         },
         {
             key: 'locations', title: 'Standort',
             subtitle: 'Familie finden',
-            icon: MapPin, gradient: ['#6B6B9F', '#4E4E78'], iconColor: '#A8A8D8',
+            icon: MapPin, gradient: FAMILY_GRADIENT, iconColor: FAMILY_ICON,
         },
     ];
 
@@ -160,27 +166,27 @@ export default function FamilyScreen() {
         {
             key: 'packing', title: 'Packlisten',
             subtitle: 'Für Ferien & Ausflüge',
-            icon: Luggage, gradient: ['#7A6A92', '#5A4D6E'], iconColor: '#B5A5CC',
+            icon: Luggage, gradient: EXTRAS_GRADIENT, iconColor: EXTRAS_ICON,
         },
         {
             key: 'countdowns', title: 'Countdowns',
             subtitle: 'Tage zählen',
-            icon: Target, gradient: ['#8A6A6A', '#684F4F'], iconColor: '#C8A0A0',
+            icon: Target, gradient: EXTRAS_GRADIENT, iconColor: EXTRAS_ICON,
         },
         {
             key: 'weekly', title: 'Wochenübersicht',
             subtitle: 'Alles auf einen Blick',
-            icon: LayoutList, gradient: ['#55668A', '#3E4C68'], iconColor: '#8DA0C4',
+            icon: LayoutList, gradient: EXTRAS_GRADIENT, iconColor: EXTRAS_ICON,
         },
         {
             key: 'recipes', title: 'Rezeptbuch',
             subtitle: 'Familienrezepte',
-            icon: BookOpen, gradient: ['#6B7F5E', '#4F5F46'], iconColor: '#A3BD93',
+            icon: BookOpen, gradient: EXTRAS_GRADIENT, iconColor: EXTRAS_ICON,
         },
         {
             key: 'documents', title: 'Dokumentsafe',
             subtitle: 'Wichtige Dokumente',
-            icon: FolderLock, gradient: ['#5A6675', '#434D5A'], iconColor: '#93A1B4',
+            icon: FolderLock, gradient: EXTRAS_GRADIENT, iconColor: EXTRAS_ICON,
         },
     ];
 
