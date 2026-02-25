@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
     View, Text, StyleSheet, Pressable, ScrollView, TextInput,
     ActivityIndicator, Alert, Modal, Platform, Dimensions, Linking,
-    TouchableWithoutFeedback,
+    TouchableWithoutFeedback, TouchableOpacity,
 } from 'react-native';
 import {
     X, Plus, Search, Trash2, Download, Upload, ArrowLeft,
@@ -460,9 +460,9 @@ export function FamilyDocuments({ visible, onClose }: FamilyDocumentsProps) {
             <View style={[styles.container, { backgroundColor: colors.background }]}>
                 {activeFolder ? renderDocList() : renderFolderGrid()}
 
-                {/* Upload Sheet - rendered as absolute overlay, NOT a nested Modal */}
+                {/* Upload Sheet */}
                 {showUploadSheet && (
-                    <View style={[StyleSheet.absoluteFill, styles.overlay]}>
+                    <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.4)' }]}>
                         <TouchableWithoutFeedback onPress={() => setShowUploadSheet(false)}>
                             <View style={{ flex: 1 }} />
                         </TouchableWithoutFeedback>
@@ -470,32 +470,32 @@ export function FamilyDocuments({ visible, onClose }: FamilyDocumentsProps) {
                             <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
                             <Text style={[styles.sheetTitle, { color: colors.text, borderBottomColor: colors.border }]}>Hochladen</Text>
 
-                            <Pressable style={styles.sheetRow} onPress={handleCreateFolder}>
+                            <TouchableOpacity style={styles.sheetRow} onPress={handleCreateFolder} activeOpacity={0.6}>
                                 <FolderPlus size={20} color={colors.subtext} />
                                 <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Einen Ordner erstellen</Text>
-                            </Pressable>
+                            </TouchableOpacity>
 
-                            <Pressable style={styles.sheetRow} onPress={handlePickDocument}>
+                            <TouchableOpacity style={styles.sheetRow} onPress={handlePickDocument} activeOpacity={0.6}>
                                 <File size={20} color={colors.subtext} />
                                 <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Datei</Text>
-                            </Pressable>
+                            </TouchableOpacity>
 
-                            <Pressable style={styles.sheetRow} onPress={handlePickImage}>
+                            <TouchableOpacity style={styles.sheetRow} onPress={handlePickImage} activeOpacity={0.6}>
                                 <ImageIcon size={20} color={colors.subtext} />
                                 <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Aus Kamerarolle</Text>
-                            </Pressable>
+                            </TouchableOpacity>
 
-                            <Pressable style={styles.sheetRow} onPress={handleTakePhoto}>
+                            <TouchableOpacity style={styles.sheetRow} onPress={handleTakePhoto} activeOpacity={0.6}>
                                 <Camera size={20} color={colors.subtext} />
                                 <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Foto oder Video aufnehmen</Text>
-                            </Pressable>
+                            </TouchableOpacity>
                         </View>
                     </View>
                 )}
 
-                {/* Options Sheet - rendered as absolute overlay */}
+                {/* Options Sheet */}
                 {showOptionsSheet && (
-                    <View style={[StyleSheet.absoluteFill, styles.overlay]}>
+                    <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.4)' }]}>
                         <TouchableWithoutFeedback onPress={() => setShowOptionsSheet(false)}>
                             <View style={{ flex: 1 }} />
                         </TouchableWithoutFeedback>
@@ -503,30 +503,30 @@ export function FamilyDocuments({ visible, onClose }: FamilyDocumentsProps) {
                             <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
                             <Text style={[styles.sheetTitle, { color: colors.text, borderBottomColor: colors.border }]}>Optionen</Text>
 
-                            <Pressable style={styles.sheetRow} onPress={() => { setShowOptionsSheet(false); setShowUploadSheet(true); }}>
+                            <TouchableOpacity style={styles.sheetRow} onPress={() => { setShowOptionsSheet(false); setShowUploadSheet(true); }} activeOpacity={0.6}>
                                 <Upload size={20} color={colors.subtext} />
                                 <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Hochladen</Text>
-                            </Pressable>
+                            </TouchableOpacity>
 
-                            <Pressable style={styles.sheetRow} onPress={handleCreateFolder}>
+                            <TouchableOpacity style={styles.sheetRow} onPress={handleCreateFolder} activeOpacity={0.6}>
                                 <FolderPlus size={20} color={colors.subtext} />
                                 <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Einen Ordner erstellen</Text>
-                            </Pressable>
+                            </TouchableOpacity>
 
-                            <Pressable style={styles.sheetRow} onPress={() => { setViewAsList(!viewAsList); setShowOptionsSheet(false); }}>
+                            <TouchableOpacity style={styles.sheetRow} onPress={() => { setViewAsList(!viewAsList); setShowOptionsSheet(false); }} activeOpacity={0.6}>
                                 <List size={20} color={colors.subtext} />
                                 <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Ansicht: {viewAsList ? 'Raster' : 'Liste'}</Text>
-                            </Pressable>
+                            </TouchableOpacity>
 
-                            <Pressable style={styles.sheetRow} onPress={() => { cycleSortMode(); setShowOptionsSheet(false); }}>
+                            <TouchableOpacity style={styles.sheetRow} onPress={() => { cycleSortMode(); setShowOptionsSheet(false); }} activeOpacity={0.6}>
                                 <ArrowUpDown size={20} color={colors.subtext} />
                                 <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Sortieren: {getSortLabel()}</Text>
-                            </Pressable>
+                            </TouchableOpacity>
 
-                            <Pressable style={styles.sheetRow} onPress={handleFeedback}>
+                            <TouchableOpacity style={styles.sheetRow} onPress={handleFeedback} activeOpacity={0.6}>
                                 <MessageCircle size={20} color={colors.subtext} />
                                 <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Feedback geben</Text>
-                            </Pressable>
+                            </TouchableOpacity>
                         </View>
                     </View>
                 )}
