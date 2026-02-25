@@ -102,82 +102,85 @@ export default function FamilyScreen() {
         }
     };
 
-    const MAIN_MODULES: { key: ModuleKey; title: string; subtitle: string; icon: any; gradient: [string, string]; emoji: string }[] = [
+    // Harmonious color palette — two tonal families:
+    // Cool: indigo → slate blue
+    // Warm accent: muted teal (matching the theme accent range)
+    const MAIN_MODULES: { key: ModuleKey; title: string; subtitle: string; icon: any; gradient: [string, string]; iconColor: string }[] = [
         {
             key: 'calendar', title: 'Kalender',
             subtitle: stats.todayEvents > 0 ? `${stats.todayEvents} Termine heute` : 'Keine Termine',
-            icon: CalendarDays, gradient: ['#6366F1', '#4338CA'], emoji: '📅',
+            icon: CalendarDays, gradient: ['#4F46E5', '#3730A3'], iconColor: '#818CF8',
         },
         {
             key: 'todos', title: 'Aufgaben',
             subtitle: stats.openTodos > 0 ? `${stats.openTodos} offen` : 'Alles erledigt ✓',
-            icon: CheckSquare, gradient: ['#10B981', '#059669'], emoji: '✅',
+            icon: CheckSquare, gradient: ['#3B82A0', '#2A6478'], iconColor: '#7DD3E8',
         },
         {
             key: 'shopping', title: 'Einkaufsliste',
             subtitle: 'Gemeinsam einkaufen',
-            icon: ShoppingCart, gradient: ['#F59E0B', '#D97706'], emoji: '🛒',
+            icon: ShoppingCart, gradient: ['#5B6AAD', '#444F85'], iconColor: '#A5B0E0',
         },
         {
             key: 'meals', title: 'Essensplaner',
             subtitle: 'Wochenplan',
-            icon: UtensilsCrossed, gradient: ['#F97316', '#EA580C'], emoji: '🍽️',
+            icon: UtensilsCrossed, gradient: ['#6B7F5E', '#4F5F46'], iconColor: '#A3BD93',
         },
     ];
 
-    const FAMILY_MODULES: { key: ModuleKey; title: string; subtitle: string; icon: any; gradient: [string, string]; emoji: string }[] = [
+    const FAMILY_MODULES: { key: ModuleKey; title: string; subtitle: string; icon: any; gradient: [string, string]; iconColor: string }[] = [
         {
             key: 'pinboard', title: 'Pinnwand',
             subtitle: stats.recentPins > 0 ? `${stats.recentPins} Einträge` : 'Noch keine',
-            icon: MessageSquare, gradient: ['#EC4899', '#DB2777'], emoji: '📌',
+            icon: MessageSquare, gradient: ['#8B6A9F', '#664D78'], iconColor: '#C4A8D8',
         },
         {
             key: 'rewards', title: 'Belohnungen',
             subtitle: 'Punkte sammeln',
-            icon: Trophy, gradient: ['#8B5CF6', '#6D28D9'], emoji: '🏆',
+            icon: Trophy, gradient: ['#7B6B4F', '#5C503A'], iconColor: '#C4AD82',
         },
         {
             key: 'contacts', title: 'Kontakte',
             subtitle: 'Wichtige Nummern',
-            icon: Phone, gradient: ['#06B6D4', '#0891B2'], emoji: '📞',
+            icon: Phone, gradient: ['#4A7C8A', '#365B65'], iconColor: '#80BCC8',
         },
         {
             key: 'routines', title: 'Routinen',
             subtitle: 'Tagesabläufe',
-            icon: Clock, gradient: ['#14B8A6', '#0D9488'], emoji: '⏰',
+            icon: Clock, gradient: ['#5A7A6E', '#425A50'], iconColor: '#8FB8A7',
         },
         {
             key: 'locations', title: 'Standort',
             subtitle: 'Familie finden',
-            icon: MapPin, gradient: ['#F97316', '#EA580C'], emoji: '📍',
+            icon: MapPin, gradient: ['#6B6B9F', '#4E4E78'], iconColor: '#A8A8D8',
         },
     ];
 
-    const UTILITY_MODULES: { key: ModuleKey; title: string; subtitle: string; icon: any; gradient: [string, string]; emoji: string }[] = [
+    const UTILITY_MODULES: { key: ModuleKey; title: string; subtitle: string; icon: any; gradient: [string, string]; iconColor: string }[] = [
         {
             key: 'packing', title: 'Packlisten',
             subtitle: 'Für Ferien & Ausflüge',
-            icon: Luggage, gradient: ['#A855F7', '#7C3AED'], emoji: '🧳',
+            icon: Luggage, gradient: ['#7A6A92', '#5A4D6E'], iconColor: '#B5A5CC',
         },
         {
             key: 'countdowns', title: 'Countdowns',
             subtitle: 'Tage zählen',
-            icon: Target, gradient: ['#EF4444', '#DC2626'], emoji: '🎯',
+            icon: Target, gradient: ['#8A6A6A', '#684F4F'], iconColor: '#C8A0A0',
         },
         {
             key: 'weekly', title: 'Wochenübersicht',
             subtitle: 'Alles auf einen Blick',
-            icon: LayoutList, gradient: ['#6366F1', '#4F46E5'], emoji: '📋',
+            icon: LayoutList, gradient: ['#55668A', '#3E4C68'], iconColor: '#8DA0C4',
         },
         {
             key: 'recipes', title: 'Rezeptbuch',
             subtitle: 'Familienrezepte',
-            icon: BookOpen, gradient: ['#F59E0B', '#D97706'], emoji: '📖',
+            icon: BookOpen, gradient: ['#6B7F5E', '#4F5F46'], iconColor: '#A3BD93',
         },
         {
             key: 'documents', title: 'Dokumentsafe',
             subtitle: 'Wichtige Dokumente',
-            icon: FolderLock, gradient: ['#64748B', '#475569'], emoji: '🔒',
+            icon: FolderLock, gradient: ['#5A6675', '#434D5A'], iconColor: '#93A1B4',
         },
     ];
 
@@ -207,7 +210,7 @@ export default function FamilyScreen() {
                 >
                     {/* Icon badge */}
                     <View style={styles.iconBadge}>
-                        <Icon size={20} color="#fff" strokeWidth={2.5} />
+                        <Icon size={20} color={mod.iconColor} strokeWidth={2} />
                     </View>
 
                     {/* Content */}
@@ -218,27 +221,12 @@ export default function FamilyScreen() {
 
                     {/* Arrow */}
                     <View style={styles.moduleArrow}>
-                        <ChevronRight size={16} color="rgba(255,255,255,0.7)" />
+                        <ChevronRight size={16} color="rgba(255,255,255,0.5)" />
                     </View>
                 </LinearGradient>
             </Pressable>
         );
     };
-
-    const renderStatCard = (value: number, label: string, color: string, emoji: string) => (
-        <View style={[styles.statCard, { backgroundColor: color + '12', borderColor: color + '25' }]}>
-            <Text style={styles.statEmoji}>{emoji}</Text>
-            <Text style={[styles.statNumber, { color }]}>{value}</Text>
-            <Text style={[styles.statLabel, { color: colors.subtext }]}>{label}</Text>
-        </View>
-    );
-
-    const renderSectionHeader = (title: string, emoji: string) => (
-        <View style={styles.sectionHeader}>
-            <View style={[styles.sectionDot, { backgroundColor: colors.accent }]} />
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>{title}</Text>
-        </View>
-    );
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
@@ -258,27 +246,47 @@ export default function FamilyScreen() {
                     </View>
                 </View>
 
-                {/* Stats row */}
-                <View style={styles.statsRow}>
-                    {renderStatCard(stats.todayEvents, 'Termine', '#6366F1', '📅')}
-                    {renderStatCard(stats.openTodos, 'Offen', '#10B981', '✅')}
-                    {renderStatCard(stats.recentPins, 'Pins', '#EC4899', '📌')}
+                {/* Quick Summary */}
+                <View style={[styles.summaryCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                    <View style={styles.summaryItem}>
+                        <Text style={[styles.summaryNumber, { color: colors.accent }]}>{stats.todayEvents}</Text>
+                        <Text style={[styles.summaryLabel, { color: colors.subtext }]}>Termine{'\n'}heute</Text>
+                    </View>
+                    <View style={[styles.summaryDivider, { backgroundColor: colors.border }]} />
+                    <View style={styles.summaryItem}>
+                        <Text style={[styles.summaryNumber, { color: colors.accent }]}>{stats.openTodos}</Text>
+                        <Text style={[styles.summaryLabel, { color: colors.subtext }]}>Offene{'\n'}Aufgaben</Text>
+                    </View>
+                    <View style={[styles.summaryDivider, { backgroundColor: colors.border }]} />
+                    <View style={styles.summaryItem}>
+                        <Text style={[styles.summaryNumber, { color: colors.accent }]}>{stats.recentPins}</Text>
+                        <Text style={[styles.summaryLabel, { color: colors.subtext }]}>Pinnwand{'\n'}Einträge</Text>
+                    </View>
                 </View>
 
                 {/* Planung & Organisation */}
-                {renderSectionHeader('Planung', '📋')}
+                <View style={styles.sectionHeader}>
+                    <View style={[styles.sectionDot, { backgroundColor: colors.accent }]} />
+                    <Text style={[styles.sectionTitle, { color: colors.text }]}>Planung</Text>
+                </View>
                 <View style={styles.gridContainer}>
                     {MAIN_MODULES.map(renderModuleCard)}
                 </View>
 
                 {/* Familie & Motivation */}
-                {renderSectionHeader('Familie', '👨‍👩‍👧‍👦')}
+                <View style={styles.sectionHeader}>
+                    <View style={[styles.sectionDot, { backgroundColor: colors.accent }]} />
+                    <Text style={[styles.sectionTitle, { color: colors.text }]}>Familie</Text>
+                </View>
                 <View style={styles.gridContainer}>
                     {FAMILY_MODULES.map(renderModuleCard)}
                 </View>
 
                 {/* Tools & Extras */}
-                {renderSectionHeader('Extras', '🛠️')}
+                <View style={styles.sectionHeader}>
+                    <View style={[styles.sectionDot, { backgroundColor: colors.accent }]} />
+                    <Text style={[styles.sectionTitle, { color: colors.text }]}>Extras</Text>
+                </View>
                 <View style={styles.gridContainer}>
                     {UTILITY_MODULES.map(renderModuleCard)}
                 </View>
@@ -323,22 +331,14 @@ const styles = StyleSheet.create({
         justifyContent: 'center', alignItems: 'center',
     },
 
-    // Stats row
-    statsRow: {
-        flexDirection: 'row',
-        gap: 10,
-        marginBottom: 28,
+    // Summary card
+    summaryCard: {
+        flexDirection: 'row', borderRadius: 18, padding: 18, borderWidth: 1, marginBottom: 28,
     },
-    statCard: {
-        flex: 1,
-        borderRadius: 16,
-        padding: 14,
-        alignItems: 'center',
-        borderWidth: 1,
-    },
-    statEmoji: { fontSize: 18, marginBottom: 6 },
-    statNumber: { fontSize: 26, fontWeight: '800', letterSpacing: -0.5 },
-    statLabel: { fontSize: 11, fontWeight: '600', marginTop: 2, textTransform: 'uppercase', letterSpacing: 0.5 },
+    summaryItem: { flex: 1, alignItems: 'center' },
+    summaryNumber: { fontSize: 26, fontWeight: '800', letterSpacing: -0.5 },
+    summaryLabel: { fontSize: 11, textAlign: 'center', marginTop: 4, lineHeight: 14, fontWeight: '500' },
+    summaryDivider: { width: 1, marginVertical: 4 },
 
     // Section
     sectionHeader: {
@@ -368,11 +368,6 @@ const styles = StyleSheet.create({
         width: CARD_WIDTH,
         borderRadius: 20,
         overflow: 'hidden',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.15,
-        shadowRadius: 12,
-        elevation: 6,
     },
     moduleGradient: {
         padding: 16,
@@ -381,7 +376,7 @@ const styles = StyleSheet.create({
     },
     iconBadge: {
         width: 38, height: 38, borderRadius: 12,
-        backgroundColor: 'rgba(255,255,255,0.2)',
+        backgroundColor: 'rgba(255,255,255,0.1)',
         justifyContent: 'center', alignItems: 'center',
     },
     moduleInfo: {},
@@ -390,13 +385,13 @@ const styles = StyleSheet.create({
         letterSpacing: -0.2,
     },
     moduleSubtitle: {
-        fontSize: 11, color: 'rgba(255,255,255,0.75)',
+        fontSize: 11, color: 'rgba(255,255,255,0.6)',
         marginTop: 2, fontWeight: '500',
     },
     moduleArrow: {
         position: 'absolute', bottom: 14, right: 14,
         width: 28, height: 28, borderRadius: 14,
-        backgroundColor: 'rgba(255,255,255,0.15)',
+        backgroundColor: 'rgba(255,255,255,0.1)',
         justifyContent: 'center', alignItems: 'center',
     },
 });
