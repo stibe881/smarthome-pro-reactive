@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
     View, Text, StyleSheet, Pressable, ScrollView, TextInput,
     ActivityIndicator, Alert, Modal, Platform, Dimensions, Linking,
+    TouchableWithoutFeedback,
 } from 'react-native';
 import {
     X, Plus, Search, Trash2, Download, Upload, ArrowLeft,
@@ -308,8 +309,11 @@ export function FamilyDocuments({ visible, onClose }: FamilyDocumentsProps) {
     // --- Upload Bottom Sheet ---
     const renderUploadSheet = () => (
         <Modal visible={showUploadSheet} transparent animationType="slide" onRequestClose={() => setShowUploadSheet(false)}>
-            <Pressable style={styles.overlay} onPress={() => setShowUploadSheet(false)}>
-                <Pressable style={[styles.bottomSheet, { backgroundColor: colors.background }]} onPress={() => { }}>
+            <View style={styles.overlay}>
+                <TouchableWithoutFeedback onPress={() => setShowUploadSheet(false)}>
+                    <View style={{ flex: 1 }} />
+                </TouchableWithoutFeedback>
+                <View style={[styles.bottomSheet, { backgroundColor: colors.background }]}>
                     <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
                     <Text style={[styles.sheetTitle, { color: colors.text, borderBottomColor: colors.border }]}>Hochladen</Text>
 
@@ -332,16 +336,19 @@ export function FamilyDocuments({ visible, onClose }: FamilyDocumentsProps) {
                         <Camera size={20} color={colors.subtext} />
                         <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Foto oder Video aufnehmen</Text>
                     </Pressable>
-                </Pressable>
-            </Pressable>
+                </View>
+            </View>
         </Modal>
     );
 
     // --- Options Bottom Sheet ---
     const renderOptionsSheet = () => (
         <Modal visible={showOptionsSheet} transparent animationType="slide" onRequestClose={() => setShowOptionsSheet(false)}>
-            <Pressable style={styles.overlay} onPress={() => setShowOptionsSheet(false)}>
-                <Pressable style={[styles.bottomSheet, { backgroundColor: colors.background }]} onPress={() => { }}>
+            <View style={styles.overlay}>
+                <TouchableWithoutFeedback onPress={() => setShowOptionsSheet(false)}>
+                    <View style={{ flex: 1 }} />
+                </TouchableWithoutFeedback>
+                <View style={[styles.bottomSheet, { backgroundColor: colors.background }]}>
                     <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
                     <Text style={[styles.sheetTitle, { color: colors.text, borderBottomColor: colors.border }]}>Optionen</Text>
 
@@ -369,8 +376,8 @@ export function FamilyDocuments({ visible, onClose }: FamilyDocumentsProps) {
                         <MessageCircle size={20} color={colors.subtext} />
                         <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Feedback geben</Text>
                     </Pressable>
-                </Pressable>
-            </Pressable>
+                </View>
+            </View>
         </Modal>
     );
 

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
     View, Text, StyleSheet, Pressable, ScrollView, TextInput,
     ActivityIndicator, Alert, Modal, Image, KeyboardAvoidingView, Platform,
-    Dimensions, Linking,
+    Dimensions, Linking, TouchableWithoutFeedback,
 } from 'react-native';
 import {
     X, Plus, Search, Clock, Users, Trash2, Edit3, Check, ChevronRight,
@@ -449,8 +449,11 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
 
             {/* New Food Idea Picker (bottom sheet) */}
             <Modal visible={showNewPicker} transparent animationType="slide" onRequestClose={() => setShowNewPicker(false)}>
-                <Pressable style={styles.overlay} onPress={() => setShowNewPicker(false)}>
-                    <Pressable style={[styles.bottomSheet, { backgroundColor: colors.background }]} onPress={() => { }}>
+                <View style={styles.overlay}>
+                    <TouchableWithoutFeedback onPress={() => setShowNewPicker(false)}>
+                        <View style={{ flex: 1 }} />
+                    </TouchableWithoutFeedback>
+                    <View style={[styles.bottomSheet, { backgroundColor: colors.background }]}>
                         <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
                         <Text style={[styles.sheetTitle, { color: colors.text }]}>Neue Food-Idee</Text>
 
@@ -473,8 +476,8 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
                             </View>
                             <Text style={{ fontSize: 40 }}>📕</Text>
                         </Pressable>
-                    </Pressable>
-                </Pressable>
+                    </View>
+                </View>
             </Modal>
         </>
     );
@@ -540,8 +543,11 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
 
                     {/* Category Picker */}
                     <Modal visible={showCategoryPicker} transparent animationType="slide" onRequestClose={() => setShowCategoryPicker(false)}>
-                        <Pressable style={styles.overlay} onPress={() => setShowCategoryPicker(false)}>
-                            <Pressable style={[styles.bottomSheet, { backgroundColor: colors.background }]} onPress={() => { }}>
+                        <View style={styles.overlay}>
+                            <TouchableWithoutFeedback onPress={() => setShowCategoryPicker(false)}>
+                                <View style={{ flex: 1 }} />
+                            </TouchableWithoutFeedback>
+                            <View style={[styles.bottomSheet, { backgroundColor: colors.background }]}>
                                 <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
                                 <Text style={[styles.sheetTitle, { color: colors.text }]}>Kategorie wählen</Text>
                                 {RECIPE_CATEGORIES.map(cat => (
@@ -555,8 +561,8 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
                                         {r.category === cat.key && <Check size={18} color={colors.accent} />}
                                     </Pressable>
                                 ))}
-                            </Pressable>
-                        </Pressable>
+                            </View>
+                        </View>
                     </Modal>
 
                     {/* Ingredients */}
