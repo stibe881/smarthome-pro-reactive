@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, Dimensions, Animated, Alert } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, Dimensions, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -42,7 +42,7 @@ export default function FamilyScreen() {
     const { colors } = useTheme();
     const { user } = useAuth();
     const { householdId } = useHousehold();
-    const { isProUser, presentPaywall, debugInfo, manageSubscriptions } = useSubscription();
+    const { isProUser, presentPaywall } = useSubscription();
 
     const [activeModule, setActiveModule] = useState<ModuleKey | null>(null);
     const [stats, setStats] = useState<ModuleStats>({ todayEvents: 0, openTodos: 0, recentPins: 0 });
@@ -92,24 +92,15 @@ export default function FamilyScreen() {
     };
 
     const handleModulePress = async (key: ModuleKey) => {
-        // TEMPORARY DEBUG ALERT — remove after fixing
-        Alert.alert(
-            '🔑 Subscription Debug',
-            `isProUser: ${isProUser}\n\n${debugInfo}`,
-            [
-                { text: 'Abo verwalten', onPress: () => manageSubscriptions() },
-                {
-                    text: 'OK (weiter)', onPress: async () => {
-                        if (isProUser) {
-                            setActiveModule(key);
-                        } else {
-                            const purchased = await presentPaywall();
-                            if (purchased) setActiveModule(key);
-                        }
-                    }
-                },
-            ]
-        );
+        if (isProUser) {
+            setActiveModule(key);
+            return;
+        }
+        // Not subscribed — show paywall
+        const purchased = await presentPaywall();
+        if (purchased) {
+            setActiveModule(key);
+        }
     };
 
     const MAIN_MODULES: { key: ModuleKey; title: string; subtitle: string; icon: any; gradient: [string, string]; emoji: string }[] = [
