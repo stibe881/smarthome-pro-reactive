@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { Platform, Alert } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 
 const ENTITLEMENT_ID = 'HomePilot_Pro';
@@ -59,6 +60,16 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
                     Purchases.configure({ apiKey: IOS_API_KEY });
                 } else if (Platform.OS === 'android') {
                     Purchases.configure({ apiKey: ANDROID_API_KEY });
+                }
+
+                // One-time reset: clear stuck sandbox customer
+                const RESET_KEY = 'rc_reset_v1';
+                const didReset = await AsyncStorage.getItem(RESET_KEY);
+                if (!didReset) {
+                    try {
+                        await Purchases.logOut();
+                    } catch (_) { /* first launch or already anonymous — ignore */ }
+                    await AsyncStorage.setItem(RESET_KEY, 'done');
                 }
 
                 // Force fresh data from server (clears keychain cache)

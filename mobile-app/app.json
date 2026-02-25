@@ -16,7 +16,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.stibe88.mobileapp",
       "appleTeamId": "QF59FHQ44R",
-      "buildNumber": "112",
+      "buildNumber": "113",
       "entitlements": {
         "com.apple.security.application-groups": [
           "group.com.stibe88.mobileapp"
