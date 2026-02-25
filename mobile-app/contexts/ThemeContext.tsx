@@ -142,16 +142,16 @@ export const THEMES: Record<ThemeType, ThemeColors> = {
     },
     rose: {
         background: '#1a0011',     // Very dark magenta-black
-        card: '#2d0020',           // Deep magenta
+        card: '#3d1030',           // Brighter magenta card (was #2d0020 — too close to background)
         text: '#ffe0f0',           // Light pink white
         subtext: '#FF69B4',        // Hot Pink
         accent: '#FF1493',         // Deep Pink (knalliges pink)
-        border: '#5c0040',         // Dark magenta border
+        border: '#6e2055',         // Visible magenta border (was #5c0040 — too dim)
         success: '#FF69B4',
         error: '#ef4444',
         warning: '#f59e0b',
         tint: '#FF1493',
-        tabBar: '#1a0011',
+        tabBar: '#120010',         // Slightly darker than background for tab separation
         backgroundImage: require('../assets/themes/dark-pink.png'),
     },
     blossom: {

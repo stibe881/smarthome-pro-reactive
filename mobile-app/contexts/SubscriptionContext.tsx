@@ -101,6 +101,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
             return false;
         } catch (e) {
             console.error('Paywall error:', e);
+            Alert.alert('Paywall Fehler', String(e));
             return false;
         }
     }, []);

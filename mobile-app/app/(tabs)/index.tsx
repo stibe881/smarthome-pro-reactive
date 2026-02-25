@@ -66,7 +66,7 @@ const HeroStatCard = memo(({
         <Pressable
             onPress={onPress}
             onLongPress={onLongPress}
-            style={[styles.heroCard, { width: cardWidth, backgroundColor: colors.card }]} // Override Logic
+            style={[styles.heroCard, { width: cardWidth, backgroundColor: colors.card, borderWidth: isActive ? 0 : 1, borderColor: colors.border }]}
         >
             <View style={[styles.heroCardGradient, { backgroundColor: isActive ? gradient[0] : colors.card }]}>
                 <View style={[styles.decorativeCircle, { backgroundColor: isActive ? 'rgba(255,255,255,0.1)' : colors.border + '30' }]} />
@@ -169,7 +169,7 @@ const QuickAction = memo(({
     )
 });
 
-const Tile = ({ label, subtext, icon: Icon, iconColor, activeColor, isActive, onPress, children, activeStyle }: any) => {
+const Tile = memo(({ label, subtext, icon: Icon, iconColor, activeColor, isActive, onPress, children, activeStyle }: any) => {
     const { colors } = useTheme();
     return (
         <Pressable
@@ -193,9 +193,9 @@ const Tile = ({ label, subtext, icon: Icon, iconColor, activeColor, isActive, on
             {children}
         </Pressable>
     )
-};
+});
 
-const SpecificApplianceTile = ({
+const SpecificApplianceTile = memo(({
     label,
     icon: Icon,
     statusText,
@@ -210,12 +210,16 @@ const SpecificApplianceTile = ({
     isFinished: boolean,
     compact?: boolean
 }) => {
+    const { colors } = useTheme();
     // Only show if running or finished
     if (!statusText) return null;
 
+    const bgColor = isRunning ? colors.card : colors.card;
+    const borderCol = isRunning ? '#3B82F6' : '#10B981';
+
     if (compact) {
         return (
-            <View style={[styles.applianceStatusCard, styles.applianceStatusCardCompact, isRunning ? styles.applianceRunning : styles.applianceFinished]}>
+            <View style={[styles.applianceStatusCard, styles.applianceStatusCardCompact, { backgroundColor: bgColor, borderColor: borderCol }]}>
                 <View style={[styles.applianceStatusIcon, { marginBottom: 8, marginRight: 0 }, isRunning ? { backgroundColor: '#3B82F6' } : { backgroundColor: '#10B981' }]}>
                     <Icon size={20} color="#fff" />
                     {isRunning && <ActivityIndicator size="small" color="#fff" style={{ position: 'absolute', top: -4, right: -4, transform: [{ scale: 0.7 }] }} />}
@@ -226,29 +230,29 @@ const SpecificApplianceTile = ({
                     )}
                 </View>
                 <View style={{ alignItems: 'center' }}>
-                    <Text style={[styles.applianceTime, { textAlign: 'center', fontSize: 12, marginBottom: 2, fontWeight: 'bold', color: isRunning ? '#fff' : '#10B981' }]}>{statusText}</Text>
-                    <Text style={[styles.applianceName, { textAlign: 'center', fontSize: 10, opacity: 0.7 }]} numberOfLines={1}>{label}</Text>
+                    <Text style={[styles.applianceTime, { textAlign: 'center', fontSize: 12, marginBottom: 2, fontWeight: 'bold', color: isRunning ? colors.text : '#10B981' }]}>{statusText}</Text>
+                    <Text style={[styles.applianceName, { textAlign: 'center', fontSize: 10, opacity: 0.7, color: colors.subtext }]} numberOfLines={1}>{label}</Text>
                 </View>
             </View>
         );
     }
 
     return (
-        <View style={[styles.applianceStatusCard, isRunning ? styles.applianceRunning : styles.applianceFinished]}>
+        <View style={[styles.applianceStatusCard, { backgroundColor: bgColor, borderColor: borderCol }]}>
             <View style={[styles.applianceStatusIcon, isRunning ? { backgroundColor: '#3B82F6' } : { backgroundColor: '#10B981' }]}>
                 <Icon size={20} color="#fff" />
             </View>
             <View style={styles.applianceInfo}>
-                <Text style={styles.applianceName} numberOfLines={1}>{label}</Text>
-                <Text style={styles.applianceTime}>{statusText}</Text>
+                <Text style={[styles.applianceName, { color: colors.text }]} numberOfLines={1}>{label}</Text>
+                <Text style={[styles.applianceTime, { color: colors.subtext }]}>{statusText}</Text>
             </View>
             {isRunning && <ActivityIndicator size="small" color="#3B82F6" style={{ marginLeft: 8 }} />}
             {isFinished && <View style={styles.finishedBadge}><Text style={styles.finishedText}>✓</Text></View>}
         </View>
     );
-};
+});
 
-const LockTile = ({ lock, callService, entities }: { lock: any, callService: any, entities?: any[] }) => {
+const LockTile = memo(({ lock, callService, entities }: { lock: any, callService: any, entities?: any[] }) => {
     const isLocked = lock.state === 'locked';
     const isUnlocked = lock.state === 'unlocked';
     const isJammed = lock.state === 'jammed';
@@ -396,9 +400,9 @@ const LockTile = ({ lock, callService, entities }: { lock: any, callService: any
             </Pressable>
         </Animated.View>
     )
-};
+});
 
-const SecuritySensorTile = ({ entity }: { entity: any }) => {
+const SecuritySensorTile = memo(({ entity }: { entity: any }) => {
     const { colors } = useTheme();
     let friendlyName = entity.attributes.friendly_name || "Sensor";
     // Clean up names
@@ -423,7 +427,7 @@ const SecuritySensorTile = ({ entity }: { entity: any }) => {
             </View>
         </View>
     );
-};
+});
 
 // Animated Wohnungstüre button with dynamic state coloring
 const DoorApartButton = ({ onPress, isUnlocked, isDoorOpen, btnColor, cardColor, textColor, borderColor }: {
@@ -477,7 +481,7 @@ const DoorApartButton = ({ onPress, isUnlocked, isDoorOpen, btnColor, cardColor,
 };
 
 
-const EventTile = ({ calendar, onPress }: { calendar: any, onPress?: () => void }) => {
+const EventTile = memo(({ calendar, onPress }: { calendar: any, onPress?: () => void }) => {
     const { colors } = useTheme();
     if (!calendar.attributes.message && !calendar.attributes.all_day) return null;
 
@@ -514,7 +518,7 @@ const EventTile = ({ calendar, onPress }: { calendar: any, onPress?: () => void 
             </View>
         </Pressable>
     );
-};
+});
 
 // =====================================================
 // MAIN DASHBOARD COMPONENT
@@ -935,12 +939,12 @@ export default function Dashboard() {
 
     // Callbacks
     const openLightsModal = useCallback(() => setActiveModal('lights'), []);
-    const openCoversModal = () => setActiveModal('covers');
-    const openRobiModal = () => setActiveModal('robi');
+    const openCoversModal = useCallback(() => setActiveModal('covers'), []);
+    const openRobiModal = useCallback(() => setActiveModal('robi'), []);
 
-    const openSecurityModal = () => setActiveModal('security');
-    const openCamerasModal = () => setActiveModal('cameras');
-    const closeModal = () => setActiveModal(null);
+    const openSecurityModal = useCallback(() => setActiveModal('security'), []);
+    const openCamerasModal = useCallback(() => setActiveModal('cameras'), []);
+    const closeModal = useCallback(() => setActiveModal(null), []);
 
     const handleAllLightsOff = useCallback(() => {
         lights.filter(l => l.state === 'on').forEach(l => callService('light', 'turn_off', l.entity_id));
@@ -1387,7 +1391,7 @@ export default function Dashboard() {
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickActionsRow}>
                         {quickActions.map((qa) => {
                             const IconComp = ICON_MAP[qa.iconName] || Zap;
-                            const gradient: [string, string] = [qa.color + '26', qa.color + '0D'];
+                            const gradient: [string, string] = [qa.color + '59', qa.color + '26'];
 
                             const handlePress = () => {
                                 switch (qa.type) {
@@ -1550,7 +1554,7 @@ export default function Dashboard() {
                         <Pressable
                             onPress={openRobiModal}
                             onLongPress={handleAllVacuumsHome}
-                            style={[styles.heroCard, { width: cardWidth, backgroundColor: colors.card }]} // Override Logic
+                            style={[styles.heroCard, { width: cardWidth, backgroundColor: colors.card, borderWidth: activeVacuums > 0 ? 0 : 1, borderColor: colors.border }]}
                         >
                             <View style={[styles.heroCardGradient, { backgroundColor: activeVacuums > 0 ? colors.accent : colors.card }]}>
                                 <View style={[styles.decorativeCircle, { backgroundColor: activeVacuums > 0 ? 'rgba(255,255,255,0.1)' : colors.border + '30' }]} />

@@ -113,17 +113,17 @@ export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
             .filter(Boolean);
     }, [entities, cameraConfigs]);
 
-    // Auto-Refresh for grid view (Battery: 10s interval, pauses when backgrounded)
+    // Auto-Refresh for grid view (Battery: 10s interval, pauses when backgrounded or in management view)
     const [refreshTrigger, setRefreshTrigger] = React.useState(Date.now());
     React.useEffect(() => {
-        if (!visible || fullscreenCamera) return;
+        if (!visible || fullscreenCamera || showManage) return;
         let interval: ReturnType<typeof setInterval> | null = null;
         const start = () => { interval = setInterval(() => setRefreshTrigger(Date.now()), 10000); };
         const stop = () => { if (interval) { clearInterval(interval); interval = null; } };
         start();
         const sub = AppState.addEventListener('change', (s) => { s === 'active' ? start() : stop(); });
         return () => { stop(); sub.remove(); };
-    }, [visible, fullscreenCamera]);
+    }, [visible, fullscreenCamera, showManage]);
 
     // Faster refresh for fullscreen (Battery: pauses when backgrounded)
     const [fullscreenRefresh, setFullscreenRefresh] = React.useState(Date.now());
