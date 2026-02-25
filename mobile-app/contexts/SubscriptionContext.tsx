@@ -61,6 +61,8 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
                     Purchases.configure({ apiKey: ANDROID_API_KEY });
                 }
 
+                // Force fresh data from server (clears keychain cache)
+                await Purchases.invalidateCustomerInfoCache();
                 const info = await Purchases.getCustomerInfo();
                 const hasEntitlement = typeof info.entitlements.active[ENTITLEMENT_ID] !== 'undefined';
                 setIsProUser(hasEntitlement);
