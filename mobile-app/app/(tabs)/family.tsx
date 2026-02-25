@@ -96,7 +96,6 @@ export default function FamilyScreen() {
             setActiveModule(key);
             return;
         }
-        // Not subscribed — show paywall
         const purchased = await presentPaywall();
         if (purchased) {
             setActiveModule(key);
@@ -107,7 +106,7 @@ export default function FamilyScreen() {
         {
             key: 'calendar', title: 'Kalender',
             subtitle: stats.todayEvents > 0 ? `${stats.todayEvents} Termine heute` : 'Keine Termine',
-            icon: CalendarDays, gradient: ['#3B82F6', '#1D4ED8'], emoji: '📅',
+            icon: CalendarDays, gradient: ['#6366F1', '#4338CA'], emoji: '📅',
         },
         {
             key: 'todos', title: 'Aufgaben',
@@ -140,7 +139,7 @@ export default function FamilyScreen() {
         {
             key: 'contacts', title: 'Kontakte',
             subtitle: 'Wichtige Nummern',
-            icon: Phone, gradient: ['#06B6D4', '#0891B2'], emoji: '📍',
+            icon: Phone, gradient: ['#06B6D4', '#0891B2'], emoji: '📞',
         },
         {
             key: 'routines', title: 'Routinen',
@@ -206,18 +205,40 @@ export default function FamilyScreen() {
                     end={{ x: 1, y: 1 }}
                     style={styles.moduleGradient}
                 >
-                    <Text style={styles.moduleEmoji}>{mod.emoji}</Text>
+                    {/* Icon badge */}
+                    <View style={styles.iconBadge}>
+                        <Icon size={20} color="#fff" strokeWidth={2.5} />
+                    </View>
+
+                    {/* Content */}
                     <View style={styles.moduleInfo}>
                         <Text style={styles.moduleTitle}>{mod.title}</Text>
-                        <Text style={styles.moduleSubtitle}>{mod.subtitle}</Text>
+                        <Text style={styles.moduleSubtitle} numberOfLines={1}>{mod.subtitle}</Text>
                     </View>
+
+                    {/* Arrow */}
                     <View style={styles.moduleArrow}>
-                        <ChevronRight size={18} color="rgba(255,255,255,0.6)" />
+                        <ChevronRight size={16} color="rgba(255,255,255,0.7)" />
                     </View>
                 </LinearGradient>
             </Pressable>
         );
     };
+
+    const renderStatCard = (value: number, label: string, color: string, emoji: string) => (
+        <View style={[styles.statCard, { backgroundColor: color + '12', borderColor: color + '25' }]}>
+            <Text style={styles.statEmoji}>{emoji}</Text>
+            <Text style={[styles.statNumber, { color }]}>{value}</Text>
+            <Text style={[styles.statLabel, { color: colors.subtext }]}>{label}</Text>
+        </View>
+    );
+
+    const renderSectionHeader = (title: string, emoji: string) => (
+        <View style={styles.sectionHeader}>
+            <View style={[styles.sectionDot, { backgroundColor: colors.accent }]} />
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>{title}</Text>
+        </View>
+    );
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
@@ -230,48 +251,39 @@ export default function FamilyScreen() {
                 <View style={styles.header}>
                     <View>
                         <Text style={[styles.greeting, { color: colors.subtext }]}>{getGreeting()} 👋</Text>
-                        <Text style={[styles.title, { color: colors.text }]}>Familienplaner</Text>
+                        <Text style={[styles.title, { color: colors.text }]}>Family Hub</Text>
                     </View>
-                    <View style={[styles.avatarCircle, { backgroundColor: colors.accent + '20' }]}>
+                    <View style={[styles.avatarCircle, { backgroundColor: colors.accent + '18' }]}>
                         <Users size={22} color={colors.accent} />
                     </View>
                 </View>
 
-                {/* Quick Summary */}
-                <View style={[styles.summaryCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                    <View style={styles.summaryItem}>
-                        <Text style={[styles.summaryNumber, { color: colors.accent }]}>{stats.todayEvents}</Text>
-                        <Text style={[styles.summaryLabel, { color: colors.subtext }]}>Termine{'\n'}heute</Text>
-                    </View>
-                    <View style={[styles.summaryDivider, { backgroundColor: colors.border }]} />
-                    <View style={styles.summaryItem}>
-                        <Text style={[styles.summaryNumber, { color: '#10B981' }]}>{stats.openTodos}</Text>
-                        <Text style={[styles.summaryLabel, { color: colors.subtext }]}>Offene{'\n'}Aufgaben</Text>
-                    </View>
-                    <View style={[styles.summaryDivider, { backgroundColor: colors.border }]} />
-                    <View style={styles.summaryItem}>
-                        <Text style={[styles.summaryNumber, { color: '#EC4899' }]}>{stats.recentPins}</Text>
-                        <Text style={[styles.summaryLabel, { color: colors.subtext }]}>Pinnwand{'\n'}Einträge</Text>
-                    </View>
+                {/* Stats row */}
+                <View style={styles.statsRow}>
+                    {renderStatCard(stats.todayEvents, 'Termine', '#6366F1', '📅')}
+                    {renderStatCard(stats.openTodos, 'Offen', '#10B981', '✅')}
+                    {renderStatCard(stats.recentPins, 'Pins', '#EC4899', '📌')}
                 </View>
 
                 {/* Planung & Organisation */}
-                <Text style={[styles.sectionTitle, { color: colors.text }]}>📋 Planung</Text>
+                {renderSectionHeader('Planung', '📋')}
                 <View style={styles.gridContainer}>
                     {MAIN_MODULES.map(renderModuleCard)}
                 </View>
 
                 {/* Familie & Motivation */}
-                <Text style={[styles.sectionTitle, { color: colors.text, marginTop: 20 }]}>👨‍👩‍👧‍👦 Familie</Text>
+                {renderSectionHeader('Familie', '👨‍👩‍👧‍👦')}
                 <View style={styles.gridContainer}>
                     {FAMILY_MODULES.map(renderModuleCard)}
                 </View>
 
                 {/* Tools & Extras */}
-                <Text style={[styles.sectionTitle, { color: colors.text, marginTop: 20 }]}>🛠️ Extras</Text>
+                {renderSectionHeader('Extras', '🛠️')}
                 <View style={styles.gridContainer}>
                     {UTILITY_MODULES.map(renderModuleCard)}
                 </View>
+
+                <View style={{ height: 20 }} />
             </Animated.ScrollView>
 
             {/* Module Modals */}
@@ -298,33 +310,89 @@ const styles = StyleSheet.create({
     scrollContent: { padding: 16, paddingBottom: 40 },
 
     // Header
-    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-    greeting: { fontSize: 14, fontWeight: '500', marginBottom: 2 },
-    title: { fontSize: 28, fontWeight: '800', letterSpacing: -0.5 },
-    avatarCircle: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
-
-    // Summary card
-    summaryCard: {
-        flexDirection: 'row', borderRadius: 20, padding: 20, borderWidth: 1, marginBottom: 24,
+    header: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 24,
     },
-    summaryItem: { flex: 1, alignItems: 'center' },
-    summaryNumber: { fontSize: 28, fontWeight: '800' },
-    summaryLabel: { fontSize: 11, textAlign: 'center', marginTop: 4, lineHeight: 14 },
-    summaryDivider: { width: 1, marginVertical: 4 },
+    greeting: { fontSize: 14, fontWeight: '500', marginBottom: 2, letterSpacing: 0.2 },
+    title: { fontSize: 32, fontWeight: '800', letterSpacing: -0.8 },
+    avatarCircle: {
+        width: 46, height: 46, borderRadius: 23,
+        justifyContent: 'center', alignItems: 'center',
+    },
+
+    // Stats row
+    statsRow: {
+        flexDirection: 'row',
+        gap: 10,
+        marginBottom: 28,
+    },
+    statCard: {
+        flex: 1,
+        borderRadius: 16,
+        padding: 14,
+        alignItems: 'center',
+        borderWidth: 1,
+    },
+    statEmoji: { fontSize: 18, marginBottom: 6 },
+    statNumber: { fontSize: 26, fontWeight: '800', letterSpacing: -0.5 },
+    statLabel: { fontSize: 11, fontWeight: '600', marginTop: 2, textTransform: 'uppercase', letterSpacing: 0.5 },
 
     // Section
-    sectionTitle: { fontSize: 18, fontWeight: '700', marginBottom: 12 },
+    sectionHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 8,
+        marginBottom: 14,
+    },
+    sectionDot: {
+        width: 4,
+        height: 18,
+        borderRadius: 2,
+        marginRight: 10,
+    },
+    sectionTitle: { fontSize: 18, fontWeight: '700', letterSpacing: -0.3 },
 
     // Grid
-    gridContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+    gridContainer: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 12,
+        marginBottom: 12,
+    },
 
     // Module card
-    moduleCard: { width: CARD_WIDTH, borderRadius: 20, overflow: 'hidden' },
-    moduleGradient: { padding: 18, height: 130, justifyContent: 'space-between' },
-    moduleEmoji: { fontSize: 28 },
-    moduleInfo: { marginTop: 4 },
-    moduleTitle: { fontSize: 15, fontWeight: '700', color: '#fff' },
-    moduleSubtitle: { fontSize: 11, color: 'rgba(255,255,255,0.75)', marginTop: 2 },
+    moduleCard: {
+        width: CARD_WIDTH,
+        borderRadius: 20,
+        overflow: 'hidden',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 12,
+        elevation: 6,
+    },
+    moduleGradient: {
+        padding: 16,
+        height: 120,
+        justifyContent: 'space-between',
+    },
+    iconBadge: {
+        width: 38, height: 38, borderRadius: 12,
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        justifyContent: 'center', alignItems: 'center',
+    },
+    moduleInfo: {},
+    moduleTitle: {
+        fontSize: 15, fontWeight: '700', color: '#fff',
+        letterSpacing: -0.2,
+    },
+    moduleSubtitle: {
+        fontSize: 11, color: 'rgba(255,255,255,0.75)',
+        marginTop: 2, fontWeight: '500',
+    },
     moduleArrow: {
         position: 'absolute', bottom: 14, right: 14,
         width: 28, height: 28, borderRadius: 14,
