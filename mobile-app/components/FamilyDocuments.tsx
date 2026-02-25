@@ -5,9 +5,11 @@ import {
 } from 'react-native';
 import {
     X, Plus, Search, Trash2, Download, Upload, ArrowLeft,
-    MoreHorizontal, Home,
+    MoreHorizontal, Home, FolderPlus, File, Image as ImageIcon,
+    Camera, List, ArrowUpDown, MessageCircle,
 } from 'lucide-react-native';
 import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { useTheme } from '../contexts/ThemeContext';
@@ -54,7 +56,9 @@ export function FamilyDocuments({ visible, onClose }: FamilyDocumentsProps) {
     const [isLoading, setIsLoading] = useState(true);
     const [isUploading, setIsUploading] = useState(false);
     const [activeFolder, setActiveFolder] = useState<string | null>(null);
-    const [showUploadOptions, setShowUploadOptions] = useState(false);
+    const [showUploadSheet, setShowUploadSheet] = useState(false);
+    const [showOptionsSheet, setShowOptionsSheet] = useState(false);
+    const [showCategorize, setShowCategorize] = useState(false);
     const [uploadCategory, setUploadCategory] = useState('private');
     const [uploadDescription, setUploadDescription] = useState('');
 
@@ -100,7 +104,10 @@ export function FamilyDocuments({ visible, onClose }: FamilyDocumentsProps) {
         return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
     };
 
-    const handleUpload = async () => {
+    // Upload file document
+    const handlePickDocument = async () => {
+        setShowUploadSheet(false);
+        setShowOptionsSheet(false);
         if (!householdId) return;
         try {
             const result = await DocumentPicker.getDocumentAsync({
@@ -109,19 +116,85 @@ export function FamilyDocuments({ visible, onClose }: FamilyDocumentsProps) {
             });
             if (result.canceled || !result.assets?.length) return;
             const file = result.assets[0];
-            (handleUpload as any)._pendingFile = file;
+            (handlePickDocument as any)._pendingFile = file;
             setUploadCategory(activeFolder || 'private');
-            setShowUploadOptions(true);
+            setUploadDescription('');
+            setShowCategorize(true);
         } catch (e: any) {
             Alert.alert('Fehler', e.message);
         }
     };
 
+    // Upload from camera roll
+    const handlePickImage = async () => {
+        setShowUploadSheet(false);
+        setShowOptionsSheet(false);
+        if (!householdId) return;
+        try {
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ['images', 'videos'],
+                quality: 0.8,
+            });
+            if (result.canceled || !result.assets?.length) return;
+            const asset = result.assets[0];
+            const fileName = asset.uri.split('/').pop() || `image_${Date.now()}.jpg`;
+            (handlePickDocument as any)._pendingFile = {
+                uri: asset.uri,
+                name: fileName,
+                size: asset.fileSize || 0,
+                mimeType: asset.mimeType || 'image/jpeg',
+            };
+            setUploadCategory(activeFolder || 'private');
+            setUploadDescription('');
+            setShowCategorize(true);
+        } catch (e: any) {
+            Alert.alert('Fehler', e.message);
+        }
+    };
+
+    // Take photo/video
+    const handleTakePhoto = async () => {
+        setShowUploadSheet(false);
+        setShowOptionsSheet(false);
+        if (!householdId) return;
+        try {
+            const { status } = await ImagePicker.requestCameraPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert('Berechtigung', 'Kamerazugriff wird benötigt.');
+                return;
+            }
+            const result = await ImagePicker.launchCameraAsync({
+                quality: 0.8,
+            });
+            if (result.canceled || !result.assets?.length) return;
+            const asset = result.assets[0];
+            const fileName = `photo_${Date.now()}.jpg`;
+            (handlePickDocument as any)._pendingFile = {
+                uri: asset.uri,
+                name: fileName,
+                size: asset.fileSize || 0,
+                mimeType: asset.mimeType || 'image/jpeg',
+            };
+            setUploadCategory(activeFolder || 'private');
+            setUploadDescription('');
+            setShowCategorize(true);
+        } catch (e: any) {
+            Alert.alert('Fehler', e.message);
+        }
+    };
+
+    // Create folder (placeholder)
+    const handleCreateFolder = () => {
+        setShowUploadSheet(false);
+        setShowOptionsSheet(false);
+        Alert.alert('Ordner erstellen', 'Diese Funktion wird bald verfügbar sein.');
+    };
+
     const confirmUpload = async () => {
-        const file = (handleUpload as any)._pendingFile;
+        const file = (handlePickDocument as any)._pendingFile;
         if (!file || !householdId) return;
         setIsUploading(true);
-        setShowUploadOptions(false);
+        setShowCategorize(false);
         try {
             const fileExt = file.name.split('.').pop() || 'bin';
             const filePath = `${householdId}/${Date.now()}.${fileExt}`;
@@ -188,6 +261,75 @@ export function FamilyDocuments({ visible, onClose }: FamilyDocumentsProps) {
 
     const activeFolderInfo = FOLDERS.find(f => f.key === activeFolder);
 
+    // --- Upload Bottom Sheet ---
+    const renderUploadSheet = () => (
+        <Modal visible={showUploadSheet} transparent animationType="slide" onRequestClose={() => setShowUploadSheet(false)}>
+            <Pressable style={styles.overlay} onPress={() => setShowUploadSheet(false)}>
+                <View style={[styles.bottomSheet, { backgroundColor: colors.background }]}>
+                    <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
+                    <Text style={[styles.sheetTitle, { color: colors.text, borderBottomColor: colors.border }]}>Hochladen</Text>
+
+                    <Pressable style={styles.sheetRow} onPress={handleCreateFolder}>
+                        <FolderPlus size={20} color={colors.subtext} />
+                        <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Einen Ordner erstellen</Text>
+                    </Pressable>
+
+                    <Pressable style={styles.sheetRow} onPress={handlePickDocument}>
+                        <File size={20} color={colors.subtext} />
+                        <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Datei</Text>
+                    </Pressable>
+
+                    <Pressable style={styles.sheetRow} onPress={handlePickImage}>
+                        <ImageIcon size={20} color={colors.subtext} />
+                        <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Aus Kamerarolle</Text>
+                    </Pressable>
+
+                    <Pressable style={styles.sheetRow} onPress={handleTakePhoto}>
+                        <Camera size={20} color={colors.subtext} />
+                        <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Foto oder Video aufnehmen</Text>
+                    </Pressable>
+                </View>
+            </Pressable>
+        </Modal>
+    );
+
+    // --- Options Bottom Sheet ---
+    const renderOptionsSheet = () => (
+        <Modal visible={showOptionsSheet} transparent animationType="slide" onRequestClose={() => setShowOptionsSheet(false)}>
+            <Pressable style={styles.overlay} onPress={() => setShowOptionsSheet(false)}>
+                <View style={[styles.bottomSheet, { backgroundColor: colors.background }]}>
+                    <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
+                    <Text style={[styles.sheetTitle, { color: colors.text, borderBottomColor: colors.border }]}>Optionen</Text>
+
+                    <Pressable style={styles.sheetRow} onPress={() => { setShowOptionsSheet(false); setShowUploadSheet(true); }}>
+                        <Upload size={20} color={colors.subtext} />
+                        <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Hochladen</Text>
+                    </Pressable>
+
+                    <Pressable style={styles.sheetRow} onPress={handleCreateFolder}>
+                        <FolderPlus size={20} color={colors.subtext} />
+                        <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Einen Ordner erstellen</Text>
+                    </Pressable>
+
+                    <Pressable style={styles.sheetRow} onPress={() => setShowOptionsSheet(false)}>
+                        <List size={20} color={colors.subtext} />
+                        <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Ansicht: Liste</Text>
+                    </Pressable>
+
+                    <Pressable style={styles.sheetRow} onPress={() => setShowOptionsSheet(false)}>
+                        <ArrowUpDown size={20} color={colors.subtext} />
+                        <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Sortieren: Geändertes Datum (neuestes)</Text>
+                    </Pressable>
+
+                    <Pressable style={styles.sheetRow} onPress={() => setShowOptionsSheet(false)}>
+                        <MessageCircle size={20} color={colors.subtext} />
+                        <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Feedback geben</Text>
+                    </Pressable>
+                </View>
+            </Pressable>
+        </Modal>
+    );
+
     // --- Folder Grid View ---
     const renderFolderGrid = () => (
         <>
@@ -197,7 +339,7 @@ export function FamilyDocuments({ visible, onClose }: FamilyDocumentsProps) {
                     <Home size={22} color={colors.accent} />
                 </Pressable>
                 <View style={{ flex: 1 }} />
-                <Pressable hitSlop={12}>
+                <Pressable hitSlop={12} onPress={() => setShowOptionsSheet(true)}>
                     <MoreHorizontal size={22} color={colors.accent} />
                 </Pressable>
             </View>
@@ -232,7 +374,7 @@ export function FamilyDocuments({ visible, onClose }: FamilyDocumentsProps) {
                                         <Text style={[styles.folderCount, { color: colors.subtext }]}>
                                             👥 {count === 0 ? 'Leer' : `${count} ${count === 1 ? 'Datei' : 'Dateien'}`}
                                         </Text>
-                                        <Pressable style={styles.folderMenu} hitSlop={12}>
+                                        <Pressable style={styles.folderMenu} hitSlop={12} onPress={() => setShowOptionsSheet(true)}>
                                             <MoreHorizontal size={16} color={colors.subtext} />
                                         </Pressable>
                                     </Pressable>
@@ -244,7 +386,7 @@ export function FamilyDocuments({ visible, onClose }: FamilyDocumentsProps) {
             </ScrollView>
 
             {/* FAB */}
-            <Pressable style={[styles.fab, { backgroundColor: colors.accent }]} onPress={handleUpload}>
+            <Pressable style={[styles.fab, { backgroundColor: colors.accent }]} onPress={() => setShowUploadSheet(true)}>
                 <Plus size={24} color="#fff" />
             </Pressable>
         </>
@@ -259,8 +401,8 @@ export function FamilyDocuments({ visible, onClose }: FamilyDocumentsProps) {
                     <ArrowLeft size={22} color={colors.accent} />
                 </Pressable>
                 <Text style={[styles.headerTitle, { color: colors.text }]}>{activeFolderInfo?.label}</Text>
-                <Pressable onPress={handleUpload}>
-                    <Upload size={20} color={colors.accent} />
+                <Pressable onPress={() => setShowOptionsSheet(true)}>
+                    <MoreHorizontal size={20} color={colors.accent} />
                 </Pressable>
             </View>
 
@@ -271,7 +413,7 @@ export function FamilyDocuments({ visible, onClose }: FamilyDocumentsProps) {
                 </View>
             )}
 
-            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 100 }}>
                 {folderDocs.length === 0 ? (
                     <View style={styles.empty}>
                         <Text style={{ fontSize: 48 }}>{activeFolderInfo?.emoji}</Text>
@@ -304,7 +446,7 @@ export function FamilyDocuments({ visible, onClose }: FamilyDocumentsProps) {
             </ScrollView>
 
             {/* FAB */}
-            <Pressable style={[styles.fab, { backgroundColor: colors.accent }]} onPress={handleUpload}>
+            <Pressable style={[styles.fab, { backgroundColor: colors.accent }]} onPress={() => setShowUploadSheet(true)}>
                 <Plus size={24} color="#fff" />
             </Pressable>
         </>
@@ -316,11 +458,17 @@ export function FamilyDocuments({ visible, onClose }: FamilyDocumentsProps) {
                 {activeFolder ? renderDocList() : renderFolderGrid()}
             </View>
 
-            {/* Upload Options Modal */}
-            <Modal visible={showUploadOptions} transparent animationType="fade" onRequestClose={() => setShowUploadOptions(false)}>
+            {/* Upload Sheet */}
+            {renderUploadSheet()}
+
+            {/* Options Sheet */}
+            {renderOptionsSheet()}
+
+            {/* Categorize File Modal */}
+            <Modal visible={showCategorize} transparent animationType="fade" onRequestClose={() => setShowCategorize(false)}>
                 <View style={styles.overlay}>
-                    <View style={[styles.optionsSheet, { backgroundColor: colors.background }]}>
-                        <Text style={[styles.headerTitle, { color: colors.text, marginBottom: 16 }]}>Dokument kategorisieren</Text>
+                    <View style={[styles.categorizeSheet, { backgroundColor: colors.background }]}>
+                        <Text style={[styles.categorizeTitle, { color: colors.text }]}>Dokument kategorisieren</Text>
 
                         <Text style={{ color: colors.subtext, fontSize: 12, marginBottom: 6 }}>Ordner:</Text>
                         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
@@ -351,7 +499,7 @@ export function FamilyDocuments({ visible, onClose }: FamilyDocumentsProps) {
                         />
 
                         <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
-                            <Pressable style={[styles.btnSecondary, { borderColor: colors.border }]} onPress={() => setShowUploadOptions(false)}>
+                            <Pressable style={[styles.btnSecondary, { borderColor: colors.border }]} onPress={() => setShowCategorize(false)}>
                                 <Text style={{ color: colors.text, fontWeight: '600' }}>Abbrechen</Text>
                             </Pressable>
                             <Pressable style={[styles.btnPrimary, { backgroundColor: colors.accent }]} onPress={confirmUpload}>
@@ -373,7 +521,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
         padding: 16, borderBottomWidth: 1,
     },
-    headerTitle: { fontSize: 18, fontWeight: '800' },
+    headerTitle: { fontSize: 18, fontWeight: '800', flex: 1, textAlign: 'center' },
 
     // Folder grid
     gridScrollContent: { padding: 20, paddingBottom: 100 },
@@ -426,6 +574,23 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.3, shadowRadius: 8,
     },
 
+    // Bottom sheets
+    overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+    bottomSheet: {
+        borderTopLeftRadius: 20, borderTopRightRadius: 20,
+        paddingHorizontal: 20, paddingBottom: 40,
+    },
+    sheetHandle: { width: 36, height: 4, borderRadius: 2, alignSelf: 'center', marginTop: 10, marginBottom: 16 },
+    sheetTitle: {
+        fontSize: 16, fontWeight: '800', textAlign: 'center',
+        paddingBottom: 16, borderBottomWidth: 1, marginBottom: 8,
+    },
+    sheetRow: {
+        flexDirection: 'row', alignItems: 'center', gap: 14,
+        paddingVertical: 16,
+    },
+    sheetRowLabel: { fontSize: 16, fontWeight: '500' },
+
     // Document list
     uploadingBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 10 },
     empty: { alignItems: 'center', paddingVertical: 60 },
@@ -433,9 +598,9 @@ const styles = StyleSheet.create({
     docCard: { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 16, borderWidth: 1, marginBottom: 8 },
     docName: { fontSize: 15, fontWeight: '700' },
 
-    // Upload options
-    overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-    optionsSheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 },
+    // Categorize modal
+    categorizeSheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 },
+    categorizeTitle: { fontSize: 18, fontWeight: '800', marginBottom: 16 },
     catChip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
     input: { borderWidth: 1, padding: 12, borderRadius: 12, fontSize: 15 },
     btnSecondary: { flex: 1, alignItems: 'center', paddingVertical: 14, borderRadius: 14, borderWidth: 1 },

@@ -326,7 +326,7 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
             </View>
 
             {/* Filter tabs */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.catRow}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={styles.catRow}>
                 {FILTER_TABS.map(tab => (
                     <Pressable
                         key={tab.key}
@@ -723,10 +723,11 @@ const styles = StyleSheet.create({
     },
     searchInput: { flex: 1, fontSize: 15 },
 
-    catRow: { paddingHorizontal: 16, paddingVertical: 10, gap: 6 },
+    catRow: { paddingHorizontal: 16, paddingVertical: 10, gap: 6, alignItems: 'flex-start' },
     catChip: {
         flexDirection: 'row', alignItems: 'center', gap: 4,
         paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1,
+        height: 34,
     },
     catLabel: { fontSize: 12, fontWeight: '600' },
 
