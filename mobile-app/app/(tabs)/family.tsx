@@ -42,7 +42,7 @@ export default function FamilyScreen() {
     const { colors } = useTheme();
     const { user } = useAuth();
     const { householdId } = useHousehold();
-    const { isProUser, presentPaywall, debugInfo } = useSubscription();
+    const { isProUser, presentPaywall, debugInfo, resetUser } = useSubscription();
 
     const [activeModule, setActiveModule] = useState<ModuleKey | null>(null);
     const [stats, setStats] = useState<ModuleStats>({ todayEvents: 0, openTodos: 0, recentPins: 0 });
@@ -97,6 +97,7 @@ export default function FamilyScreen() {
             '🔑 Subscription Debug',
             `isProUser: ${isProUser}\n\n${debugInfo}`,
             [
+                { text: 'Reset User', style: 'destructive', onPress: () => resetUser() },
                 {
                     text: 'OK (weiter)', onPress: async () => {
                         if (isProUser) {
