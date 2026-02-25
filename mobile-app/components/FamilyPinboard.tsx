@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     View, Text, StyleSheet, Pressable, ScrollView, TextInput,
-    ActivityIndicator, Alert, Modal, Image, Dimensions, Platform,
+    ActivityIndicator, Alert, Modal, Image, Dimensions, Platform, KeyboardAvoidingView,
 } from 'react-native';
-import { Plus, X, Send, ImagePlus, Trash2, Check } from 'lucide-react-native';
+import { Plus, X, Send, ImagePlus, Trash2, Check, Heart, MessageCircle } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { useTheme } from '../contexts/ThemeContext';
@@ -12,7 +12,6 @@ import { useHousehold } from '../hooks/useHousehold';
 import { supabase } from '../lib/supabase';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_WIDTH = (SCREEN_WIDTH - 48) / 2;
 
 interface PinItem {
     id: string;
@@ -21,6 +20,17 @@ interface PinItem {
     content: string | null;
     image_url: string | null;
     pin_type: string;
+    created_at: string;
+    likes_count: number;
+    liked_by_me: boolean;
+    comments_count: number;
+}
+
+interface CommentItem {
+    id: string;
+    pin_id: string;
+    user_id: string | null;
+    content: string;
     created_at: string;
 }
 
@@ -34,8 +44,6 @@ interface FamilyPinboardProps {
     visible: boolean;
     onClose: () => void;
 }
-
-const PIN_COLORS_LIGHT = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', '#C9B1FF', '#FFD93D', '#6BCB77'];
 
 export const FamilyPinboard: React.FC<FamilyPinboardProps> = ({ visible, onClose }) => {
     const { colors } = useTheme();
@@ -51,11 +59,17 @@ export const FamilyPinboard: React.FC<FamilyPinboardProps> = ({ visible, onClose
     const [selectedNotifyMembers, setSelectedNotifyMembers] = useState<Set<string>>(new Set());
     const [showNotifyPicker, setShowNotifyPicker] = useState(false);
 
+    // Comments state
+    const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
+    const [commentsByPin, setCommentsByPin] = useState<Record<string, CommentItem[]>>({});
+    const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
+    const [postingComment, setPostingComment] = useState<string | null>(null);
+
     const loadPins = useCallback(async () => {
-        if (!householdId) return;
+        if (!householdId || !user?.id) return;
         setIsLoading(true);
         try {
-            const { data, error } = await supabase
+            const { data: pinsData, error } = await supabase
                 .from('family_pins')
                 .select('*')
                 .eq('household_id', householdId)
@@ -63,13 +77,56 @@ export const FamilyPinboard: React.FC<FamilyPinboardProps> = ({ visible, onClose
                 .limit(50);
 
             if (error) throw error;
-            setPins(data || []);
+            if (!pinsData) { setPins([]); return; }
+
+            // Fetch likes counts & my likes
+            const pinIds = pinsData.map(p => p.id);
+
+            const [likesRes, myLikesRes, commentsRes] = await Promise.all([
+                supabase
+                    .from('pin_likes')
+                    .select('pin_id')
+                    .in('pin_id', pinIds),
+                supabase
+                    .from('pin_likes')
+                    .select('pin_id')
+                    .in('pin_id', pinIds)
+                    .eq('user_id', user.id),
+                supabase
+                    .from('pin_comments')
+                    .select('pin_id')
+                    .in('pin_id', pinIds),
+            ]);
+
+            // Count likes per pin
+            const likesMap: Record<string, number> = {};
+            (likesRes.data || []).forEach(l => {
+                likesMap[l.pin_id] = (likesMap[l.pin_id] || 0) + 1;
+            });
+
+            // My likes set
+            const myLikesSet = new Set((myLikesRes.data || []).map(l => l.pin_id));
+
+            // Count comments per pin
+            const commentsMap: Record<string, number> = {};
+            (commentsRes.data || []).forEach(c => {
+                commentsMap[c.pin_id] = (commentsMap[c.pin_id] || 0) + 1;
+            });
+
+            const enriched: PinItem[] = pinsData.map(p => ({
+                ...p,
+                likes_count: likesMap[p.id] || 0,
+                liked_by_me: myLikesSet.has(p.id),
+                comments_count: commentsMap[p.id] || 0,
+            }));
+
+            setPins(enriched);
         } catch (e: any) {
             console.error('Error loading pins:', e);
         } finally {
             setIsLoading(false);
         }
-    }, [householdId]);
+    }, [householdId, user?.id]);
 
     const loadMembers = useCallback(async () => {
         if (!householdId) return;
@@ -187,13 +244,17 @@ export const FamilyPinboard: React.FC<FamilyPinboardProps> = ({ visible, onClose
                 if (error) throw error;
             } else {
                 const { data: publicData } = supabase.storage.from('family-pins').getPublicUrl(fileName);
+                // Allow user to add a caption
+                const caption = newContent.trim() || null;
                 const { error } = await supabase.from('family_pins').insert({
                     household_id: householdId,
                     created_by: user?.id,
                     image_url: publicData.publicUrl,
+                    content: caption,
                     pin_type: 'photo',
                 });
                 if (error) throw error;
+                if (caption) setNewContent('');
             }
 
             sendPushNotifications('📷 Neues Foto');
@@ -215,6 +276,91 @@ export const FamilyPinboard: React.FC<FamilyPinboardProps> = ({ visible, onClose
                 }
             }
         ]);
+    };
+
+    // --- Like ---
+    const handleToggleLike = async (pin: PinItem) => {
+        if (!user?.id) return;
+        // Optimistic update
+        setPins(prev => prev.map(p => p.id === pin.id ? {
+            ...p,
+            liked_by_me: !p.liked_by_me,
+            likes_count: p.liked_by_me ? p.likes_count - 1 : p.likes_count + 1,
+        } : p));
+
+        try {
+            if (pin.liked_by_me) {
+                await supabase.from('pin_likes').delete()
+                    .eq('pin_id', pin.id).eq('user_id', user.id);
+            } else {
+                await supabase.from('pin_likes').insert({
+                    pin_id: pin.id, user_id: user.id,
+                });
+            }
+        } catch (e) {
+            // Revert on error
+            setPins(prev => prev.map(p => p.id === pin.id ? {
+                ...p,
+                liked_by_me: pin.liked_by_me,
+                likes_count: pin.likes_count,
+            } : p));
+        }
+    };
+
+    // --- Comments ---
+    const toggleComments = async (pinId: string) => {
+        setExpandedComments(prev => {
+            const next = new Set(prev);
+            if (next.has(pinId)) {
+                next.delete(pinId);
+            } else {
+                next.add(pinId);
+                loadComments(pinId);
+            }
+            return next;
+        });
+    };
+
+    const loadComments = async (pinId: string) => {
+        try {
+            const { data } = await supabase
+                .from('pin_comments')
+                .select('*')
+                .eq('pin_id', pinId)
+                .order('created_at', { ascending: true })
+                .limit(50);
+            setCommentsByPin(prev => ({ ...prev, [pinId]: data || [] }));
+        } catch (e) { console.error(e); }
+    };
+
+    const handlePostComment = async (pinId: string) => {
+        const text = (commentInputs[pinId] || '').trim();
+        if (!text || !user?.id) return;
+        setPostingComment(pinId);
+        try {
+            const { error } = await supabase.from('pin_comments').insert({
+                pin_id: pinId, user_id: user.id, content: text,
+            });
+            if (error) throw error;
+            setCommentInputs(prev => ({ ...prev, [pinId]: '' }));
+            loadComments(pinId);
+            // Update comments count
+            setPins(prev => prev.map(p => p.id === pinId ? {
+                ...p, comments_count: p.comments_count + 1,
+            } : p));
+        } catch (e: any) {
+            Alert.alert('Fehler', e.message);
+        } finally {
+            setPostingComment(null);
+        }
+    };
+
+    const handleDeleteComment = async (comment: CommentItem) => {
+        await supabase.from('pin_comments').delete().eq('id', comment.id);
+        loadComments(comment.pin_id);
+        setPins(prev => prev.map(p => p.id === comment.pin_id ? {
+            ...p, comments_count: Math.max(0, p.comments_count - 1),
+        } : p));
     };
 
     const formatDate = (dateStr: string) => {
@@ -240,11 +386,153 @@ export const FamilyPinboard: React.FC<FamilyPinboardProps> = ({ visible, onClose
         });
     };
 
-    const getPinColor = (index: number) => PIN_COLORS_LIGHT[index % PIN_COLORS_LIGHT.length];
+    const getInitials = (name: string) => {
+        const parts = name.split(' ');
+        if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+        return name.substring(0, 2).toUpperCase();
+    };
+
+    const getPinTypeLabel = (pin: PinItem) => {
+        if (pin.pin_type === 'photo') return 'hat ein Foto geteilt';
+        return 'Notiz hinzufügen';
+    };
+
+    const renderPost = (pin: PinItem) => {
+        const authorName = members[pin.created_by || ''] || 'Unbekannt';
+        const initials = getInitials(authorName);
+        const isPhoto = pin.pin_type === 'photo' && pin.image_url;
+        const isExpanded = expandedComments.has(pin.id);
+        const comments = commentsByPin[pin.id] || [];
+
+        return (
+            <View key={pin.id} style={[styles.postCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                {/* Post header - avatar + name + time */}
+                <View style={styles.postHeader}>
+                    <View style={[styles.avatar, { backgroundColor: colors.accent }]}>
+                        <Text style={styles.avatarText}>{initials}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                        <Text style={[styles.authorName, { color: colors.text }]}>
+                            <Text style={{ fontWeight: '700' }}>{authorName}</Text>
+                            <Text style={{ fontWeight: '400', color: colors.subtext }}> {getPinTypeLabel(pin)}</Text>
+                        </Text>
+                        <Text style={[styles.postTime, { color: colors.subtext }]}>{formatDate(pin.created_at)}</Text>
+                    </View>
+                    {pin.created_by === user?.id && (
+                        <Pressable onPress={() => handleDelete(pin)} hitSlop={12}>
+                            <Trash2 size={16} color={colors.subtext} />
+                        </Pressable>
+                    )}
+                </View>
+
+                {/* Text content */}
+                {pin.content && (
+                    <Text style={[styles.postContent, { color: colors.text }]}>{pin.content}</Text>
+                )}
+
+                {/* Photo */}
+                {isPhoto && (
+                    <Image source={{ uri: pin.image_url! }} style={styles.postImage} resizeMode="cover" />
+                )}
+
+                {/* Action bar - Like + Comment */}
+                <View style={[styles.actionBar, { borderTopColor: colors.border }]}>
+                    <Pressable
+                        style={styles.actionBtn}
+                        onPress={() => handleToggleLike(pin)}
+                    >
+                        <Heart
+                            size={20}
+                            color={pin.liked_by_me ? '#EF4444' : colors.subtext}
+                            fill={pin.liked_by_me ? '#EF4444' : 'transparent'}
+                        />
+                        {pin.likes_count > 0 && (
+                            <Text style={[styles.actionCount, { color: pin.liked_by_me ? '#EF4444' : colors.subtext }]}>
+                                {pin.likes_count}
+                            </Text>
+                        )}
+                    </Pressable>
+
+                    <View style={[styles.actionDivider, { backgroundColor: colors.border }]} />
+
+                    <Pressable
+                        style={styles.actionBtn}
+                        onPress={() => toggleComments(pin.id)}
+                    >
+                        <MessageCircle
+                            size={20}
+                            color={isExpanded ? colors.accent : colors.subtext}
+                        />
+                        {pin.comments_count > 0 && (
+                            <Text style={[styles.actionCount, { color: isExpanded ? colors.accent : colors.subtext }]}>
+                                {pin.comments_count}
+                            </Text>
+                        )}
+                    </Pressable>
+                </View>
+
+                {/* Comments section */}
+                {isExpanded && (
+                    <View style={[styles.commentsSection, { borderTopColor: colors.border }]}>
+                        {comments.map(comment => {
+                            const cName = members[comment.user_id || ''] || 'Unbekannt';
+                            return (
+                                <View key={comment.id} style={styles.commentRow}>
+                                    <View style={[styles.commentAvatar, { backgroundColor: colors.accent + '30' }]}>
+                                        <Text style={[styles.commentAvatarText, { color: colors.accent }]}>
+                                            {getInitials(cName)}
+                                        </Text>
+                                    </View>
+                                    <View style={[styles.commentBubble, { backgroundColor: colors.background }]}>
+                                        <Text style={[styles.commentAuthor, { color: colors.text }]}>{cName}</Text>
+                                        <Text style={[styles.commentText, { color: colors.text }]}>{comment.content}</Text>
+                                        <Text style={[styles.commentTime, { color: colors.subtext }]}>{formatDate(comment.created_at)}</Text>
+                                    </View>
+                                    {comment.user_id === user?.id && (
+                                        <Pressable onPress={() => handleDeleteComment(comment)} hitSlop={12} style={{ paddingTop: 4 }}>
+                                            <Trash2 size={12} color={colors.subtext} />
+                                        </Pressable>
+                                    )}
+                                </View>
+                            );
+                        })}
+
+                        {/* Comment input */}
+                        <View style={[styles.commentInputRow, { borderTopColor: comments.length > 0 ? colors.border : 'transparent' }]}>
+                            <TextInput
+                                style={[styles.commentInput, { color: colors.text, backgroundColor: colors.background, borderColor: colors.border }]}
+                                value={commentInputs[pin.id] || ''}
+                                onChangeText={t => setCommentInputs(prev => ({ ...prev, [pin.id]: t }))}
+                                placeholder="Kommentar schreiben..."
+                                placeholderTextColor={colors.subtext}
+                                maxLength={300}
+                            />
+                            <Pressable
+                                onPress={() => handlePostComment(pin.id)}
+                                disabled={postingComment === pin.id || !(commentInputs[pin.id] || '').trim()}
+                                style={[styles.commentSendBtn, {
+                                    backgroundColor: colors.accent,
+                                    opacity: (commentInputs[pin.id] || '').trim() ? 1 : 0.4,
+                                }]}
+                            >
+                                {postingComment === pin.id
+                                    ? <ActivityIndicator size="small" color="#fff" />
+                                    : <Send size={14} color="#fff" />
+                                }
+                            </Pressable>
+                        </View>
+                    </View>
+                )}
+            </View>
+        );
+    };
 
     return (
         <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-            <View style={[styles.container, { backgroundColor: colors.background }]}>
+            <KeyboardAvoidingView
+                style={[styles.container, { backgroundColor: colors.background }]}
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            >
                 {/* Header */}
                 <View style={[styles.header, { borderBottomColor: colors.border }]}>
                     <Pressable onPress={onClose}><X size={24} color={colors.subtext} /></Pressable>
@@ -300,10 +588,10 @@ export const FamilyPinboard: React.FC<FamilyPinboardProps> = ({ visible, onClose
                     </View>
                 )}
 
-                {/* Pins Grid - Masonry-style */}
-                <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.gridContainer} showsVerticalScrollIndicator={false}>
+                {/* Posts Feed */}
+                <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.feedContainer} showsVerticalScrollIndicator={false}>
                     {isLoading ? (
-                        <ActivityIndicator color={colors.accent} style={{ paddingVertical: 40, width: '100%' }} />
+                        <ActivityIndicator color={colors.accent} style={{ paddingVertical: 40 }} />
                     ) : pins.length === 0 ? (
                         <View style={styles.empty}>
                             <Text style={{ fontSize: 40 }}>📌</Text>
@@ -312,67 +600,12 @@ export const FamilyPinboard: React.FC<FamilyPinboardProps> = ({ visible, onClose
                             </Text>
                         </View>
                     ) : (
-                        <View style={styles.masonryContainer}>
-                            {/* Left column */}
-                            <View style={styles.masonryColumn}>
-                                {pins.filter((_, i) => i % 2 === 0).map((pin, index) => renderPin(pin, index * 2))}
-                            </View>
-                            {/* Right column */}
-                            <View style={styles.masonryColumn}>
-                                {pins.filter((_, i) => i % 2 === 1).map((pin, index) => renderPin(pin, index * 2 + 1))}
-                            </View>
-                        </View>
+                        pins.map(pin => renderPost(pin))
                     )}
                 </ScrollView>
-            </View>
+            </KeyboardAvoidingView>
         </Modal>
     );
-
-    function renderPin(pin: PinItem, index: number) {
-        const pinColor = getPinColor(index);
-        const isPhoto = pin.pin_type === 'photo' && pin.image_url;
-
-        return (
-            <View
-                key={pin.id}
-                style={[
-                    styles.pinCard,
-                    {
-                        backgroundColor: colors.card,
-                        borderColor: colors.border,
-                    },
-                ]}
-            >
-                {/* Colored pin indicator */}
-                <View style={[styles.pinDot, { backgroundColor: pinColor }]} />
-
-                {/* Photo displayed directly */}
-                {isPhoto && (
-                    <Image source={{ uri: pin.image_url! }} style={styles.pinImage} resizeMode="cover" />
-                )}
-
-                {/* Text content */}
-                {pin.content && (
-                    <Text style={[styles.pinContent, { color: colors.text }]}>{pin.content}</Text>
-                )}
-
-                {/* Footer */}
-                <View style={styles.pinFooter}>
-                    <View style={{ flex: 1 }}>
-                        <Text style={[styles.pinAuthor, { color: pinColor }]}>
-                            {members[pin.created_by || ''] || 'Unbekannt'}
-                        </Text>
-                        <Text style={[styles.pinTime, { color: colors.subtext }]}>{formatDate(pin.created_at)}</Text>
-                    </View>
-                    {pin.created_by === user?.id && (
-                        <Pressable onPress={() => handleDelete(pin)} hitSlop={12}>
-                            <Trash2 size={13} color={colors.subtext} />
-                        </Pressable>
-                    )}
-                </View>
-            </View>
-        );
-    }
 };
 
 const styles = StyleSheet.create({
@@ -400,30 +633,104 @@ const styles = StyleSheet.create({
     notifyCheck: { width: 16, height: 16, borderRadius: 4, borderWidth: 1.5, borderColor: '#999', justifyContent: 'center', alignItems: 'center' },
     notifyName: { fontSize: 12, fontWeight: '600' },
 
-    gridContainer: { padding: 12, paddingBottom: 40 },
-    empty: { alignItems: 'center', paddingVertical: 60, gap: 12, width: '100%' },
+    feedContainer: { padding: 12, paddingBottom: 40, gap: 16 },
+    empty: { alignItems: 'center', paddingVertical: 60, gap: 12 },
     emptyText: { fontSize: 15, textAlign: 'center', lineHeight: 22 },
 
-    masonryContainer: { flexDirection: 'row', gap: 10 },
-    masonryColumn: { flex: 1, gap: 10 },
+    // Post card
+    postCard: {
+        borderRadius: 16,
+        borderWidth: 1,
+        overflow: 'hidden',
+    },
+    postHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 14,
+        gap: 10,
+    },
+    avatar: {
+        width: 42, height: 42, borderRadius: 21,
+        justifyContent: 'center', alignItems: 'center',
+    },
+    avatarText: {
+        color: '#fff', fontSize: 14, fontWeight: '700',
+    },
+    authorName: { fontSize: 14, lineHeight: 18 },
+    postTime: { fontSize: 12, marginTop: 1 },
 
-    pinCard: {
-        borderRadius: 16, overflow: 'hidden', borderWidth: 1,
+    postContent: {
+        fontSize: 15, lineHeight: 22,
+        paddingHorizontal: 14, paddingBottom: 12,
     },
-    pinDot: {
-        position: 'absolute', top: 10, right: 10, width: 8, height: 8,
-        borderRadius: 4, zIndex: 2,
+    postImage: {
+        width: '100%',
+        height: undefined,
+        aspectRatio: 4 / 3,
+        backgroundColor: '#1a1a1a',
     },
-    pinImage: {
-        width: '100%', height: 160, backgroundColor: '#f0f0f0',
+
+    // Action bar
+    actionBar: {
+        flexDirection: 'row',
+        borderTopWidth: 1,
     },
-    pinContent: {
-        fontSize: 14, lineHeight: 20, padding: 12, paddingBottom: 4,
+    actionBtn: {
+        flex: 1,
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingVertical: 10,
+        gap: 6,
     },
-    pinFooter: {
-        flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12,
-        paddingVertical: 8, paddingTop: 4,
+    actionCount: { fontSize: 13, fontWeight: '600' },
+    actionDivider: { width: 1, marginVertical: 8 },
+
+    // Comments
+    commentsSection: {
+        borderTopWidth: 1,
+        paddingHorizontal: 14,
+        paddingVertical: 10,
     },
-    pinAuthor: { fontSize: 12, fontWeight: '700' },
-    pinTime: { fontSize: 10 },
+    commentRow: {
+        flexDirection: 'row',
+        gap: 8,
+        marginBottom: 10,
+        alignItems: 'flex-start',
+    },
+    commentAvatar: {
+        width: 28, height: 28, borderRadius: 14,
+        justifyContent: 'center', alignItems: 'center',
+        marginTop: 2,
+    },
+    commentAvatarText: { fontSize: 10, fontWeight: '700' },
+    commentBubble: {
+        flex: 1,
+        borderRadius: 12,
+        padding: 10,
+    },
+    commentAuthor: { fontSize: 12, fontWeight: '700', marginBottom: 2 },
+    commentText: { fontSize: 13, lineHeight: 18 },
+    commentTime: { fontSize: 10, marginTop: 4 },
+
+    commentInputRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginTop: 4,
+        paddingTop: 8,
+        borderTopWidth: StyleSheet.hairlineWidth,
+    },
+    commentInput: {
+        flex: 1,
+        borderRadius: 20,
+        borderWidth: 1,
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+        fontSize: 13,
+    },
+    commentSendBtn: {
+        width: 32, height: 32, borderRadius: 16,
+        justifyContent: 'center', alignItems: 'center',
+    },
 });
