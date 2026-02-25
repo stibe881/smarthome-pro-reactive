@@ -5,7 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import {
     CalendarDays, CheckSquare, ShoppingCart, MessageSquare,
     ChevronRight, Users, UtensilsCrossed, Trophy, Phone,
-    Clock, Luggage, Target, LayoutList, BookOpen, MapPin, FolderLock,
+    Clock, Luggage, Target, LayoutList, BookOpen, MapPin, FolderLock, Cake,
 } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -26,11 +26,12 @@ import { WeeklyOverview } from '../../components/WeeklyOverview';
 import { FamilyRecipes } from '../../components/FamilyRecipes';
 import { FamilyLocations } from '../../components/FamilyLocations';
 import { FamilyDocuments } from '../../components/FamilyDocuments';
+import { FamilyCelebrations } from '../../components/FamilyCelebrations';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = (SCREEN_WIDTH - 48) / 2;
 
-type ModuleKey = 'calendar' | 'todos' | 'shopping' | 'pinboard' | 'meals' | 'rewards' | 'contacts' | 'routines' | 'packing' | 'countdowns' | 'weekly' | 'recipes' | 'locations' | 'documents';
+type ModuleKey = 'calendar' | 'todos' | 'shopping' | 'pinboard' | 'meals' | 'rewards' | 'contacts' | 'routines' | 'packing' | 'countdowns' | 'weekly' | 'recipes' | 'locations' | 'documents' | 'celebrations';
 
 interface ModuleStats {
     todayEvents: number;
@@ -159,6 +160,11 @@ export default function FamilyScreen() {
             key: 'locations', title: 'Standort',
             subtitle: 'Familie finden',
             icon: MapPin, gradient: FAMILY_GRADIENT, iconColor: FAMILY_ICON,
+        },
+        {
+            key: 'celebrations', title: 'Geburtstage',
+            subtitle: 'Feiern & Jubiläen',
+            icon: Cake, gradient: FAMILY_GRADIENT, iconColor: FAMILY_ICON,
         },
     ];
 
@@ -315,6 +321,7 @@ export default function FamilyScreen() {
             <FamilyRecipes visible={activeModule === 'recipes'} onClose={handleCloseModule} />
             <FamilyLocations visible={activeModule === 'locations'} onClose={handleCloseModule} />
             <FamilyDocuments visible={activeModule === 'documents'} onClose={handleCloseModule} />
+            <FamilyCelebrations visible={activeModule === 'celebrations'} onClose={handleCloseModule} />
         </SafeAreaView>
     );
 }
