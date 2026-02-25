@@ -306,80 +306,6 @@ export function FamilyDocuments({ visible, onClose }: FamilyDocumentsProps) {
 
     const activeFolderInfo = FOLDERS.find(f => f.key === activeFolder);
 
-    // --- Upload Bottom Sheet ---
-    const renderUploadSheet = () => (
-        <Modal visible={showUploadSheet} transparent animationType="slide" onRequestClose={() => setShowUploadSheet(false)}>
-            <View style={styles.overlay}>
-                <TouchableWithoutFeedback onPress={() => setShowUploadSheet(false)}>
-                    <View style={{ flex: 1 }} />
-                </TouchableWithoutFeedback>
-                <View style={[styles.bottomSheet, { backgroundColor: colors.background }]}>
-                    <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
-                    <Text style={[styles.sheetTitle, { color: colors.text, borderBottomColor: colors.border }]}>Hochladen</Text>
-
-                    <Pressable style={styles.sheetRow} onPress={handleCreateFolder}>
-                        <FolderPlus size={20} color={colors.subtext} />
-                        <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Einen Ordner erstellen</Text>
-                    </Pressable>
-
-                    <Pressable style={styles.sheetRow} onPress={handlePickDocument}>
-                        <File size={20} color={colors.subtext} />
-                        <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Datei</Text>
-                    </Pressable>
-
-                    <Pressable style={styles.sheetRow} onPress={handlePickImage}>
-                        <ImageIcon size={20} color={colors.subtext} />
-                        <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Aus Kamerarolle</Text>
-                    </Pressable>
-
-                    <Pressable style={styles.sheetRow} onPress={handleTakePhoto}>
-                        <Camera size={20} color={colors.subtext} />
-                        <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Foto oder Video aufnehmen</Text>
-                    </Pressable>
-                </View>
-            </View>
-        </Modal>
-    );
-
-    // --- Options Bottom Sheet ---
-    const renderOptionsSheet = () => (
-        <Modal visible={showOptionsSheet} transparent animationType="slide" onRequestClose={() => setShowOptionsSheet(false)}>
-            <View style={styles.overlay}>
-                <TouchableWithoutFeedback onPress={() => setShowOptionsSheet(false)}>
-                    <View style={{ flex: 1 }} />
-                </TouchableWithoutFeedback>
-                <View style={[styles.bottomSheet, { backgroundColor: colors.background }]}>
-                    <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
-                    <Text style={[styles.sheetTitle, { color: colors.text, borderBottomColor: colors.border }]}>Optionen</Text>
-
-                    <Pressable style={styles.sheetRow} onPress={() => { setShowOptionsSheet(false); setShowUploadSheet(true); }}>
-                        <Upload size={20} color={colors.subtext} />
-                        <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Hochladen</Text>
-                    </Pressable>
-
-                    <Pressable style={styles.sheetRow} onPress={handleCreateFolder}>
-                        <FolderPlus size={20} color={colors.subtext} />
-                        <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Einen Ordner erstellen</Text>
-                    </Pressable>
-
-                    <Pressable style={styles.sheetRow} onPress={() => { setViewAsList(!viewAsList); setShowOptionsSheet(false); }}>
-                        <List size={20} color={colors.subtext} />
-                        <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Ansicht: {viewAsList ? 'Raster' : 'Liste'}</Text>
-                    </Pressable>
-
-                    <Pressable style={styles.sheetRow} onPress={() => { cycleSortMode(); setShowOptionsSheet(false); }}>
-                        <ArrowUpDown size={20} color={colors.subtext} />
-                        <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Sortieren: {getSortLabel()}</Text>
-                    </Pressable>
-
-                    <Pressable style={styles.sheetRow} onPress={handleFeedback}>
-                        <MessageCircle size={20} color={colors.subtext} />
-                        <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Feedback geben</Text>
-                    </Pressable>
-                </View>
-            </View>
-        </Modal>
-    );
 
     // --- Folder Grid View ---
     const renderFolderGrid = () => (
@@ -533,92 +459,160 @@ export function FamilyDocuments({ visible, onClose }: FamilyDocumentsProps) {
         <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
             <View style={[styles.container, { backgroundColor: colors.background }]}>
                 {activeFolder ? renderDocList() : renderFolderGrid()}
-            </View>
 
-            {/* Upload Sheet */}
-            {renderUploadSheet()}
+                {/* Upload Sheet - rendered as absolute overlay, NOT a nested Modal */}
+                {showUploadSheet && (
+                    <View style={[StyleSheet.absoluteFill, styles.overlay]}>
+                        <TouchableWithoutFeedback onPress={() => setShowUploadSheet(false)}>
+                            <View style={{ flex: 1 }} />
+                        </TouchableWithoutFeedback>
+                        <View style={[styles.bottomSheet, { backgroundColor: colors.background }]}>
+                            <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
+                            <Text style={[styles.sheetTitle, { color: colors.text, borderBottomColor: colors.border }]}>Hochladen</Text>
 
-            {/* Options Sheet */}
-            {renderOptionsSheet()}
-
-            {/* Create Folder Modal */}
-            <Modal visible={showCreateFolder} transparent animationType="fade" onRequestClose={() => setShowCreateFolder(false)}>
-                <Pressable style={styles.overlay} onPress={() => setShowCreateFolder(false)}>
-                    <View style={[styles.categorizeSheet, { backgroundColor: colors.background }]}>
-                        <Text style={[styles.categorizeTitle, { color: colors.text }]}>Neuer Ordner</Text>
-                        <TextInput
-                            style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
-                            value={newFolderName}
-                            onChangeText={setNewFolderName}
-                            placeholder="Ordnername"
-                            placeholderTextColor={colors.subtext}
-                            autoFocus
-                            maxLength={50}
-                        />
-                        <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
-                            <Pressable
-                                style={[styles.btnSecondary, { borderColor: colors.border }]}
-                                onPress={() => setShowCreateFolder(false)}
-                            >
-                                <Text style={{ color: colors.text, fontWeight: '600' }}>Abbrechen</Text>
+                            <Pressable style={styles.sheetRow} onPress={handleCreateFolder}>
+                                <FolderPlus size={20} color={colors.subtext} />
+                                <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Einen Ordner erstellen</Text>
                             </Pressable>
-                            <Pressable
-                                style={[styles.btnPrimary, { backgroundColor: colors.accent }]}
-                                onPress={confirmCreateFolder}
-                            >
-                                <Text style={{ color: '#fff', fontWeight: '600' }}>Erstellen</Text>
+
+                            <Pressable style={styles.sheetRow} onPress={handlePickDocument}>
+                                <File size={20} color={colors.subtext} />
+                                <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Datei</Text>
+                            </Pressable>
+
+                            <Pressable style={styles.sheetRow} onPress={handlePickImage}>
+                                <ImageIcon size={20} color={colors.subtext} />
+                                <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Aus Kamerarolle</Text>
+                            </Pressable>
+
+                            <Pressable style={styles.sheetRow} onPress={handleTakePhoto}>
+                                <Camera size={20} color={colors.subtext} />
+                                <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Foto oder Video aufnehmen</Text>
                             </Pressable>
                         </View>
                     </View>
-                </Pressable>
-            </Modal>
+                )}
 
-            {/* Categorize File Modal */}
-            <Modal visible={showCategorize} transparent animationType="fade" onRequestClose={() => setShowCategorize(false)}>
-                <View style={styles.overlay}>
-                    <View style={[styles.categorizeSheet, { backgroundColor: colors.background }]}>
-                        <Text style={[styles.categorizeTitle, { color: colors.text }]}>Dokument kategorisieren</Text>
+                {/* Options Sheet - rendered as absolute overlay */}
+                {showOptionsSheet && (
+                    <View style={[StyleSheet.absoluteFill, styles.overlay]}>
+                        <TouchableWithoutFeedback onPress={() => setShowOptionsSheet(false)}>
+                            <View style={{ flex: 1 }} />
+                        </TouchableWithoutFeedback>
+                        <View style={[styles.bottomSheet, { backgroundColor: colors.background }]}>
+                            <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
+                            <Text style={[styles.sheetTitle, { color: colors.text, borderBottomColor: colors.border }]}>Optionen</Text>
 
-                        <Text style={{ color: colors.subtext, fontSize: 12, marginBottom: 6 }}>Ordner:</Text>
-                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
-                            {FOLDERS.map(folder => (
+                            <Pressable style={styles.sheetRow} onPress={() => { setShowOptionsSheet(false); setShowUploadSheet(true); }}>
+                                <Upload size={20} color={colors.subtext} />
+                                <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Hochladen</Text>
+                            </Pressable>
+
+                            <Pressable style={styles.sheetRow} onPress={handleCreateFolder}>
+                                <FolderPlus size={20} color={colors.subtext} />
+                                <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Einen Ordner erstellen</Text>
+                            </Pressable>
+
+                            <Pressable style={styles.sheetRow} onPress={() => { setViewAsList(!viewAsList); setShowOptionsSheet(false); }}>
+                                <List size={20} color={colors.subtext} />
+                                <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Ansicht: {viewAsList ? 'Raster' : 'Liste'}</Text>
+                            </Pressable>
+
+                            <Pressable style={styles.sheetRow} onPress={() => { cycleSortMode(); setShowOptionsSheet(false); }}>
+                                <ArrowUpDown size={20} color={colors.subtext} />
+                                <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Sortieren: {getSortLabel()}</Text>
+                            </Pressable>
+
+                            <Pressable style={styles.sheetRow} onPress={handleFeedback}>
+                                <MessageCircle size={20} color={colors.subtext} />
+                                <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Feedback geben</Text>
+                            </Pressable>
+                        </View>
+                    </View>
+                )}
+
+                {/* Create Folder - rendered as absolute overlay */}
+                {showCreateFolder && (
+                    <View style={[StyleSheet.absoluteFill, styles.overlay, { justifyContent: 'center', alignItems: 'center' }]}>
+                        <TouchableWithoutFeedback onPress={() => setShowCreateFolder(false)}>
+                            <View style={StyleSheet.absoluteFill} />
+                        </TouchableWithoutFeedback>
+                        <View style={[styles.categorizeSheet, { backgroundColor: colors.background, width: '85%' }]}>
+                            <Text style={[styles.categorizeTitle, { color: colors.text }]}>Neuer Ordner</Text>
+                            <TextInput
+                                style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
+                                value={newFolderName}
+                                onChangeText={setNewFolderName}
+                                placeholder="Ordnername"
+                                placeholderTextColor={colors.subtext}
+                                autoFocus
+                                maxLength={50}
+                            />
+                            <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
                                 <Pressable
-                                    key={folder.key}
-                                    style={[styles.catChip, {
-                                        backgroundColor: uploadCategory === folder.key ? folder.bgColor + '30' : colors.card,
-                                        borderColor: uploadCategory === folder.key ? folder.bgColor : colors.border,
-                                    }]}
-                                    onPress={() => setUploadCategory(folder.key)}
+                                    style={[styles.btnSecondary, { borderColor: colors.border }]}
+                                    onPress={() => setShowCreateFolder(false)}
                                 >
-                                    <Text style={{ fontSize: 14 }}>{folder.emoji}</Text>
-                                    <Text style={{ fontSize: 11, color: uploadCategory === folder.key ? folder.bgColor : colors.text, fontWeight: '600' }}>
-                                        {folder.label}
-                                    </Text>
+                                    <Text style={{ color: colors.text, fontWeight: '600' }}>Abbrechen</Text>
                                 </Pressable>
-                            ))}
-                        </View>
-
-                        <Text style={{ color: colors.subtext, fontSize: 12, marginBottom: 6 }}>Beschreibung (optional):</Text>
-                        <TextInput
-                            style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
-                            value={uploadDescription}
-                            onChangeText={setUploadDescription}
-                            placeholder="z.B. Krankenversicherung 2025"
-                            placeholderTextColor={colors.subtext}
-                        />
-
-                        <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
-                            <Pressable style={[styles.btnSecondary, { borderColor: colors.border }]} onPress={() => setShowCategorize(false)}>
-                                <Text style={{ color: colors.text, fontWeight: '600' }}>Abbrechen</Text>
-                            </Pressable>
-                            <Pressable style={[styles.btnPrimary, { backgroundColor: colors.accent }]} onPress={confirmUpload}>
-                                <Upload size={16} color="#fff" />
-                                <Text style={{ color: '#fff', fontWeight: '700' }}>Hochladen</Text>
-                            </Pressable>
+                                <Pressable
+                                    style={[styles.btnPrimary, { backgroundColor: colors.accent }]}
+                                    onPress={confirmCreateFolder}
+                                >
+                                    <Text style={{ color: '#fff', fontWeight: '600' }}>Erstellen</Text>
+                                </Pressable>
+                            </View>
                         </View>
                     </View>
-                </View>
-            </Modal>
+                )}
+
+                {/* Categorize File - rendered as absolute overlay */}
+                {showCategorize && (
+                    <View style={[StyleSheet.absoluteFill, styles.overlay, { justifyContent: 'center', alignItems: 'center' }]}>
+                        <View style={[styles.categorizeSheet, { backgroundColor: colors.background, width: '85%' }]}>
+                            <Text style={[styles.categorizeTitle, { color: colors.text }]}>Dokument kategorisieren</Text>
+
+                            <Text style={{ color: colors.subtext, fontSize: 12, marginBottom: 6 }}>Ordner:</Text>
+                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
+                                {FOLDERS.map(folder => (
+                                    <Pressable
+                                        key={folder.key}
+                                        style={[styles.catChip, {
+                                            backgroundColor: uploadCategory === folder.key ? folder.bgColor + '30' : colors.card,
+                                            borderColor: uploadCategory === folder.key ? folder.bgColor : colors.border,
+                                        }]}
+                                        onPress={() => setUploadCategory(folder.key)}
+                                    >
+                                        <Text style={{ fontSize: 14 }}>{folder.emoji}</Text>
+                                        <Text style={{ fontSize: 11, color: uploadCategory === folder.key ? folder.bgColor : colors.text, fontWeight: '600' }}>
+                                            {folder.label}
+                                        </Text>
+                                    </Pressable>
+                                ))}
+                            </View>
+
+                            <Text style={{ color: colors.subtext, fontSize: 12, marginBottom: 6 }}>Beschreibung (optional):</Text>
+                            <TextInput
+                                style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
+                                value={uploadDescription}
+                                onChangeText={setUploadDescription}
+                                placeholder="z.B. Krankenversicherung 2025"
+                                placeholderTextColor={colors.subtext}
+                            />
+
+                            <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
+                                <Pressable style={[styles.btnSecondary, { borderColor: colors.border }]} onPress={() => setShowCategorize(false)}>
+                                    <Text style={{ color: colors.text, fontWeight: '600' }}>Abbrechen</Text>
+                                </Pressable>
+                                <Pressable style={[styles.btnPrimary, { backgroundColor: colors.accent }]} onPress={confirmUpload}>
+                                    <Upload size={16} color="#fff" />
+                                    <Text style={{ color: '#fff', fontWeight: '700' }}>Hochladen</Text>
+                                </Pressable>
+                            </View>
+                        </View>
+                    </View>
+                )}
+            </View>
         </Modal>
     );
 }
