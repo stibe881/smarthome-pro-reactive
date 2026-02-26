@@ -100,12 +100,16 @@ export const FamilyContacts: React.FC<ContactsProps> = ({ visible, onClose }) =>
         <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
             <View style={[styles.container, { backgroundColor: colors.background }]}>
                 <View style={[styles.header, { borderBottomColor: colors.border }]}>
-                    <Pressable onPress={onClose}><X size={24} color={colors.subtext} /></Pressable>
-                    <Text style={[styles.headerTitle, { color: colors.text }]}>Wichtige Kontakte</Text>
-                    <Pressable onPress={() => { resetForm(); setShowAdd(true); }}><Plus size={24} color={colors.accent} /></Pressable>
+                    <View style={styles.titleRow}>
+                        <Phone size={24} color={colors.accent} />
+                        <Text style={[styles.headerTitle, { color: colors.text }]}>Wichtige Kontakte</Text>
+                    </View>
+                    <Pressable onPress={onClose} style={[styles.closeBtn, { backgroundColor: colors.border }]}>
+                        <X size={24} color={colors.subtext} />
+                    </Pressable>
                 </View>
 
-                <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+                <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 100 }}>
                     {isLoading ? <ActivityIndicator color={colors.accent} style={{ paddingVertical: 40 }} /> :
                         contacts.length === 0 ? (
                             <View style={styles.empty}>
@@ -137,6 +141,11 @@ export const FamilyContacts: React.FC<ContactsProps> = ({ visible, onClose }) =>
                         )}
                 </ScrollView>
 
+                {/* FAB */}
+                <Pressable style={[styles.fab, { backgroundColor: colors.accent }]} onPress={() => { resetForm(); setShowAdd(true); }}>
+                    <Plus size={24} color="#fff" />
+                </Pressable>
+
                 {/* Add/Edit Modal */}
                 <Modal visible={showAdd} transparent animationType="fade">
                     <View style={styles.overlay}><View style={[styles.popup, { backgroundColor: colors.card }]}>
@@ -165,8 +174,10 @@ export const FamilyContacts: React.FC<ContactsProps> = ({ visible, onClose }) =>
 
 const styles = StyleSheet.create({
     container: { flex: 1 },
-    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1 },
-    headerTitle: { fontSize: 18, fontWeight: 'bold' },
+    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1 },
+    titleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    headerTitle: { fontSize: 20, fontWeight: 'bold' },
+    closeBtn: { padding: 4, borderRadius: 20 },
     empty: { alignItems: 'center', paddingVertical: 60, gap: 12 },
     emptyText: { fontSize: 15, textAlign: 'center', lineHeight: 22 },
     groupTitle: { fontSize: 14, fontWeight: '700', marginBottom: 8 },
@@ -176,6 +187,13 @@ const styles = StyleSheet.create({
     contactPhone: { fontSize: 14, fontWeight: '600', marginTop: 2 },
     contactNotes: { fontSize: 12, marginTop: 2 },
     contactActions: { gap: 12 },
+    fab: {
+        position: 'absolute', bottom: 30, right: 20,
+        width: 56, height: 56, borderRadius: 28,
+        justifyContent: 'center', alignItems: 'center',
+        elevation: 6, shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8,
+    },
     overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 24 },
     popup: { borderRadius: 20, padding: 20 },
     popupTitle: { fontSize: 18, fontWeight: '800', marginBottom: 12 },

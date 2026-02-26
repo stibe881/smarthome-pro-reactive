@@ -109,9 +109,13 @@ export const MealPlanner: React.FC<MealPlannerProps> = ({ visible, onClose }) =>
         <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
             <View style={[styles.container, { backgroundColor: colors.background }]}>
                 <View style={[styles.header, { borderBottomColor: colors.border }]}>
-                    <Pressable onPress={onClose}><X size={24} color={colors.subtext} /></Pressable>
-                    <Text style={[styles.headerTitle, { color: colors.text }]}>Essensplaner</Text>
-                    <View style={{ width: 24 }} />
+                    <View style={styles.titleRow}>
+                        <UtensilsCrossed size={24} color={colors.accent} />
+                        <Text style={[styles.headerTitle, { color: colors.text }]}>Essensplaner</Text>
+                    </View>
+                    <Pressable onPress={onClose} style={[styles.closeBtn, { backgroundColor: colors.border }]}>
+                        <X size={24} color={colors.subtext} />
+                    </Pressable>
                 </View>
 
                 {/* Week Nav */}
@@ -207,8 +211,10 @@ export const MealPlanner: React.FC<MealPlannerProps> = ({ visible, onClose }) =>
 
 const styles = StyleSheet.create({
     container: { flex: 1 },
-    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1 },
-    headerTitle: { fontSize: 18, fontWeight: 'bold' },
+    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1 },
+    titleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    headerTitle: { fontSize: 20, fontWeight: 'bold' },
+    closeBtn: { padding: 4, borderRadius: 20 },
     weekNav: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 10, marginHorizontal: 16, marginTop: 12, borderRadius: 12 },
     weekLabel: { fontSize: 15, fontWeight: '700' },
     dayTabs: { marginTop: 12, maxHeight: 44 },

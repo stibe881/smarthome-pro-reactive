@@ -3,7 +3,7 @@ import {
     View, Text, StyleSheet, Pressable, ScrollView,
     ActivityIndicator, Modal,
 } from 'react-native';
-import { X, ChevronLeft, ChevronRight, CalendarDays, CheckCircle2, Clock } from 'lucide-react-native';
+import { X, ChevronLeft, ChevronRight, CalendarDays, CheckCircle2, Clock, LayoutList } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useHousehold } from '../hooks/useHousehold';
 import { supabase } from '../lib/supabase';
@@ -92,9 +92,13 @@ export const WeeklyOverview: React.FC<WeeklyOverviewProps> = ({ visible, onClose
         <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
             <View style={[styles.container, { backgroundColor: colors.background }]}>
                 <View style={[styles.header, { borderBottomColor: colors.border }]}>
-                    <Pressable onPress={onClose}><X size={24} color={colors.subtext} /></Pressable>
-                    <Text style={[styles.headerTitle, { color: colors.text }]}>Wochenübersicht</Text>
-                    <View style={{ width: 24 }} />
+                    <View style={styles.titleRow}>
+                        <LayoutList size={24} color={colors.accent} />
+                        <Text style={[styles.headerTitle, { color: colors.text }]}>Wochenübersicht</Text>
+                    </View>
+                    <Pressable onPress={onClose} style={[styles.closeBtn, { backgroundColor: colors.border }]}>
+                        <X size={24} color={colors.subtext} />
+                    </Pressable>
                 </View>
 
                 {/* Week Nav */}
@@ -193,8 +197,10 @@ export const WeeklyOverview: React.FC<WeeklyOverviewProps> = ({ visible, onClose
 
 const styles = StyleSheet.create({
     container: { flex: 1 },
-    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1 },
-    headerTitle: { fontSize: 18, fontWeight: 'bold' },
+    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1 },
+    titleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    headerTitle: { fontSize: 20, fontWeight: 'bold' },
+    closeBtn: { padding: 4, borderRadius: 20 },
     weekNav: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 10, marginHorizontal: 16, marginTop: 12, borderRadius: 12 },
     weekLabel: { fontSize: 15, fontWeight: '700' },
     statsRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, marginTop: 12 },

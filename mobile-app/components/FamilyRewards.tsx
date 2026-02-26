@@ -242,9 +242,13 @@ export const FamilyRewards: React.FC<RewardsProps> = ({ visible, onClose }) => {
         <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
             <View style={[styles.container, { backgroundColor: colors.background }]}>
                 <View style={[styles.header, { borderBottomColor: colors.border }]}>
-                    <Pressable onPress={onClose}><X size={24} color={colors.subtext} /></Pressable>
-                    <Text style={[styles.headerTitle, { color: colors.text }]}>Belohnungen</Text>
-                    <View style={{ width: 24 }} />
+                    <View style={styles.titleRow}>
+                        <Trophy size={24} color={colors.accent} />
+                        <Text style={[styles.headerTitle, { color: colors.text }]}>Belohnungen</Text>
+                    </View>
+                    <Pressable onPress={onClose} style={[styles.closeBtn, { backgroundColor: colors.border }]}>
+                        <X size={24} color={colors.subtext} />
+                    </Pressable>
                 </View>
 
                 {/* Tabs */}
@@ -388,9 +392,13 @@ export const FamilyRewards: React.FC<RewardsProps> = ({ visible, onClose }) => {
                 <Modal visible={!!historyMember} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setHistoryMember(null)}>
                     <View style={[styles.container, { backgroundColor: colors.background }]}>
                         <View style={[styles.header, { borderBottomColor: colors.border }]}>
-                            <Pressable onPress={() => setHistoryMember(null)}><X size={24} color={colors.subtext} /></Pressable>
-                            <Text style={[styles.headerTitle, { color: colors.text }]}>{historyMember?.member_name}</Text>
-                            <View style={{ width: 24 }} />
+                            <View style={styles.titleRow}>
+                                <Clock size={24} color={colors.accent} />
+                                <Text style={[styles.headerTitle, { color: colors.text }]}>{historyMember?.member_name}</Text>
+                            </View>
+                            <Pressable onPress={() => setHistoryMember(null)} style={[styles.closeBtn, { backgroundColor: colors.border }]}>
+                                <X size={24} color={colors.subtext} />
+                            </Pressable>
                         </View>
                         <View style={{ alignItems: 'center', paddingVertical: 16 }}>
                             <Text style={[styles.memberPoints, { color: colors.accent, fontSize: 28 }]}>{historyMember?.points} ⭐</Text>
@@ -459,8 +467,10 @@ export const FamilyRewards: React.FC<RewardsProps> = ({ visible, onClose }) => {
 
 const styles = StyleSheet.create({
     container: { flex: 1 },
-    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1 },
-    headerTitle: { fontSize: 18, fontWeight: 'bold' },
+    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1 },
+    titleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    headerTitle: { fontSize: 20, fontWeight: 'bold' },
+    closeBtn: { padding: 4, borderRadius: 20 },
     tabs: { flexDirection: 'row', marginHorizontal: 16, marginTop: 12, borderRadius: 12, borderWidth: 1, overflow: 'hidden' },
     tab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10 },
     emptyState: { alignItems: 'center', paddingVertical: 60, gap: 12 },

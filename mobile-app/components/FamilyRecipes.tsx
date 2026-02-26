@@ -9,6 +9,7 @@ import {
     BookOpen, ChefHat, ArrowLeft, MoreHorizontal, Home, Heart,
     Camera, Tag, Bookmark, Share2, Flame,
 } from 'lucide-react-native';
+import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useTheme } from '../contexts/ThemeContext';
@@ -367,13 +368,18 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
         <>
             {/* Header */}
             <View style={[styles.header, { borderBottomColor: colors.border }]}>
-                <Pressable onPress={onClose}>
-                    <Home size={22} color={colors.accent} />
-                </Pressable>
-                <Text style={[styles.headerTitle, { color: colors.text }]}>Rezeptbox</Text>
-                <Pressable hitSlop={12} onPress={() => setShowNewPicker(true)}>
-                    <MoreHorizontal size={22} color={colors.accent} />
-                </Pressable>
+                <View style={styles.titleRow}>
+                    <BookOpen size={24} color={colors.accent} />
+                    <Text style={[styles.headerTitle, { color: colors.text }]}>Rezeptbox</Text>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                    <Pressable hitSlop={12} onPress={() => setShowNewPicker(true)}>
+                        <MoreHorizontal size={22} color={colors.accent} />
+                    </Pressable>
+                    <Pressable onPress={onClose} style={[styles.closeBtn, { backgroundColor: colors.border }]}>
+                        <X size={24} color={colors.subtext} />
+                    </Pressable>
+                </View>
             </View>
 
             {/* Search */}
@@ -418,26 +424,39 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
                     </View>
                 ) : (
                     filtered.map(recipe => (
-                        <Pressable
+                        <Swipeable
                             key={recipe.id}
-                            style={[styles.recipeRow, { borderBottomColor: colors.border }]}
-                            onPress={() => { setSelectedRecipe(recipe); setViewMode('detail'); }}
-                        >
-                            <View style={{ flex: 1 }}>
-                                <Text style={[styles.recipeTitle, { color: colors.text }]} numberOfLines={1}>{recipe.title}</Text>
-                                <Text style={[styles.recipeSub, { color: colors.subtext }]} numberOfLines={1}>
-                                    {getSourceDomain(recipe.source_url) || ''}{recipe.source_url && recipe.added_by_name ? ' | ' : ''}
-                                    {recipe.added_by_name ? `Hinzugefügt von ${recipe.added_by_name}` : ''}
-                                </Text>
-                            </View>
-                            {recipe.image_url ? (
-                                <Image source={{ uri: recipe.image_url }} style={styles.recipeThumb} />
-                            ) : (
-                                <View style={[styles.recipeThumbPlaceholder, { backgroundColor: colors.card }]}>
-                                    <ChefHat size={20} color={colors.subtext} />
-                                </View>
+                            renderRightActions={() => (
+                                <Pressable
+                                    style={styles.swipeDelete}
+                                    onPress={() => handleDelete(recipe)}
+                                >
+                                    <Trash2 size={20} color="#fff" />
+                                    <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>Löschen</Text>
+                                </Pressable>
                             )}
-                        </Pressable>
+                            overshootRight={false}
+                        >
+                            <Pressable
+                                style={[styles.recipeRow, { borderBottomColor: colors.border }]}
+                                onPress={() => { setSelectedRecipe(recipe); setViewMode('detail'); }}
+                            >
+                                <View style={{ flex: 1 }}>
+                                    <Text style={[styles.recipeTitle, { color: colors.text }]} numberOfLines={1}>{recipe.title}</Text>
+                                    <Text style={[styles.recipeSub, { color: colors.subtext }]} numberOfLines={1}>
+                                        {getSourceDomain(recipe.source_url) || ''}{recipe.source_url && recipe.added_by_name ? ' | ' : ''}
+                                        {recipe.added_by_name ? `Hinzugefügt von ${recipe.added_by_name}` : ''}
+                                    </Text>
+                                </View>
+                                {recipe.image_url ? (
+                                    <Image source={{ uri: recipe.image_url }} style={styles.recipeThumb} />
+                                ) : (
+                                    <View style={[styles.recipeThumbPlaceholder, { backgroundColor: colors.card }]}>
+                                        <ChefHat size={20} color={colors.subtext} />
+                                    </View>
+                                )}
+                            </Pressable>
+                        </Swipeable>
                     ))
                 )}
             </ScrollView>
@@ -501,8 +520,10 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
                     </View>
                 ) : (
                     <View style={[styles.header, { borderBottomColor: colors.border }]}>
-                        <Pressable onPress={() => setViewMode('list')}><ArrowLeft size={22} color={colors.subtext} /></Pressable>
-                        <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>{r.title}</Text>
+                        <View style={styles.titleRow}>
+                            <Pressable onPress={() => setViewMode('list')}><ArrowLeft size={22} color={colors.subtext} /></Pressable>
+                            <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>{r.title}</Text>
+                        </View>
                         <Pressable onPress={() => openEdit(r)}><MoreHorizontal size={22} color={colors.accent} /></Pressable>
                     </View>
                 )}
@@ -615,6 +636,15 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
                         <Text style={styles.planBtnText}>Dieses Rezept planen</Text>
                     </Pressable>
                 </View>
+
+                {/* Delete button */}
+                <Pressable
+                    style={styles.deleteRecipeBtn}
+                    onPress={() => handleDelete(r)}
+                >
+                    <Trash2 size={16} color="#EF4444" />
+                    <Text style={{ color: '#EF4444', fontWeight: '600', fontSize: 14 }}>Rezept löschen</Text>
+                </Pressable>
             </View>
         );
     };
@@ -815,12 +845,14 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
 
     return (
         <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-            <View style={[styles.container, { backgroundColor: colors.background }]}>
-                {viewMode === 'list' && renderList()}
-                {viewMode === 'detail' && renderDetail()}
-                {viewMode === 'create_own' && renderCreateOwn()}
-                {viewMode === 'create_web' && renderCreateWeb()}
-            </View>
+            <GestureHandlerRootView style={{ flex: 1 }}>
+                <View style={[styles.container, { backgroundColor: colors.background }]}>
+                    {viewMode === 'list' && renderList()}
+                    {viewMode === 'detail' && renderDetail()}
+                    {viewMode === 'create_own' && renderCreateOwn()}
+                    {viewMode === 'create_web' && renderCreateWeb()}
+                </View>
+            </GestureHandlerRootView>
         </Modal>
     );
 }
@@ -831,9 +863,11 @@ const styles = StyleSheet.create({
     container: { flex: 1 },
     header: {
         flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-        padding: 16, borderBottomWidth: 1,
+        padding: 20, borderBottomWidth: 1,
     },
-    headerTitle: { fontSize: 18, fontWeight: '800', flex: 1, textAlign: 'center' },
+    titleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    headerTitle: { fontSize: 20, fontWeight: 'bold' },
+    closeBtn: { padding: 4, borderRadius: 20 },
 
     searchRow: {
         flexDirection: 'row', alignItems: 'center', gap: 8,
@@ -960,4 +994,14 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20, paddingVertical: 14, borderRadius: 10,
     },
     catPickerLabel: { fontSize: 15, fontWeight: '500', flex: 1 },
+
+    // Delete
+    swipeDelete: {
+        backgroundColor: '#EF4444', justifyContent: 'center', alignItems: 'center',
+        width: 80, marginLeft: 8, gap: 4,
+    },
+    deleteRecipeBtn: {
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+        paddingVertical: 14, marginHorizontal: 20, marginBottom: 40,
+    },
 });

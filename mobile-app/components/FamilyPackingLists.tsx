@@ -3,7 +3,9 @@ import {
     View, Text, StyleSheet, Pressable, ScrollView, TextInput,
     ActivityIndicator, Alert, Modal,
 } from 'react-native';
-import { X, Plus, Trash2, Luggage, CheckCircle2, Circle, Copy } from 'lucide-react-native';
+import {
+    X, Plus, Trash2, Check, ChevronLeft, Luggage, CheckCircle2, Circle, Copy,
+} from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useHousehold } from '../hooks/useHousehold';
 import { supabase } from '../lib/supabase';
@@ -99,7 +101,7 @@ export const FamilyPackingLists: React.FC<PackingListsProps> = ({ visible, onClo
     };
 
     const deleteList = (list: PackingList) => {
-        Alert.alert('Löschen', `"${list.title}" löschen?`, [
+        Alert.alert('Löschen', `"${list.title}" löschen ? `, [
             { text: 'Abbrechen', style: 'cancel' },
             { text: 'Löschen', style: 'destructive', onPress: async () => { await supabase.from('packing_lists').delete().eq('id', list.id); setActiveList(null); loadLists(); } },
         ]);
@@ -109,14 +111,22 @@ export const FamilyPackingLists: React.FC<PackingListsProps> = ({ visible, onClo
         <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
             <View style={[styles.container, { backgroundColor: colors.background }]}>
                 <View style={[styles.header, { borderBottomColor: colors.border }]}>
-                    <Pressable onPress={activeList ? () => { setActiveList(null); loadLists(); } : onClose}>
-                        <X size={24} color={colors.subtext} />
-                    </Pressable>
-                    <Text style={[styles.headerTitle, { color: colors.text }]}>{activeList ? activeList.title : 'Packlisten'}</Text>
+                    <View style={styles.titleRow}>
+                        {activeList ? (
+                            <Pressable onPress={() => { setActiveList(null); loadLists(); }}>
+                                <ChevronLeft size={24} color={colors.accent} />
+                            </Pressable>
+                        ) : (
+                            <Luggage size={24} color={colors.accent} />
+                        )}
+                        <Text style={[styles.headerTitle, { color: colors.text }]}>{activeList ? activeList.title : 'Packlisten'}</Text>
+                    </View>
                     {activeList ? (
                         <Pressable onPress={resetChecks}><Text style={{ color: colors.accent, fontSize: 13, fontWeight: '600' }}>Reset</Text></Pressable>
                     ) : (
-                        <Pressable onPress={() => setShowAdd(true)}><Plus size={24} color={colors.accent} /></Pressable>
+                        <Pressable onPress={onClose} style={[styles.closeBtn, { backgroundColor: colors.border }]}>
+                            <X size={24} color={colors.subtext} />
+                        </Pressable>
                     )}
                 </View>
 
@@ -142,7 +152,7 @@ export const FamilyPackingLists: React.FC<PackingListsProps> = ({ visible, onClo
                     </ScrollView>
                 ) : (
                     /* List Overview */
-                    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+                    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 100 }}>
                         {isLoading ? <ActivityIndicator color={colors.accent} style={{ paddingVertical: 40 }} /> : (
                             <>
                                 {lists.map(list => {
@@ -175,6 +185,13 @@ export const FamilyPackingLists: React.FC<PackingListsProps> = ({ visible, onClo
                     </ScrollView>
                 )}
 
+                {/* FAB - only on list overview */}
+                {!activeList && (
+                    <Pressable style={[styles.fab, { backgroundColor: colors.accent }]} onPress={() => setShowAdd(true)}>
+                        <Plus size={24} color="#fff" />
+                    </Pressable>
+                )}
+
                 {/* Create Modal */}
                 <Modal visible={showAdd} transparent animationType="fade">
                     <View style={styles.overlay}><View style={[styles.popup, { backgroundColor: colors.card }]}>
@@ -200,8 +217,10 @@ export const FamilyPackingLists: React.FC<PackingListsProps> = ({ visible, onClo
 
 const styles = StyleSheet.create({
     container: { flex: 1 },
-    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1 },
-    headerTitle: { fontSize: 18, fontWeight: 'bold' },
+    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1 },
+    titleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    headerTitle: { fontSize: 20, fontWeight: 'bold' },
+    closeBtn: { padding: 4, borderRadius: 20 },
     progress: { fontSize: 13, fontWeight: '600', marginVertical: 10 },
     addItemRow: { flexDirection: 'row', alignItems: 'center', borderRadius: 14, borderWidth: 1, paddingLeft: 14, paddingRight: 4, paddingVertical: 4 },
     addItemInput: { flex: 1, fontSize: 15, paddingVertical: 8 },
@@ -213,6 +232,13 @@ const styles = StyleSheet.create({
     listTitle: { fontSize: 15, fontWeight: '700' },
     sectionTitle: { fontSize: 13, fontWeight: '700', marginBottom: 8 },
     templateCard: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 14, borderWidth: 1, marginBottom: 6 },
+    fab: {
+        position: 'absolute', bottom: 30, right: 20,
+        width: 56, height: 56, borderRadius: 28,
+        justifyContent: 'center', alignItems: 'center',
+        elevation: 6, shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8,
+    },
     overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 24 },
     popup: { borderRadius: 20, padding: 20 },
     popupTitle: { fontSize: 18, fontWeight: '800', marginBottom: 12 },

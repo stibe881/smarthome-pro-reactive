@@ -6,10 +6,11 @@ import {
 import DateTimePicker from '@react-native-community/datetimepicker';
 import {
     X, Check, Plus, Cake, Heart, PartyPopper, Trash2, Bell, BellOff,
-    CalendarDays, Eye, RotateCcw, ChevronRight,
+    CalendarDays, Eye, RotateCcw, ChevronRight, Link2,
 } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useHomeAssistant } from '../contexts/HomeAssistantContext';
 import { useHousehold } from '../hooks/useHousehold';
 import { supabase } from '../lib/supabase';
 
@@ -77,6 +78,7 @@ export const FamilyCelebrations: React.FC<FamilyCelebrationsProps> = ({ visible,
     const { colors } = useTheme();
     const { user } = useAuth();
     const { householdId } = useHousehold();
+    const { fetchCalendarEvents, callService } = useHomeAssistant();
 
     const [celebrations, setCelebrations] = useState<CelebrationItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -96,6 +98,10 @@ export const FamilyCelebrations: React.FC<FamilyCelebrationsProps> = ({ visible,
     const [editingItem, setEditingItem] = useState<CelebrationItem | null>(null);
     const [showColorPicker, setShowColorPicker] = useState(false);
     const [showReminderPicker, setShowReminderPicker] = useState(false);
+
+    // HA Birthday calendar integration
+    const [birthdayCalSource, setBirthdayCalSource] = useState<{ entity_id: string } | null>(null);
+    const [haEvents, setHaEvents] = useState<CelebrationItem[]>([]);
 
     const loadCelebrations = useCallback(async () => {
         if (!householdId) return;
@@ -118,9 +124,67 @@ export const FamilyCelebrations: React.FC<FamilyCelebrationsProps> = ({ visible,
     useEffect(() => {
         if (visible) {
             loadCelebrations();
+            loadBirthdayCalSource();
             setViewMode('list');
         }
     }, [visible, loadCelebrations]);
+
+    // Load the birthday calendar source
+    const loadBirthdayCalSource = async () => {
+        if (!householdId) return;
+        try {
+            const { data } = await supabase
+                .from('planner_calendar_sources')
+                .select('entity_id')
+                .eq('household_id', householdId)
+                .eq('is_birthday_calendar', true)
+                .limit(1)
+                .single();
+            setBirthdayCalSource(data || null);
+        } catch {
+            setBirthdayCalSource(null);
+        }
+    };
+
+    // Load HA birthday events when we have the source
+    useEffect(() => {
+        if (!birthdayCalSource || !fetchCalendarEvents) return;
+        const loadHaBirthdays = async () => {
+            try {
+                const now = new Date();
+                const end = new Date();
+                end.setDate(now.getDate() + 365);
+                const data = await fetchCalendarEvents(birthdayCalSource.entity_id, now.toISOString(), end.toISOString());
+                if (!data || !Array.isArray(data)) return;
+
+                const items: CelebrationItem[] = data.slice(0, 30).map((evt: any, idx: number) => {
+                    const startStr = evt.start?.date || evt.start?.dateTime || evt.start || '';
+                    const dateOnly = startStr.slice(0, 10);
+                    return {
+                        id: `ha-birthday-${idx}`,
+                        household_id: '',
+                        created_by: null,
+                        name: evt.summary || 'Unbenannt',
+                        event_type: 'birthday' as const,
+                        event_date: dateOnly,
+                        show_year: false,
+                        all_day: true,
+                        color: '#EC4899',
+                        emoji: '🎂',
+                        image_url: null,
+                        repeat_type: 'yearly',
+                        reminder_time: 'none',
+                        visibility: 'everyone',
+                        created_at: '',
+                    };
+                });
+                setHaEvents(items);
+            } catch (e) {
+                console.error('Error loading HA birthday events:', e);
+            }
+        };
+        loadHaBirthdays();
+    }, [birthdayCalSource, fetchCalendarEvents]);
 
     const resetForm = () => {
         setFormName('');
@@ -201,6 +265,21 @@ export const FamilyCelebrations: React.FC<FamilyCelebrationsProps> = ({ visible,
             resetForm();
             setViewMode('list');
             loadCelebrations();
+
+            // Sync birthday to HA calendar if birthday calendar is configured
+            if (selectedType === 'birthday' && birthdayCalSource && callService) {
+                try {
+                    const startDate = dateStr;
+                    const endDate = new Date(new Date(dateStr + 'T00:00:00').getTime() + 86400000).toISOString().split('T')[0];
+                    callService('calendar', 'create_event', birthdayCalSource.entity_id, {
+                        summary: formName.trim(),
+                        start_date: startDate,
+                        end_date: endDate,
+                    });
+                } catch (syncErr) {
+                    console.warn('HA birthday sync failed:', syncErr);
+                }
+            }
         } catch (e: any) {
             Alert.alert('Fehler', e.message);
         } finally {
@@ -254,13 +333,29 @@ export const FamilyCelebrations: React.FC<FamilyCelebrationsProps> = ({ visible,
     const currentReminderInfo = REMINDER_OPTIONS.find(r => r.key === formReminder) || REMINDER_OPTIONS[0];
     const typeInfo = EVENT_TYPES.find(t => t.key === selectedType)!;
 
+    // Merge Supabase celebrations with HA birthday events (deduplicated)
+    const mergedCelebrations = (() => {
+        const deduped = haEvents.filter(ha => {
+            const haName = ha.name.toLowerCase().trim();
+            const haMonth = new Date(ha.event_date + 'T00:00:00').getMonth();
+            const haDay = new Date(ha.event_date + 'T00:00:00').getDate();
+            return !celebrations.some(c => {
+                const cName = c.name.toLowerCase().trim();
+                const cMonth = new Date(c.event_date + 'T00:00:00').getMonth();
+                const cDay = new Date(c.event_date + 'T00:00:00').getDate();
+                return cName === haName && cMonth === haMonth && cDay === haDay;
+            });
+        });
+        return [...celebrations, ...deduped];
+    })();
+
     // --- Render ---
 
     const renderList = () => (
         <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
             {isLoading ? (
                 <ActivityIndicator color={colors.accent} style={{ paddingVertical: 40 }} />
-            ) : celebrations.length === 0 ? (
+            ) : mergedCelebrations.length === 0 ? (
                 <View style={styles.empty}>
                     <Text style={{ fontSize: 48 }}>🎂</Text>
                     <Text style={[styles.emptyTitle, { color: colors.text }]}>Keine Einträge</Text>
@@ -271,17 +366,18 @@ export const FamilyCelebrations: React.FC<FamilyCelebrationsProps> = ({ visible,
             ) : (
                 <>
                     {/* Upcoming section */}
-                    {celebrations.map(item => {
+                    {mergedCelebrations.map(item => {
                         const daysUntil = getDaysUntil(item.event_date);
                         const isToday = daysUntil === 0;
                         const isSoon = daysUntil <= 7;
+                        const isHaEvent = item.id.startsWith('ha-');
 
                         return (
                             <Pressable
                                 key={item.id}
                                 style={[styles.celebrationCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-                                onPress={() => openEditForm(item)}
-                                onLongPress={() => handleDelete(item)}
+                                onPress={() => !isHaEvent && openEditForm(item)}
+                                onLongPress={() => !isHaEvent && handleDelete(item)}
                             >
                                 <View style={[styles.celebEmoji, { backgroundColor: item.color + '25' }]}>
                                     <Text style={{ fontSize: 28 }}>{item.emoji}</Text>
@@ -292,6 +388,7 @@ export const FamilyCelebrations: React.FC<FamilyCelebrationsProps> = ({ visible,
                                         {formatEventDate(item.event_date, item.show_year)}
                                         {item.event_type === 'birthday' && item.show_year && ` · wird ${getAge(item.event_date) + 1}`}
                                     </Text>
+
                                 </View>
                                 <View style={styles.celebRight}>
                                     {isToday ? (
@@ -540,14 +637,19 @@ export const FamilyCelebrations: React.FC<FamilyCelebrationsProps> = ({ visible,
             <View style={[styles.container, { backgroundColor: colors.background }]}>
                 {/* Header */}
                 <View style={[styles.header, { borderBottomColor: colors.border }]}>
-                    <Pressable onPress={() => {
-                        if (viewMode === 'form') { setViewMode('type_picker'); resetForm(); }
-                        else if (viewMode === 'type_picker') setViewMode('list');
-                        else onClose();
-                    }}>
-                        <X size={24} color={colors.subtext} />
-                    </Pressable>
-                    <Text style={[styles.headerTitle, { color: colors.text }]}>{headerTitle}</Text>
+                    <View style={styles.titleRow}>
+                        {viewMode === 'list' ? (
+                            <Cake size={24} color={colors.accent} />
+                        ) : (
+                            <Pressable onPress={() => {
+                                if (viewMode === 'form') { setViewMode('type_picker'); resetForm(); }
+                                else if (viewMode === 'type_picker') setViewMode('list');
+                            }}>
+                                <X size={24} color={colors.subtext} />
+                            </Pressable>
+                        )}
+                        <Text style={[styles.headerTitle, { color: colors.text }]}>{headerTitle}</Text>
+                    </View>
                     {viewMode === 'form' ? (
                         <Pressable onPress={handleSave} disabled={isSaving}>
                             {isSaving
@@ -556,8 +658,8 @@ export const FamilyCelebrations: React.FC<FamilyCelebrationsProps> = ({ visible,
                             }
                         </Pressable>
                     ) : viewMode === 'list' ? (
-                        <Pressable onPress={openTypePicker}>
-                            <Plus size={24} color={colors.accent} />
+                        <Pressable onPress={onClose} style={[styles.closeBtn, { backgroundColor: colors.border }]}>
+                            <X size={24} color={colors.subtext} />
                         </Pressable>
                     ) : (
                         <View style={{ width: 24 }} />
@@ -569,6 +671,13 @@ export const FamilyCelebrations: React.FC<FamilyCelebrationsProps> = ({ visible,
                 {viewMode === 'type_picker' && renderTypePicker()}
                 {viewMode === 'form' && renderForm()}
 
+                {/* FAB - only in list mode */}
+                {viewMode === 'list' && (
+                    <Pressable style={[styles.fab, { backgroundColor: colors.accent }]} onPress={openTypePicker}>
+                        <Plus size={24} color="#fff" />
+                    </Pressable>
+                )}
+
                 {renderDatePicker()}
             </View>
         </Modal>
@@ -579,15 +688,24 @@ const styles = StyleSheet.create({
     container: { flex: 1 },
     header: {
         flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-        padding: 16, borderBottomWidth: 1,
+        padding: 20, borderBottomWidth: 1,
     },
-    headerTitle: { fontSize: 18, fontWeight: 'bold' },
+    titleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    headerTitle: { fontSize: 20, fontWeight: 'bold' },
+    closeBtn: { padding: 4, borderRadius: 20 },
 
     // List
-    listContent: { padding: 16, paddingBottom: 40, gap: 10 },
+    listContent: { padding: 16, paddingBottom: 100, gap: 10 },
     empty: { alignItems: 'center', paddingVertical: 60, gap: 8 },
     emptyTitle: { fontSize: 18, fontWeight: '700' },
     emptyText: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
+    fab: {
+        position: 'absolute', bottom: 30, right: 20,
+        width: 56, height: 56, borderRadius: 28,
+        justifyContent: 'center', alignItems: 'center',
+        elevation: 6, shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8,
+    },
 
     celebrationCard: {
         flexDirection: 'row', alignItems: 'center', padding: 14,

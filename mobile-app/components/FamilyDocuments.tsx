@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     View, Text, StyleSheet, Pressable, ScrollView, TextInput,
-    ActivityIndicator, Alert, Modal, Platform, Dimensions, Linking,
+    ActivityIndicator, Alert, Modal, Platform, Dimensions, Linking, Image,
     TouchableWithoutFeedback, TouchableOpacity,
 } from 'react-native';
 import {
-    X, Plus, Search, Trash2, Download, Upload, ArrowLeft,
-    MoreHorizontal, Home, FolderPlus, File, Image as ImageIcon,
+    X, Plus, Search, Trash2, Download, Upload, ArrowLeft, Edit3, CheckCircle,
+    MoreHorizontal, Home, FolderPlus, FolderLock, File, Image as ImageIcon,
     Camera, List, ArrowUpDown, MessageCircle,
 } from 'lucide-react-native';
 import * as DocumentPicker from 'expo-document-picker';
@@ -17,6 +17,8 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useHousehold } from '../hooks/useHousehold';
 import { supabase } from '../lib/supabase';
+import * as WebBrowser from 'expo-web-browser';
+import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
 
 interface FamilyDocument {
     id: string;
@@ -66,6 +68,10 @@ export function FamilyDocuments({ visible, onClose }: FamilyDocumentsProps) {
     const [viewAsList, setViewAsList] = useState(false);
     const [showCreateFolder, setShowCreateFolder] = useState(false);
     const [newFolderName, setNewFolderName] = useState('');
+    const pendingFileRef = useRef<any>(null);
+    const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
+    const isSelecting = selectedDocs.size > 0;
+    const [previewDoc, setPreviewDoc] = useState<FamilyDocument | null>(null);
 
     const loadDocuments = useCallback(async () => {
         if (!householdId) return;
@@ -102,12 +108,16 @@ export function FamilyDocuments({ visible, onClose }: FamilyDocumentsProps) {
         }
     }) : [];
 
-    const getFileIcon = (type: string) => {
-        if (type.includes('image')) return '🖼️';
-        if (type.includes('pdf')) return '📄';
-        if (type.includes('spreadsheet') || type.includes('excel')) return '📊';
-        if (type.includes('word') || type.includes('document')) return '📝';
-        return '📎';
+    const getFileIcon = (type: string): { icon: string; color: string } => {
+        if (type.includes('image')) return { icon: '🖼️', color: '#8B5CF6' };
+        if (type.includes('pdf')) return { icon: '📄', color: '#EF4444' };
+        if (type.includes('spreadsheet') || type.includes('excel')) return { icon: '📊', color: '#10B981' };
+        if (type.includes('word') || type.includes('document')) return { icon: '📝', color: '#3B82F6' };
+        if (type.includes('video')) return { icon: '🎬', color: '#F59E0B' };
+        if (type.includes('audio')) return { icon: '🎵', color: '#EC4899' };
+        if (type.includes('zip') || type.includes('archive') || type.includes('compressed')) return { icon: '📦', color: '#6366F1' };
+        if (type.includes('text')) return { icon: '📃', color: '#64748B' };
+        return { icon: '📎', color: '#94A3B8' };
     };
 
     const formatFileSize = (bytes: number) => {
@@ -128,7 +138,7 @@ export function FamilyDocuments({ visible, onClose }: FamilyDocumentsProps) {
             });
             if (result.canceled || !result.assets?.length) return;
             const file = result.assets[0];
-            (handlePickDocument as any)._pendingFile = file;
+            pendingFileRef.current = file;
             setUploadCategory(activeFolder || 'private');
             setUploadDescription('');
             setShowCategorize(true);
@@ -150,7 +160,7 @@ export function FamilyDocuments({ visible, onClose }: FamilyDocumentsProps) {
             if (result.canceled || !result.assets?.length) return;
             const asset = result.assets[0];
             const fileName = asset.uri.split('/').pop() || `image_${Date.now()}.jpg`;
-            (handlePickDocument as any)._pendingFile = {
+            pendingFileRef.current = {
                 uri: asset.uri,
                 name: fileName,
                 size: asset.fileSize || 0,
@@ -181,7 +191,7 @@ export function FamilyDocuments({ visible, onClose }: FamilyDocumentsProps) {
             if (result.canceled || !result.assets?.length) return;
             const asset = result.assets[0];
             const fileName = `photo_${Date.now()}.jpg`;
-            (handlePickDocument as any)._pendingFile = {
+            pendingFileRef.current = {
                 uri: asset.uri,
                 name: fileName,
                 size: asset.fileSize || 0,
@@ -236,7 +246,7 @@ export function FamilyDocuments({ visible, onClose }: FamilyDocumentsProps) {
     };
 
     const confirmUpload = async () => {
-        const file = (handlePickDocument as any)._pendingFile;
+        const file = pendingFileRef.current;
         if (!file || !householdId) return;
         setIsUploading(true);
         setShowCategorize(false);
@@ -302,6 +312,102 @@ export function FamilyDocuments({ visible, onClose }: FamilyDocumentsProps) {
         ]);
     };
 
+    const handleRename = (doc: FamilyDocument) => {
+        Alert.prompt(
+            'Umbenennen',
+            'Neuer Dateiname:',
+            async (newName) => {
+                if (!newName?.trim()) return;
+                try {
+                    await supabase.from('family_documents')
+                        .update({ file_name: newName.trim() })
+                        .eq('id', doc.id);
+                    loadDocuments();
+                } catch (e: any) {
+                    Alert.alert('Fehler', e.message);
+                }
+            },
+            'plain-text',
+            doc.file_name,
+        );
+    };
+
+    const handleOpenDoc = async (doc: FamilyDocument) => {
+        if (doc.file_type.includes('image')) {
+            setPreviewDoc(doc);
+        } else {
+            // Open PDFs, Word docs etc. in native in-app browser
+            await WebBrowser.openBrowserAsync(doc.file_url);
+        }
+    };
+
+    const handleShareDoc = async (doc: FamilyDocument) => {
+        try {
+            const fileUri = FileSystem.cacheDirectory + doc.file_name;
+            const downloadRes = await FileSystem.downloadAsync(doc.file_url, fileUri);
+            if (await Sharing.isAvailableAsync()) {
+                await Sharing.shareAsync(downloadRes.uri);
+            } else {
+                await Linking.openURL(doc.file_url);
+            }
+        } catch (e: any) {
+            Alert.alert('Fehler', e.message);
+        }
+    };
+
+    const toggleSelect = (docId: string) => {
+        setSelectedDocs(prev => {
+            const next = new Set(prev);
+            if (next.has(docId)) next.delete(docId);
+            else next.add(docId);
+            return next;
+        });
+    };
+
+    const handleBatchDelete = () => {
+        Alert.alert('Löschen', `${selectedDocs.size} Dokument(e) wirklich löschen?`, [
+            { text: 'Abbrechen', style: 'cancel' },
+            {
+                text: 'Löschen', style: 'destructive', onPress: async () => {
+                    try {
+                        const docsToDelete = documents.filter(d => selectedDocs.has(d.id));
+                        const storagePaths = docsToDelete
+                            .map(d => d.file_url.split('/family-documents/')[1])
+                            .filter(Boolean);
+                        if (storagePaths.length) {
+                            await supabase.storage.from('family-documents').remove(storagePaths);
+                        }
+                        const ids = docsToDelete.map(d => d.id);
+                        await supabase.from('family_documents').delete().in('id', ids);
+                        setSelectedDocs(new Set());
+                        loadDocuments();
+                    } catch (e: any) {
+                        Alert.alert('Fehler', e.message);
+                    }
+                }
+            },
+        ]);
+    };
+
+    const handleBatchDownload = async () => {
+        try {
+            const docsToDownload = documents.filter(d => selectedDocs.has(d.id));
+            for (const doc of docsToDownload) {
+                const fileUri = FileSystem.cacheDirectory + doc.file_name;
+                await FileSystem.downloadAsync(doc.file_url, fileUri);
+            }
+            if (docsToDownload.length === 1) {
+                const uri = FileSystem.cacheDirectory + docsToDownload[0].file_name;
+                if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri);
+            } else {
+                Alert.alert('Erfolg', `${docsToDownload.length} Dateien heruntergeladen.`);
+            }
+            setSelectedDocs(new Set());
+        } catch (e: any) {
+            Alert.alert('Fehler', e.message);
+        }
+    };
+
     if (!visible) return null;
 
     const activeFolderInfo = FOLDERS.find(f => f.key === activeFolder);
@@ -312,13 +418,18 @@ export function FamilyDocuments({ visible, onClose }: FamilyDocumentsProps) {
         <>
             {/* Header */}
             <View style={[styles.header, { borderBottomColor: colors.border }]}>
-                <Pressable onPress={onClose}>
-                    <Home size={22} color={colors.accent} />
-                </Pressable>
-                <View style={{ flex: 1 }} />
-                <Pressable hitSlop={12} onPress={() => setShowOptionsSheet(true)}>
-                    <MoreHorizontal size={22} color={colors.accent} />
-                </Pressable>
+                <View style={styles.titleRow}>
+                    <FolderLock size={24} color={colors.accent} />
+                    <Text style={[styles.headerTitle, { color: colors.text }]}>Dokumentsafe</Text>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                    <Pressable hitSlop={12} onPress={() => setShowOptionsSheet(true)}>
+                        <MoreHorizontal size={22} color={colors.accent} />
+                    </Pressable>
+                    <Pressable onPress={onClose} style={[styles.closeBtn, { backgroundColor: colors.border }]}>
+                        <X size={24} color={colors.subtext} />
+                    </Pressable>
+                </View>
             </View>
 
             <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.gridScrollContent}>
@@ -400,10 +511,12 @@ export function FamilyDocuments({ visible, onClose }: FamilyDocumentsProps) {
         <>
             {/* Header */}
             <View style={[styles.header, { borderBottomColor: colors.border }]}>
-                <Pressable onPress={() => setActiveFolder(null)}>
-                    <ArrowLeft size={22} color={colors.accent} />
-                </Pressable>
-                <Text style={[styles.headerTitle, { color: colors.text }]}>{activeFolderInfo?.label}</Text>
+                <View style={styles.titleRow}>
+                    <Pressable onPress={() => setActiveFolder(null)}>
+                        <ArrowLeft size={22} color={colors.accent} />
+                    </Pressable>
+                    <Text style={[styles.headerTitle, { color: colors.text }]}>{activeFolderInfo?.label}</Text>
+                </View>
                 <Pressable onPress={() => setShowOptionsSheet(true)}>
                     <MoreHorizontal size={20} color={colors.accent} />
                 </Pressable>
@@ -426,193 +539,268 @@ export function FamilyDocuments({ visible, onClose }: FamilyDocumentsProps) {
                     </View>
                 ) : (
                     folderDocs.map(doc => (
-                        <View key={doc.id} style={[styles.docCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                            <Text style={{ fontSize: 28 }}>{getFileIcon(doc.file_type)}</Text>
-                            <View style={{ flex: 1, marginLeft: 12 }}>
-                                <Text style={[styles.docName, { color: colors.text }]} numberOfLines={1}>{doc.file_name}</Text>
-                                {doc.description ? (
-                                    <Text style={{ color: colors.subtext, fontSize: 12, marginTop: 1 }} numberOfLines={1}>{doc.description}</Text>
-                                ) : null}
-                                <Text style={{ color: colors.subtext, fontSize: 10, marginTop: 4 }}>{formatFileSize(doc.file_size)}</Text>
-                            </View>
-                            <View style={{ flexDirection: 'row', gap: 8 }}>
-                                <Pressable onPress={() => handleDownload(doc)} hitSlop={12}>
-                                    <Download size={18} color={colors.accent} />
+                        <Swipeable
+                            key={doc.id}
+                            renderRightActions={() => (
+                                <Pressable
+                                    style={styles.swipeDelete}
+                                    onPress={() => handleDelete(doc)}
+                                >
+                                    <Trash2 size={20} color="#fff" />
+                                    <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>Löschen</Text>
                                 </Pressable>
-                                <Pressable onPress={() => handleDelete(doc)} hitSlop={12}>
-                                    <Trash2 size={18} color="#EF4444" />
-                                </Pressable>
-                            </View>
-                        </View>
+                            )}
+                            overshootRight={false}
+                        >
+                            <Pressable
+                                style={[styles.docCard, {
+                                    backgroundColor: selectedDocs.has(doc.id) ? colors.accent + '15' : colors.card,
+                                    borderColor: selectedDocs.has(doc.id) ? colors.accent : colors.border,
+                                }]}
+                                onPress={() => isSelecting ? toggleSelect(doc.id) : handleOpenDoc(doc)}
+                                onLongPress={() => toggleSelect(doc.id)}
+                            >
+                                {isSelecting && (
+                                    <View style={{ marginRight: 10 }}>
+                                        {selectedDocs.has(doc.id) ? (
+                                            <CheckCircle size={22} color={colors.accent} />
+                                        ) : (
+                                            <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: colors.subtext }} />
+                                        )}
+                                    </View>
+                                )}
+                                {doc.file_type.includes('image') ? (
+                                    <Image source={{ uri: doc.file_url }} style={styles.docThumb} />
+                                ) : (
+                                    <View style={[styles.docThumbPlaceholder, { backgroundColor: getFileIcon(doc.file_type).color + '20' }]}>
+                                        <Text style={{ fontSize: 22 }}>{getFileIcon(doc.file_type).icon}</Text>
+                                    </View>
+                                )}
+                                <View style={{ flex: 1, marginLeft: 12 }}>
+                                    <Pressable onPress={() => !isSelecting && handleRename(doc)} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                        <Text style={[styles.docName, { color: colors.text, flex: 1 }]} numberOfLines={1}>{doc.file_name}</Text>
+                                        {!isSelecting && <Edit3 size={13} color={colors.subtext} />}
+                                    </Pressable>
+                                    {doc.description ? (
+                                        <Text style={{ color: colors.subtext, fontSize: 12, marginTop: 1 }} numberOfLines={1}>{doc.description}</Text>
+                                    ) : null}
+                                    <Text style={{ color: colors.subtext, fontSize: 10, marginTop: 4 }}>{formatFileSize(doc.file_size)}</Text>
+                                </View>
+                            </Pressable>
+                        </Swipeable>
                     ))
                 )}
             </ScrollView>
 
+            {/* Batch Action Bar */}
+            {isSelecting && (
+                <View style={[styles.batchBar, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
+                    <Pressable onPress={() => setSelectedDocs(new Set())} style={{ padding: 8 }}>
+                        <Text style={{ color: colors.subtext, fontWeight: '600' }}>Abbrechen</Text>
+                    </Pressable>
+                    <Text style={{ color: colors.text, fontWeight: '700' }}>{selectedDocs.size} ausgewählt</Text>
+                    <View style={{ flexDirection: 'row', gap: 16 }}>
+                        <Pressable onPress={handleBatchDownload} hitSlop={12}>
+                            <Download size={22} color={colors.accent} />
+                        </Pressable>
+                        <Pressable onPress={handleBatchDelete} hitSlop={12}>
+                            <Trash2 size={22} color="#EF4444" />
+                        </Pressable>
+                    </View>
+                </View>
+            )}
+
             {/* FAB */}
-            <Pressable style={[styles.fab, { backgroundColor: colors.accent }]} onPress={() => setShowUploadSheet(true)}>
-                <Plus size={24} color="#fff" />
-            </Pressable>
+            {!isSelecting && (
+                <Pressable style={[styles.fab, { backgroundColor: colors.accent }]} onPress={() => setShowUploadSheet(true)}>
+                    <Plus size={24} color="#fff" />
+                </Pressable>
+            )}
         </>
     );
 
     return (
         <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-            <View style={[styles.container, { backgroundColor: colors.background }]}>
-                {activeFolder ? renderDocList() : renderFolderGrid()}
+            <GestureHandlerRootView style={{ flex: 1 }}>
+                <View style={[styles.container, { backgroundColor: colors.background }]}>
+                    {activeFolder ? renderDocList() : renderFolderGrid()}
 
-                {/* Upload Sheet */}
-                {showUploadSheet && (
-                    <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.4)' }]}>
-                        <TouchableWithoutFeedback onPress={() => setShowUploadSheet(false)}>
-                            <View style={{ flex: 1 }} />
-                        </TouchableWithoutFeedback>
-                        <View style={[styles.bottomSheet, { backgroundColor: colors.background }]}>
-                            <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
-                            <Text style={[styles.sheetTitle, { color: colors.text, borderBottomColor: colors.border }]}>Hochladen</Text>
+                    {/* Upload Sheet */}
+                    {showUploadSheet && (
+                        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.4)' }]}>
+                            <TouchableWithoutFeedback onPress={() => setShowUploadSheet(false)}>
+                                <View style={{ flex: 1 }} />
+                            </TouchableWithoutFeedback>
+                            <View style={[styles.bottomSheet, { backgroundColor: colors.background }]}>
+                                <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
+                                <Text style={[styles.sheetTitle, { color: colors.text, borderBottomColor: colors.border }]}>Hochladen</Text>
 
-                            <TouchableOpacity style={styles.sheetRow} onPress={handleCreateFolder} activeOpacity={0.6}>
-                                <FolderPlus size={20} color={colors.subtext} />
-                                <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Einen Ordner erstellen</Text>
-                            </TouchableOpacity>
+                                <TouchableOpacity style={styles.sheetRow} onPress={handleCreateFolder} activeOpacity={0.6}>
+                                    <FolderPlus size={20} color={colors.subtext} />
+                                    <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Einen Ordner erstellen</Text>
+                                </TouchableOpacity>
 
-                            <TouchableOpacity style={styles.sheetRow} onPress={handlePickDocument} activeOpacity={0.6}>
-                                <File size={20} color={colors.subtext} />
-                                <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Datei</Text>
-                            </TouchableOpacity>
+                                <TouchableOpacity style={styles.sheetRow} onPress={handlePickDocument} activeOpacity={0.6}>
+                                    <File size={20} color={colors.subtext} />
+                                    <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Datei</Text>
+                                </TouchableOpacity>
 
-                            <TouchableOpacity style={styles.sheetRow} onPress={handlePickImage} activeOpacity={0.6}>
-                                <ImageIcon size={20} color={colors.subtext} />
-                                <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Aus Kamerarolle</Text>
-                            </TouchableOpacity>
+                                <TouchableOpacity style={styles.sheetRow} onPress={handlePickImage} activeOpacity={0.6}>
+                                    <ImageIcon size={20} color={colors.subtext} />
+                                    <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Aus Kamerarolle</Text>
+                                </TouchableOpacity>
 
-                            <TouchableOpacity style={styles.sheetRow} onPress={handleTakePhoto} activeOpacity={0.6}>
-                                <Camera size={20} color={colors.subtext} />
-                                <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Foto oder Video aufnehmen</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                )}
-
-                {/* Options Sheet */}
-                {showOptionsSheet && (
-                    <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.4)' }]}>
-                        <TouchableWithoutFeedback onPress={() => setShowOptionsSheet(false)}>
-                            <View style={{ flex: 1 }} />
-                        </TouchableWithoutFeedback>
-                        <View style={[styles.bottomSheet, { backgroundColor: colors.background }]}>
-                            <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
-                            <Text style={[styles.sheetTitle, { color: colors.text, borderBottomColor: colors.border }]}>Optionen</Text>
-
-                            <TouchableOpacity style={styles.sheetRow} onPress={() => { setShowOptionsSheet(false); setShowUploadSheet(true); }} activeOpacity={0.6}>
-                                <Upload size={20} color={colors.subtext} />
-                                <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Hochladen</Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity style={styles.sheetRow} onPress={handleCreateFolder} activeOpacity={0.6}>
-                                <FolderPlus size={20} color={colors.subtext} />
-                                <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Einen Ordner erstellen</Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity style={styles.sheetRow} onPress={() => { setViewAsList(!viewAsList); setShowOptionsSheet(false); }} activeOpacity={0.6}>
-                                <List size={20} color={colors.subtext} />
-                                <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Ansicht: {viewAsList ? 'Raster' : 'Liste'}</Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity style={styles.sheetRow} onPress={() => { cycleSortMode(); setShowOptionsSheet(false); }} activeOpacity={0.6}>
-                                <ArrowUpDown size={20} color={colors.subtext} />
-                                <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Sortieren: {getSortLabel()}</Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity style={styles.sheetRow} onPress={handleFeedback} activeOpacity={0.6}>
-                                <MessageCircle size={20} color={colors.subtext} />
-                                <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Feedback geben</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                )}
-
-                {/* Create Folder - rendered as absolute overlay */}
-                {showCreateFolder && (
-                    <View style={[StyleSheet.absoluteFill, styles.overlay, { justifyContent: 'center', alignItems: 'center' }]}>
-                        <TouchableWithoutFeedback onPress={() => setShowCreateFolder(false)}>
-                            <View style={StyleSheet.absoluteFill} />
-                        </TouchableWithoutFeedback>
-                        <View style={[styles.categorizeSheet, { backgroundColor: colors.background, width: '85%' }]}>
-                            <Text style={[styles.categorizeTitle, { color: colors.text }]}>Neuer Ordner</Text>
-                            <TextInput
-                                style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
-                                value={newFolderName}
-                                onChangeText={setNewFolderName}
-                                placeholder="Ordnername"
-                                placeholderTextColor={colors.subtext}
-                                autoFocus
-                                maxLength={50}
-                            />
-                            <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
-                                <Pressable
-                                    style={[styles.btnSecondary, { borderColor: colors.border }]}
-                                    onPress={() => setShowCreateFolder(false)}
-                                >
-                                    <Text style={{ color: colors.text, fontWeight: '600' }}>Abbrechen</Text>
-                                </Pressable>
-                                <Pressable
-                                    style={[styles.btnPrimary, { backgroundColor: colors.accent }]}
-                                    onPress={confirmCreateFolder}
-                                >
-                                    <Text style={{ color: '#fff', fontWeight: '600' }}>Erstellen</Text>
-                                </Pressable>
+                                <TouchableOpacity style={styles.sheetRow} onPress={handleTakePhoto} activeOpacity={0.6}>
+                                    <Camera size={20} color={colors.subtext} />
+                                    <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Foto oder Video aufnehmen</Text>
+                                </TouchableOpacity>
                             </View>
                         </View>
-                    </View>
-                )}
+                    )}
 
-                {/* Categorize File - rendered as absolute overlay */}
-                {showCategorize && (
-                    <View style={[StyleSheet.absoluteFill, styles.overlay, { justifyContent: 'center', alignItems: 'center' }]}>
-                        <View style={[styles.categorizeSheet, { backgroundColor: colors.background, width: '85%' }]}>
-                            <Text style={[styles.categorizeTitle, { color: colors.text }]}>Dokument kategorisieren</Text>
+                    {/* Options Sheet */}
+                    {showOptionsSheet && (
+                        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.4)' }]}>
+                            <TouchableWithoutFeedback onPress={() => setShowOptionsSheet(false)}>
+                                <View style={{ flex: 1 }} />
+                            </TouchableWithoutFeedback>
+                            <View style={[styles.bottomSheet, { backgroundColor: colors.background }]}>
+                                <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
+                                <Text style={[styles.sheetTitle, { color: colors.text, borderBottomColor: colors.border }]}>Optionen</Text>
 
-                            <Text style={{ color: colors.subtext, fontSize: 12, marginBottom: 6 }}>Ordner:</Text>
-                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
-                                {FOLDERS.map(folder => (
+                                <TouchableOpacity style={styles.sheetRow} onPress={() => { setViewAsList(!viewAsList); setShowOptionsSheet(false); }} activeOpacity={0.6}>
+                                    <List size={20} color={colors.subtext} />
+                                    <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Ansicht: {viewAsList ? 'Raster' : 'Liste'}</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity style={styles.sheetRow} onPress={() => { cycleSortMode(); setShowOptionsSheet(false); }} activeOpacity={0.6}>
+                                    <ArrowUpDown size={20} color={colors.subtext} />
+                                    <Text style={[styles.sheetRowLabel, { color: colors.text }]}>Sortieren: {getSortLabel()}</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    )}
+
+                    {/* Create Folder - rendered as absolute overlay */}
+                    {showCreateFolder && (
+                        <View style={[StyleSheet.absoluteFill, styles.overlay, { justifyContent: 'center', alignItems: 'center' }]}>
+                            <TouchableWithoutFeedback onPress={() => setShowCreateFolder(false)}>
+                                <View style={StyleSheet.absoluteFill} />
+                            </TouchableWithoutFeedback>
+                            <View style={[styles.categorizeSheet, { backgroundColor: colors.background, width: '85%' }]}>
+                                <Text style={[styles.categorizeTitle, { color: colors.text }]}>Neuer Ordner</Text>
+                                <TextInput
+                                    style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
+                                    value={newFolderName}
+                                    onChangeText={setNewFolderName}
+                                    placeholder="Ordnername"
+                                    placeholderTextColor={colors.subtext}
+                                    autoFocus
+                                    maxLength={50}
+                                />
+                                <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
                                     <Pressable
-                                        key={folder.key}
-                                        style={[styles.catChip, {
-                                            backgroundColor: uploadCategory === folder.key ? folder.bgColor + '30' : colors.card,
-                                            borderColor: uploadCategory === folder.key ? folder.bgColor : colors.border,
-                                        }]}
-                                        onPress={() => setUploadCategory(folder.key)}
+                                        style={[styles.btnSecondary, { borderColor: colors.border }]}
+                                        onPress={() => setShowCreateFolder(false)}
                                     >
-                                        <Text style={{ fontSize: 14 }}>{folder.emoji}</Text>
-                                        <Text style={{ fontSize: 11, color: uploadCategory === folder.key ? folder.bgColor : colors.text, fontWeight: '600' }}>
-                                            {folder.label}
-                                        </Text>
+                                        <Text style={{ color: colors.text, fontWeight: '600' }}>Abbrechen</Text>
                                     </Pressable>
-                                ))}
+                                    <Pressable
+                                        style={[styles.btnPrimary, { backgroundColor: colors.accent }]}
+                                        onPress={confirmCreateFolder}
+                                    >
+                                        <Text style={{ color: '#fff', fontWeight: '600' }}>Erstellen</Text>
+                                    </Pressable>
+                                </View>
+                            </View>
+                        </View>
+                    )}
+
+                    {/* Categorize File - rendered as absolute overlay */}
+                    {showCategorize && (
+                        <View style={[StyleSheet.absoluteFill, styles.overlay, { justifyContent: 'center', alignItems: 'center' }]}>
+                            <View style={[styles.categorizeSheet, { backgroundColor: colors.background, width: '85%' }]}>
+                                <Text style={[styles.categorizeTitle, { color: colors.text }]}>Dokument kategorisieren</Text>
+
+                                <Text style={{ color: colors.subtext, fontSize: 12, marginBottom: 6 }}>Ordner:</Text>
+                                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
+                                    {FOLDERS.map(folder => (
+                                        <Pressable
+                                            key={folder.key}
+                                            style={[styles.catChip, {
+                                                backgroundColor: uploadCategory === folder.key ? folder.bgColor + '30' : colors.card,
+                                                borderColor: uploadCategory === folder.key ? folder.bgColor : colors.border,
+                                            }]}
+                                            onPress={() => setUploadCategory(folder.key)}
+                                        >
+                                            <Text style={{ fontSize: 14 }}>{folder.emoji}</Text>
+                                            <Text style={{ fontSize: 11, color: uploadCategory === folder.key ? folder.bgColor : colors.text, fontWeight: '600' }}>
+                                                {folder.label}
+                                            </Text>
+                                        </Pressable>
+                                    ))}
+                                </View>
+
+                                <Text style={{ color: colors.subtext, fontSize: 12, marginBottom: 6 }}>Beschreibung (optional):</Text>
+                                <TextInput
+                                    style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
+                                    value={uploadDescription}
+                                    onChangeText={setUploadDescription}
+                                    placeholder="z.B. Krankenversicherung 2025"
+                                    placeholderTextColor={colors.subtext}
+                                />
+
+                                <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
+                                    <Pressable style={[styles.btnSecondary, { borderColor: colors.border }]} onPress={() => setShowCategorize(false)}>
+                                        <Text style={{ color: colors.text, fontWeight: '600' }}>Abbrechen</Text>
+                                    </Pressable>
+                                    <Pressable style={[styles.btnPrimary, { backgroundColor: colors.accent }]} onPress={confirmUpload}>
+                                        <Upload size={16} color="#fff" />
+                                        <Text style={{ color: '#fff', fontWeight: '700' }}>Hochladen</Text>
+                                    </Pressable>
+                                </View>
+                            </View>
+                        </View>
+                    )}
+
+                    {/* Document Preview Modal */}
+                    {previewDoc && (
+                        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.92)' }]}>
+                            {/* Preview Header */}
+                            <View style={styles.previewHeader}>
+                                <View style={{ flex: 1, marginRight: 12 }}>
+                                    <Text style={styles.previewTitle} numberOfLines={2}>{previewDoc.file_name}</Text>
+                                    <Text style={styles.previewSub}>{formatFileSize(previewDoc.file_size)}</Text>
+                                </View>
+                                <Pressable onPress={() => setPreviewDoc(null)} style={styles.previewCloseBtn}>
+                                    <X size={22} color="#fff" />
+                                </Pressable>
                             </View>
 
-                            <Text style={{ color: colors.subtext, fontSize: 12, marginBottom: 6 }}>Beschreibung (optional):</Text>
-                            <TextInput
-                                style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
-                                value={uploadDescription}
-                                onChangeText={setUploadDescription}
-                                placeholder="z.B. Krankenversicherung 2025"
-                                placeholderTextColor={colors.subtext}
-                            />
+                            {/* Preview Content */}
+                            <View style={styles.previewContent}>
+                                <Image
+                                    source={{ uri: previewDoc.file_url }}
+                                    style={styles.previewImage}
+                                    resizeMode="contain"
+                                />
+                            </View>
 
-                            <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
-                                <Pressable style={[styles.btnSecondary, { borderColor: colors.border }]} onPress={() => setShowCategorize(false)}>
-                                    <Text style={{ color: colors.text, fontWeight: '600' }}>Abbrechen</Text>
+                            {/* Preview Actions */}
+                            <View style={styles.previewActions}>
+                                <Pressable style={styles.previewActionBtn} onPress={() => { handleShareDoc(previewDoc); }}>
+                                    <Download size={20} color="#fff" />
+                                    <Text style={styles.previewActionLabel}>Teilen</Text>
                                 </Pressable>
-                                <Pressable style={[styles.btnPrimary, { backgroundColor: colors.accent }]} onPress={confirmUpload}>
-                                    <Upload size={16} color="#fff" />
-                                    <Text style={{ color: '#fff', fontWeight: '700' }}>Hochladen</Text>
+                                <Pressable style={styles.previewActionBtn} onPress={() => { setPreviewDoc(null); handleDelete(previewDoc); }}>
+                                    <Trash2 size={20} color="#EF4444" />
+                                    <Text style={[styles.previewActionLabel, { color: '#EF4444' }]}>Löschen</Text>
                                 </Pressable>
                             </View>
                         </View>
-                    </View>
-                )}
-            </View>
+                    )}
+                </View>
+            </GestureHandlerRootView>
         </Modal>
     );
 }
@@ -622,9 +810,11 @@ const styles = StyleSheet.create({
 
     header: {
         flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-        padding: 16, borderBottomWidth: 1,
+        padding: 20, borderBottomWidth: 1,
     },
-    headerTitle: { fontSize: 18, fontWeight: '800', flex: 1, textAlign: 'center' },
+    titleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    headerTitle: { fontSize: 20, fontWeight: 'bold' },
+    closeBtn: { padding: 4, borderRadius: 20 },
 
     // Folder grid
     gridScrollContent: { padding: 20, paddingBottom: 100 },
@@ -667,6 +857,12 @@ const styles = StyleSheet.create({
     folderCount: { fontSize: 11 },
     folderMenu: { marginTop: 4 },
 
+    // Swipe delete
+    swipeDelete: {
+        backgroundColor: '#EF4444', justifyContent: 'center', alignItems: 'center',
+        width: 80, borderRadius: 16, marginBottom: 8, marginLeft: 8, gap: 4,
+    },
+
     // FAB
     fab: {
         position: 'absolute', bottom: 30, right: 20,
@@ -700,6 +896,8 @@ const styles = StyleSheet.create({
     emptyText: { textAlign: 'center', marginTop: 12, fontSize: 15, lineHeight: 22 },
     docCard: { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 16, borderWidth: 1, marginBottom: 8 },
     docName: { fontSize: 15, fontWeight: '700' },
+    docThumb: { width: 48, height: 48, borderRadius: 10 },
+    docThumbPlaceholder: { width: 48, height: 48, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
 
     // Categorize modal
     categorizeSheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 },
@@ -708,4 +906,38 @@ const styles = StyleSheet.create({
     input: { borderWidth: 1, padding: 12, borderRadius: 12, fontSize: 15 },
     btnSecondary: { flex: 1, alignItems: 'center', paddingVertical: 14, borderRadius: 14, borderWidth: 1 },
     btnPrimary: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 14, borderRadius: 14 },
+
+    // Batch action bar
+    batchBar: {
+        flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+        paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1,
+    },
+
+    // Preview modal
+    previewHeader: {
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+        paddingTop: 60, paddingHorizontal: 20, paddingBottom: 12,
+    },
+    previewTitle: { color: '#fff', fontSize: 17, fontWeight: '700' },
+    previewSub: { color: 'rgba(255,255,255,0.5)', fontSize: 12, marginTop: 2 },
+    previewCloseBtn: {
+        width: 36, height: 36, borderRadius: 18,
+        backgroundColor: 'rgba(255,255,255,0.15)',
+        justifyContent: 'center', alignItems: 'center',
+    },
+    previewContent: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    previewImage: { width: '100%', height: '100%' },
+    previewFileIcon: { alignItems: 'center', gap: 16, paddingHorizontal: 40 },
+    previewIconBg: {
+        width: 120, height: 120, borderRadius: 28,
+        justifyContent: 'center', alignItems: 'center',
+    },
+    previewFileName: { color: '#fff', fontSize: 18, fontWeight: '700', textAlign: 'center' },
+    previewFileDesc: { color: 'rgba(255,255,255,0.5)', fontSize: 14, textAlign: 'center' },
+    previewActions: {
+        flexDirection: 'row', justifyContent: 'space-around',
+        paddingHorizontal: 20, paddingBottom: 40, paddingTop: 16,
+    },
+    previewActionBtn: { alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 16 },
+    previewActionLabel: { color: '#fff', fontSize: 12, fontWeight: '600' },
 });

@@ -4,7 +4,7 @@ import {
     ActivityIndicator, Alert, Modal,
 } from 'react-native';
 import {
-    Plus, X, Check, Circle, CheckCircle2, Trash2, ChevronDown,
+    Plus, X, Check, Circle, CheckCircle2, CheckSquare, Trash2, ChevronDown,
     User, Calendar, Flag, Repeat,
 } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
@@ -70,6 +70,7 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
     const [showMemberPicker, setShowMemberPicker] = useState(false);
     const [newPoints, setNewPoints] = useState(0);
     const [newRecurrence, setNewRecurrence] = useState('none');
+    const [showAddModal, setShowAddModal] = useState(false);
 
     // Edit modal
     const [editTodo, setEditTodo] = useState<Todo | null>(null);
@@ -148,6 +149,7 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
             setSelectedMember(null);
             setNewPoints(0);
             setNewRecurrence('none');
+            setShowAddModal(false);
             loadTodos();
         } catch (e: any) {
             Alert.alert('Fehler', e.message);
@@ -293,9 +295,13 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
             <View style={[styles.container, { backgroundColor: colors.background }]}>
                 {/* Header */}
                 <View style={[styles.header, { borderBottomColor: colors.border }]}>
-                    <Pressable onPress={onClose}><X size={24} color={colors.subtext} /></Pressable>
-                    <Text style={[styles.headerTitle, { color: colors.text }]}>Aufgaben</Text>
-                    <View style={{ width: 24 }} />
+                    <View style={styles.titleRow}>
+                        <CheckSquare size={24} color={colors.accent} />
+                        <Text style={[styles.headerTitle, { color: colors.text }]}>Aufgaben</Text>
+                    </View>
+                    <Pressable onPress={onClose} style={[styles.closeBtn, { backgroundColor: colors.border }]}>
+                        <X size={24} color={colors.subtext} />
+                    </Pressable>
                 </View>
 
                 {/* Filter */}
@@ -315,85 +321,8 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
                     ))}
                 </View>
 
-                {/* Add */}
-                <View style={[styles.addSection, { borderColor: colors.border, backgroundColor: colors.card }]}>
-                    <View style={styles.addRow}>
-                        <TextInput
-                            style={[styles.addInput, { color: colors.text }]}
-                            value={newTitle}
-                            onChangeText={setNewTitle}
-                            placeholder="Neue Aufgabe..."
-                            placeholderTextColor={colors.subtext}
-                            onSubmitEditing={handleAdd}
-                            returnKeyType="done"
-                        />
-                        <Pressable onPress={handleAdd} disabled={isAdding || !newTitle.trim()} style={[styles.addBtn, { backgroundColor: colors.accent, opacity: newTitle.trim() ? 1 : 0.4 }]}>
-                            {isAdding ? <ActivityIndicator size="small" color="#fff" /> : <Plus size={18} color="#fff" />}
-                        </Pressable>
-                    </View>
-                    {/* Member Picker Row */}
-                    <View style={styles.assignRow}>
-                        <Text style={[styles.assignLabel, { color: colors.subtext }]}>Zuweisen an:</Text>
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
-                            <Pressable
-                                style={[styles.memberChip, !selectedMember && { backgroundColor: colors.accent + '20', borderColor: colors.accent }]}
-                                onPress={() => setSelectedMember(null)}
-                            >
-                                <Text style={[styles.memberChipText, { color: !selectedMember ? colors.accent : colors.subtext }]}>Alle</Text>
-                            </Pressable>
-                            {members.map((m, idx) => {
-                                const color = AVATAR_COLORS[idx % AVATAR_COLORS.length];
-                                const isSelected = selectedMember === m.id;
-                                const name = m.display_name || m.email.split('@')[0];
-                                return (
-                                    <Pressable
-                                        key={m.id}
-                                        style={[styles.memberChip, isSelected && { backgroundColor: color + '20', borderColor: color }]}
-                                        onPress={() => setSelectedMember(isSelected ? null : m.id)}
-                                    >
-                                        <View style={[styles.chipAvatar, { backgroundColor: color }]}>
-                                            <Text style={styles.chipAvatarText}>{name.substring(0, 1).toUpperCase()}</Text>
-                                        </View>
-                                        <Text style={[styles.memberChipText, { color: isSelected ? color : colors.subtext }]}>{name}</Text>
-                                    </Pressable>
-                                );
-                            })}
-                        </ScrollView>
-                    </View>
-                    {/* Points Row */}
-                    <View style={styles.assignRow}>
-                        <Text style={[styles.assignLabel, { color: colors.subtext }]}>⭐ Punkte:</Text>
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 4 }}>
-                            {[-5, -1, 0, 1, 2, 3, 5, 10].map(p => (
-                                <Pressable
-                                    key={p}
-                                    style={[styles.memberChip, newPoints === p && { backgroundColor: (p < 0 ? '#EF4444' : colors.accent) + '20', borderColor: p < 0 ? '#EF4444' : colors.accent }]}
-                                    onPress={() => setNewPoints(p)}
-                                >
-                                    <Text style={[styles.memberChipText, { color: newPoints === p ? (p < 0 ? '#EF4444' : colors.accent) : colors.subtext }]}>{p > 0 ? `+${p}` : p}</Text>
-                                </Pressable>
-                            ))}
-                        </ScrollView>
-                    </View>
-                    {/* Recurrence Row */}
-                    <View style={styles.assignRow}>
-                        <Text style={[styles.assignLabel, { color: colors.subtext }]}>🔄 Wiederholen:</Text>
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 4 }}>
-                            {RECURRENCE_OPTIONS.map(r => (
-                                <Pressable
-                                    key={r.key}
-                                    style={[styles.memberChip, newRecurrence === r.key && { backgroundColor: colors.accent + '20', borderColor: colors.accent }]}
-                                    onPress={() => setNewRecurrence(r.key)}
-                                >
-                                    <Text style={[styles.memberChipText, { color: newRecurrence === r.key ? colors.accent : colors.subtext }]}>{r.icon} {r.label}</Text>
-                                </Pressable>
-                            ))}
-                        </ScrollView>
-                    </View>
-                </View>
-
                 {/* List */}
-                <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 40 }}>
+                <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 100 }}>
                     {isLoading ? (
                         <ActivityIndicator color={colors.accent} style={{ paddingVertical: 40 }} />
                     ) : filteredTodos.length === 0 ? (
@@ -464,7 +393,94 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
                         })
                     )}
                 </ScrollView>
+
+                {/* FAB */}
+                <Pressable style={[styles.fab, { backgroundColor: colors.accent }]} onPress={() => setShowAddModal(true)}>
+                    <Plus size={24} color="#fff" />
+                </Pressable>
             </View>
+
+            {/* Add Task Modal */}
+            <Modal visible={showAddModal} transparent animationType="fade" onRequestClose={() => setShowAddModal(false)}>
+                <View style={styles.overlay}>
+                    <View style={[styles.popup, { backgroundColor: colors.card }]}>
+                        <Text style={[styles.popupTitle, { color: colors.text }]}>Neue Aufgabe</Text>
+                        <TextInput
+                            style={[styles.popupInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
+                            value={newTitle}
+                            onChangeText={setNewTitle}
+                            placeholder="Aufgabe beschreiben..."
+                            placeholderTextColor={colors.subtext}
+                            autoFocus
+                        />
+
+                        {/* Member Picker */}
+                        <Text style={[styles.popupLabel, { color: colors.subtext }]}>Zuweisen an</Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }} style={{ maxHeight: 36 }}>
+                            <Pressable
+                                style={[styles.memberChip, !selectedMember && { backgroundColor: colors.accent + '20', borderColor: colors.accent }]}
+                                onPress={() => setSelectedMember(null)}
+                            >
+                                <Text style={[styles.memberChipText, { color: !selectedMember ? colors.accent : colors.subtext }]}>Alle</Text>
+                            </Pressable>
+                            {members.map((m, idx) => {
+                                const color = AVATAR_COLORS[idx % AVATAR_COLORS.length];
+                                const isSelected = selectedMember === m.id;
+                                const name = m.display_name || m.email.split('@')[0];
+                                return (
+                                    <Pressable
+                                        key={m.id}
+                                        style={[styles.memberChip, isSelected && { backgroundColor: color + '20', borderColor: color }]}
+                                        onPress={() => setSelectedMember(isSelected ? null : m.id)}
+                                    >
+                                        <View style={[styles.chipAvatar, { backgroundColor: color }]}>
+                                            <Text style={styles.chipAvatarText}>{name.substring(0, 1).toUpperCase()}</Text>
+                                        </View>
+                                        <Text style={[styles.memberChipText, { color: isSelected ? color : colors.subtext }]}>{name}</Text>
+                                    </Pressable>
+                                );
+                            })}
+                        </ScrollView>
+
+                        {/* Points */}
+                        <Text style={[styles.popupLabel, { color: colors.subtext }]}>⭐ Punkte</Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 4 }} style={{ maxHeight: 36 }}>
+                            {[-5, -1, 0, 1, 2, 3, 5, 10].map(p => (
+                                <Pressable
+                                    key={p}
+                                    style={[styles.memberChip, newPoints === p && { backgroundColor: (p < 0 ? '#EF4444' : colors.accent) + '20', borderColor: p < 0 ? '#EF4444' : colors.accent }]}
+                                    onPress={() => setNewPoints(p)}
+                                >
+                                    <Text style={[styles.memberChipText, { color: newPoints === p ? (p < 0 ? '#EF4444' : colors.accent) : colors.subtext }]}>{p > 0 ? `+${p}` : p}</Text>
+                                </Pressable>
+                            ))}
+                        </ScrollView>
+
+                        {/* Recurrence */}
+                        <Text style={[styles.popupLabel, { color: colors.subtext }]}>🔄 Wiederholen</Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 4 }} style={{ maxHeight: 36 }}>
+                            {RECURRENCE_OPTIONS.map(r => (
+                                <Pressable
+                                    key={r.key}
+                                    style={[styles.memberChip, newRecurrence === r.key && { backgroundColor: colors.accent + '20', borderColor: colors.accent }]}
+                                    onPress={() => setNewRecurrence(r.key)}
+                                >
+                                    <Text style={[styles.memberChipText, { color: newRecurrence === r.key ? colors.accent : colors.subtext }]}>{r.icon} {r.label}</Text>
+                                </Pressable>
+                            ))}
+                        </ScrollView>
+
+                        <View style={{ flexDirection: 'row', gap: 8, marginTop: 16 }}>
+                            <Pressable style={[styles.cancelBtn, { borderColor: colors.border }]} onPress={() => { setShowAddModal(false); setNewTitle(''); setSelectedMember(null); setNewPoints(0); setNewRecurrence('none'); }}>
+                                <Text style={{ color: colors.subtext }}>Abbrechen</Text>
+                            </Pressable>
+                            <Pressable style={[styles.saveBtn, { backgroundColor: colors.accent, opacity: newTitle.trim() ? 1 : 0.4 }]} onPress={handleAdd} disabled={isAdding || !newTitle.trim()}>
+                                {isAdding ? <ActivityIndicator size="small" color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '700' }}>Erstellen</Text>}
+                            </Pressable>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
 
             {/* Edit Modal */}
             <Modal visible={!!editTodo} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setEditTodo(null)}>
@@ -572,9 +588,11 @@ const styles = StyleSheet.create({
     container: { flex: 1 },
     header: {
         flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-        padding: 16, borderBottomWidth: 1,
+        padding: 20, borderBottomWidth: 1,
     },
-    headerTitle: { fontSize: 18, fontWeight: 'bold' },
+    titleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    headerTitle: { fontSize: 20, fontWeight: 'bold' },
+    closeBtn: { padding: 4, borderRadius: 20 },
 
     filterRow: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 10, gap: 8 },
     filterBtn: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: 'transparent' },
@@ -588,6 +606,20 @@ const styles = StyleSheet.create({
     },
     addInput: { flex: 1, fontSize: 15, paddingVertical: 8 },
     addBtn: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+    fab: {
+        position: 'absolute', bottom: 30, right: 20,
+        width: 56, height: 56, borderRadius: 28,
+        justifyContent: 'center', alignItems: 'center',
+        elevation: 6, shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8,
+    },
+    overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
+    popup: { borderRadius: 20, padding: 20 },
+    popupTitle: { fontSize: 18, fontWeight: '800', marginBottom: 12 },
+    popupInput: { borderWidth: 1, padding: 12, borderRadius: 12, fontSize: 15, marginBottom: 14 },
+    popupLabel: { fontSize: 12, fontWeight: '600', marginBottom: 6, marginTop: 10 },
+    cancelBtn: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 12, borderWidth: 1 },
+    saveBtn: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 12 },
 
     assignRow: {
         flexDirection: 'row', alignItems: 'center', marginTop: 8, paddingTop: 8, borderTopWidth: 0.5, borderTopColor: 'rgba(128,128,128,0.2)',

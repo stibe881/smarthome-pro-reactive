@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
     View, Text, StyleSheet, Pressable, ScrollView, TextInput,
     ActivityIndicator, Alert, Modal, Image, Dimensions, Platform, KeyboardAvoidingView,
@@ -12,6 +12,55 @@ import { useHousehold } from '../hooks/useHousehold';
 import { supabase } from '../lib/supabase';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const IMAGE_MAX_WIDTH = SCREEN_WIDTH - 24 - 2; // card margin + border
+
+// Component for auto-sizing pinboard images
+const PinImage: React.FC<{ uri: string }> = React.memo(({ uri }) => {
+    const [ratio, setRatio] = useState(4 / 3);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(false);
+
+    useEffect(() => {
+        console.log('[PinImage] Loading image:', uri);
+        Image.getSize(
+            uri,
+            (w, h) => {
+                console.log('[PinImage] Got size:', w, h);
+                if (w && h) setRatio(w / h);
+            },
+            (err) => {
+                console.warn('[PinImage] getSize failed:', err);
+            },
+        );
+    }, [uri]);
+
+    // Clamp aspect ratio so images aren't absurdly tall or wide
+    const clampedRatio = Math.max(0.5, Math.min(ratio, 2.0));
+
+    if (error) {
+        return (
+            <View style={[styles.postImage, { aspectRatio: clampedRatio, justifyContent: 'center', alignItems: 'center', backgroundColor: '#2a2a2a' }]}>
+                <Text style={{ color: '#999', fontSize: 13 }}>📷 Foto konnte nicht geladen werden</Text>
+                <Text style={{ color: '#666', fontSize: 10, marginTop: 4 }} numberOfLines={1}>{uri}</Text>
+            </View>
+        );
+    }
+
+    return (
+        <View>
+            {loading && (
+                <ActivityIndicator style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1 }} color="#999" />
+            )}
+            <Image
+                source={{ uri }}
+                style={[styles.postImage, { aspectRatio: clampedRatio }]}
+                resizeMode="cover"
+                onLoad={() => { console.log('[PinImage] Image loaded OK'); setLoading(false); }}
+                onError={(e) => { console.warn('[PinImage] Image load error:', e.nativeEvent?.error, uri); setError(true); setLoading(false); }}
+            />
+        </View>
+    );
+});
 
 interface PinItem {
     id: string;
@@ -78,6 +127,11 @@ export const FamilyPinboard: React.FC<FamilyPinboardProps> = ({ visible, onClose
 
             if (error) throw error;
             if (!pinsData) { setPins([]); return; }
+
+            // Debug: log all pins with images
+            pinsData.forEach(p => {
+                console.log('[Pinboard] Pin:', p.id, 'type:', p.pin_type, 'image_url:', p.image_url, 'content:', p.content?.substring(0, 30));
+            });
 
             // Fetch likes counts & my likes
             const pinIds = pinsData.map(p => p.id);
@@ -216,50 +270,69 @@ export const FamilyPinboard: React.FC<FamilyPinboardProps> = ({ visible, onClose
             if (result.canceled || !result.assets[0]) return;
 
             setIsPosting(true);
-            const uri = result.assets[0].uri;
+            const asset = result.assets[0];
+            const uri = asset.uri;
             const fileExt = uri.split('.').pop()?.toLowerCase() || 'jpeg';
             const fileName = `pin-${householdId}-${Date.now()}.${fileExt}`;
-            const contentType = fileExt === 'png' ? 'image/png' : 'image/jpeg';
+            const mimeType = fileExt === 'png' ? 'image/png' : 'image/jpeg';
 
-            if (Platform.OS === 'web') {
-                Alert.alert('Fehler', 'Foto-Upload nur auf dem Handy verfügbar.');
+            console.log('[Pinboard] Starting upload:', fileName, 'from:', uri);
+
+            // Upload directly via Supabase Storage REST API using FormData
+            // (supabase-js client produces 0-byte files on React Native)
+            const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+            const { data: sessionData } = await supabase.auth.getSession();
+            const accessToken = sessionData?.session?.access_token;
+            const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+
+            const formData = new FormData();
+            formData.append('', {
+                uri: uri,
+                name: fileName,
+                type: mimeType,
+            } as any);
+
+            const uploadUrl = `${supabaseUrl}/storage/v1/object/family-pins/${fileName}`;
+            console.log('[Pinboard] Uploading to:', uploadUrl);
+
+            const uploadRes = await fetch(uploadUrl, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${accessToken || anonKey}`,
+                    'apikey': anonKey,
+                    'x-upsert': 'true',
+                },
+                body: formData,
+            });
+
+            const uploadResult = await uploadRes.json();
+            console.log('[Pinboard] Upload response:', uploadRes.status, JSON.stringify(uploadResult));
+
+            if (!uploadRes.ok) {
+                console.error('[Pinboard] Upload failed:', uploadResult.message || uploadResult.error);
+                Alert.alert('Upload Fehler', `Foto konnte nicht hochgeladen werden:\n${uploadResult.message || uploadResult.error || 'Unbekannter Fehler'}`);
                 return;
             }
 
-            const file = new FileSystem.File(uri);
-            const arrayBuffer = await file.arrayBuffer();
+            // Upload succeeded — get public URL
+            const { data: publicData } = supabase.storage.from('family-pins').getPublicUrl(fileName);
+            console.log('[Pinboard] Upload success! Public URL:', publicData.publicUrl);
 
-            const { error: uploadError } = await supabase.storage
-                .from('family-pins')
-                .upload(fileName, arrayBuffer, { contentType, upsert: true });
-
-            if (uploadError) {
-                console.warn('Upload failed, posting as note:', uploadError.message);
-                const { error } = await supabase.from('family_pins').insert({
-                    household_id: householdId,
-                    created_by: user?.id,
-                    content: '📷 Foto',
-                    pin_type: 'note',
-                });
-                if (error) throw error;
-            } else {
-                const { data: publicData } = supabase.storage.from('family-pins').getPublicUrl(fileName);
-                // Allow user to add a caption
-                const caption = newContent.trim() || null;
-                const { error } = await supabase.from('family_pins').insert({
-                    household_id: householdId,
-                    created_by: user?.id,
-                    image_url: publicData.publicUrl,
-                    content: caption,
-                    pin_type: 'photo',
-                });
-                if (error) throw error;
-                if (caption) setNewContent('');
-            }
+            const caption = newContent.trim() || null;
+            const { error: insertError } = await supabase.from('family_pins').insert({
+                household_id: householdId,
+                created_by: user?.id,
+                image_url: publicData.publicUrl,
+                content: caption,
+                pin_type: 'photo',
+            });
+            if (insertError) throw insertError;
+            if (caption) setNewContent('');
 
             sendPushNotifications('📷 Neues Foto');
             loadPins();
         } catch (e: any) {
+            console.error('[Pinboard] handlePostImage error:', e);
             Alert.alert('Fehler', e.message);
         } finally {
             setIsPosting(false);
@@ -400,9 +473,13 @@ export const FamilyPinboard: React.FC<FamilyPinboardProps> = ({ visible, onClose
     const renderPost = (pin: PinItem) => {
         const authorName = members[pin.created_by || ''] || 'Unbekannt';
         const initials = getInitials(authorName);
-        const isPhoto = pin.pin_type === 'photo' && pin.image_url;
+        const isPhoto = !!pin.image_url;
         const isExpanded = expandedComments.has(pin.id);
         const comments = commentsByPin[pin.id] || [];
+
+        if (pin.image_url) {
+            console.log('[Pinboard] Rendering pin with image:', pin.id, 'type:', pin.pin_type, 'url:', pin.image_url);
+        }
 
         return (
             <View key={pin.id} style={[styles.postCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -430,9 +507,9 @@ export const FamilyPinboard: React.FC<FamilyPinboardProps> = ({ visible, onClose
                     <Text style={[styles.postContent, { color: colors.text }]}>{pin.content}</Text>
                 )}
 
-                {/* Photo */}
+                {/* Photo – directly visible */}
                 {isPhoto && (
-                    <Image source={{ uri: pin.image_url! }} style={styles.postImage} resizeMode="cover" />
+                    <PinImage uri={pin.image_url!} />
                 )}
 
                 {/* Action bar - Like + Comment */}
@@ -535,14 +612,18 @@ export const FamilyPinboard: React.FC<FamilyPinboardProps> = ({ visible, onClose
             >
                 {/* Header */}
                 <View style={[styles.header, { borderBottomColor: colors.border }]}>
-                    <Pressable onPress={onClose}><X size={24} color={colors.subtext} /></Pressable>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                        <Text style={{ fontSize: 18 }}>📌</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                        <Text style={{ fontSize: 22 }}>📌</Text>
                         <Text style={[styles.headerTitle, { color: colors.text }]}>Pinnwand</Text>
                     </View>
-                    <Pressable onPress={handlePostImage}>
-                        <ImagePlus size={22} color={colors.accent} />
-                    </Pressable>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                        <Pressable onPress={handlePostImage}>
+                            <ImagePlus size={22} color={colors.accent} />
+                        </Pressable>
+                        <Pressable onPress={onClose} style={{ padding: 4, borderRadius: 20, backgroundColor: colors.border }}>
+                            <X size={24} color={colors.subtext} />
+                        </Pressable>
+                    </View>
                 </View>
 
                 {/* Compose */}
@@ -612,9 +693,9 @@ const styles = StyleSheet.create({
     container: { flex: 1 },
     header: {
         flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-        padding: 16, borderBottomWidth: 1,
+        padding: 20, borderBottomWidth: 1,
     },
-    headerTitle: { fontSize: 18, fontWeight: 'bold' },
+    headerTitle: { fontSize: 20, fontWeight: 'bold' },
 
     composeRow: {
         flexDirection: 'row', alignItems: 'flex-end', marginHorizontal: 12, marginTop: 12,
@@ -667,7 +748,7 @@ const styles = StyleSheet.create({
         width: '100%',
         height: undefined,
         aspectRatio: 4 / 3,
-        backgroundColor: '#1a1a1a',
+        borderRadius: 0,
     },
 
     // Action bar

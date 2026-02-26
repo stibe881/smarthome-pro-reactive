@@ -99,12 +99,16 @@ export const FamilyRoutines: React.FC<RoutinesProps> = ({ visible, onClose }) =>
         <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
             <View style={[styles.container, { backgroundColor: colors.background }]}>
                 <View style={[styles.header, { borderBottomColor: colors.border }]}>
-                    <Pressable onPress={onClose}><X size={24} color={colors.subtext} /></Pressable>
-                    <Text style={[styles.headerTitle, { color: colors.text }]}>Routinen</Text>
-                    <Pressable onPress={() => { resetForm(); setShowAdd(true); }}><Plus size={24} color={colors.accent} /></Pressable>
+                    <View style={styles.titleRow}>
+                        <Clock size={24} color={colors.accent} />
+                        <Text style={[styles.headerTitle, { color: colors.text }]}>Routinen</Text>
+                    </View>
+                    <Pressable onPress={onClose} style={[styles.closeBtn, { backgroundColor: colors.border }]}>
+                        <X size={24} color={colors.subtext} />
+                    </Pressable>
                 </View>
 
-                <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+                <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 100 }}>
                     {isLoading ? <ActivityIndicator color={colors.accent} style={{ paddingVertical: 40 }} /> :
                         routines.length === 0 ? (
                             <View style={styles.empty}>
@@ -153,6 +157,11 @@ export const FamilyRoutines: React.FC<RoutinesProps> = ({ visible, onClose }) =>
                             })
                         )}
                 </ScrollView>
+
+                {/* FAB */}
+                <Pressable style={[styles.fab, { backgroundColor: colors.accent }]} onPress={() => { resetForm(); setShowAdd(true); }}>
+                    <Plus size={24} color="#fff" />
+                </Pressable>
 
                 {/* Add/Edit Modal */}
                 <Modal visible={showAdd} animationType="slide" presentationStyle="pageSheet" onRequestClose={resetForm}>
@@ -208,11 +217,20 @@ export const FamilyRoutines: React.FC<RoutinesProps> = ({ visible, onClose }) =>
 
 const styles = StyleSheet.create({
     container: { flex: 1 },
-    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1 },
-    headerTitle: { fontSize: 18, fontWeight: 'bold' },
+    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1 },
+    titleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    headerTitle: { fontSize: 20, fontWeight: 'bold' },
+    closeBtn: { padding: 4, borderRadius: 20 },
     empty: { alignItems: 'center', paddingVertical: 60, gap: 12 },
     emptyText: { fontSize: 15, textAlign: 'center', lineHeight: 22 },
     timeLabel: { fontSize: 15, fontWeight: '800', marginBottom: 8 },
+    fab: {
+        position: 'absolute', bottom: 30, right: 20,
+        width: 56, height: 56, borderRadius: 28,
+        justifyContent: 'center', alignItems: 'center',
+        elevation: 6, shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8,
+    },
     routineCard: { borderRadius: 16, borderWidth: 1, padding: 14, marginBottom: 8 },
     routineHeader: { flexDirection: 'row', alignItems: 'center' },
     routineTitle: { fontSize: 16, fontWeight: '700' },

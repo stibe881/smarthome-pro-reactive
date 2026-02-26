@@ -41,6 +41,7 @@ interface CalendarSource {
     label: string;
     color: string;
     enabled: boolean;
+    is_birthday_calendar: boolean;
 }
 
 const CATEGORIES = [
@@ -102,6 +103,7 @@ export const FamilyPlanner: React.FC<FamilyPlannerProps> = ({ visible, onClose }
     const [showCalSettings, setShowCalSettings] = useState(false);
     const [addingCalEntityId, setAddingCalEntityId] = useState('');
     const [addingCalLabel, setAddingCalLabel] = useState('termine');
+    const [addingIsBirthdayCal, setAddingIsBirthdayCal] = useState(false);
 
     const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -199,15 +201,24 @@ export const FamilyPlanner: React.FC<FamilyPlannerProps> = ({ visible, onClose }
         if (!addingCalEntityId || !householdId) return;
         const labelInfo = CALENDAR_LABELS.find(l => l.key === addingCalLabel) || CALENDAR_LABELS[6];
         try {
+            // If marking as birthday calendar, unmark any existing one first
+            if (addingIsBirthdayCal) {
+                await supabase.from('planner_calendar_sources')
+                    .update({ is_birthday_calendar: false })
+                    .eq('household_id', householdId)
+                    .eq('is_birthday_calendar', true);
+            }
             const { error } = await supabase.from('planner_calendar_sources').insert({
                 household_id: householdId,
                 entity_id: addingCalEntityId,
                 label: addingCalLabel,
                 color: labelInfo.color,
                 enabled: true,
+                is_birthday_calendar: addingIsBirthdayCal,
             });
             if (error) throw error;
             setAddingCalEntityId('');
+            setAddingIsBirthdayCal(false);
             loadCalendarSources();
         } catch (e: any) {
             Alert.alert('Fehler', e.message);
@@ -419,9 +430,16 @@ export const FamilyPlanner: React.FC<FamilyPlannerProps> = ({ visible, onClose }
             <Animated.View style={[styles.container, { opacity: fadeAnim, backgroundColor: colors.background }]}>
                 {/* Header with Close */}
                 <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-                    <Pressable onPress={onClose}><X size={24} color={colors.subtext} /></Pressable>
-                    <Text style={[styles.modalTitle, { color: colors.text }]}>Kalender</Text>
-                    <Pressable onPress={() => setShowCalSettings(true)}><Settings size={22} color={colors.subtext} /></Pressable>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                        <CalendarDays size={24} color={colors.accent} />
+                        <Text style={[styles.modalTitle, { color: colors.text }]}>Kalender</Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                        <Pressable onPress={() => setShowCalSettings(true)}><Settings size={22} color={colors.subtext} /></Pressable>
+                        <Pressable onPress={onClose} style={{ padding: 4, borderRadius: 20, backgroundColor: colors.border }}>
+                            <X size={24} color={colors.subtext} />
+                        </Pressable>
+                    </View>
                 </View>
                 {/* Month Header */}
                 <View style={[styles.monthHeader, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -538,12 +556,7 @@ export const FamilyPlanner: React.FC<FamilyPlannerProps> = ({ visible, onClose }
                                                     <Text style={[styles.eventDesc, { color: colors.subtext }]} numberOfLines={1}>{event.description}</Text>
                                                 ) : null}
                                             </View>
-                                            {isHaEvent && (
-                                                <View style={[styles.haBadge, { backgroundColor: event.color + '15' }]}>
-                                                    <Link2 size={10} color={event.color} />
-                                                    <Text style={{ fontSize: 9, color: event.color, fontWeight: '600' }}>HA</Text>
-                                                </View>
-                                            )}
+
                                         </View>
                                         <View style={styles.eventMeta}>
                                             {!event.all_day && (
@@ -782,6 +795,12 @@ export const FamilyPlanner: React.FC<FamilyPlannerProps> = ({ visible, onClose }
                                                     <Text style={[styles.eventTitle, { color: colors.text }]}>{labelInfo.label}</Text>
                                                 </View>
                                                 <Text style={{ color: colors.subtext, fontSize: 12, marginTop: 2 }}>{src.entity_id}</Text>
+                                                {src.is_birthday_calendar && (
+                                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                                                        <Text style={{ fontSize: 10 }}>🎂</Text>
+                                                        <Text style={{ fontSize: 11, color: '#EC4899', fontWeight: '600' }}>Geburtstagskalender</Text>
+                                                    </View>
+                                                )}
                                             </View>
                                             <Pressable
                                                 onPress={() => Alert.alert('Entfernen', `"${labelInfo.label}" Kalender entfernen?`, [
@@ -852,6 +871,21 @@ export const FamilyPlanner: React.FC<FamilyPlannerProps> = ({ visible, onClose }
                                                 </Pressable>
                                             ))}
                                         </View>
+                                        {/* Birthday calendar toggle */}
+                                        {addingCalLabel === 'geburtstage' && (
+                                            <Pressable
+                                                style={[styles.allDayToggle, { borderColor: colors.border, backgroundColor: addingIsBirthdayCal ? '#EC4899' + '15' : colors.card, marginBottom: 16 }]}
+                                                onPress={() => setAddingIsBirthdayCal(!addingIsBirthdayCal)}
+                                            >
+                                                <View style={{ flex: 1 }}>
+                                                    <Text style={{ color: addingIsBirthdayCal ? '#EC4899' : colors.text, fontWeight: '600', fontSize: 14 }}>🎂 Als Geburtstagskalender verwenden</Text>
+                                                    <Text style={{ color: colors.subtext, fontSize: 11, marginTop: 2 }}>Geburtstage werden im Family Hub angezeigt</Text>
+                                                </View>
+                                                <View style={[styles.checkbox, addingIsBirthdayCal && { backgroundColor: '#EC4899', borderColor: '#EC4899' }]}>
+                                                    {addingIsBirthdayCal && <Check size={14} color="#fff" />}
+                                                </View>
+                                            </Pressable>
+                                        )}
                                         <Pressable
                                             style={[styles.fullBtn, { backgroundColor: colors.accent }]}
                                             onPress={addCalendarSource}
@@ -938,9 +972,9 @@ const styles = StyleSheet.create({
     modalContainer: { flex: 1 },
     modalHeader: {
         flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-        padding: 16, borderBottomWidth: 1,
+        padding: 20, borderBottomWidth: 1,
     },
-    modalTitle: { fontSize: 18, fontWeight: 'bold' },
+    modalTitle: { fontSize: 20, fontWeight: 'bold' },
 
     // Form
     formLabel: { fontSize: 12, fontWeight: '600', marginBottom: 4 },

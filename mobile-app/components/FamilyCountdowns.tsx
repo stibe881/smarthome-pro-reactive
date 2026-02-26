@@ -3,7 +3,9 @@ import {
     View, Text, StyleSheet, Pressable, ScrollView, TextInput,
     ActivityIndicator, Alert, Modal, Platform,
 } from 'react-native';
-import { X, Plus, Trash2, Clock } from 'lucide-react-native';
+import {
+    X, Plus, Trash2, Target, Clock,
+} from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useTheme } from '../contexts/ThemeContext';
 import { useHousehold } from '../hooks/useHousehold';
@@ -57,7 +59,7 @@ export const FamilyCountdowns: React.FC<CountdownsProps> = ({ visible, onClose }
     };
 
     const handleDelete = (c: Countdown) => {
-        Alert.alert('Löschen', `"${c.title}" löschen?`, [
+        Alert.alert('Löschen', `"${c.title}" löschen ? `, [
             { text: 'Abbrechen', style: 'cancel' },
             { text: 'Löschen', style: 'destructive', onPress: async () => { await supabase.from('family_countdowns').delete().eq('id', c.id); loadCountdowns(); } },
         ]);
@@ -73,7 +75,7 @@ export const FamilyCountdowns: React.FC<CountdownsProps> = ({ visible, onClose }
 
     const formatDate = (dateStr: string) => {
         const d = new Date(dateStr);
-        return `${d.getDate()}.${d.getMonth() + 1}.${d.getFullYear()}`;
+        return `${d.getDate()}.${d.getMonth() + 1}.${d.getFullYear()} `;
     };
 
     const getColor = (days: number) => {
@@ -91,12 +93,16 @@ export const FamilyCountdowns: React.FC<CountdownsProps> = ({ visible, onClose }
         <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
             <View style={[styles.container, { backgroundColor: colors.background }]}>
                 <View style={[styles.header, { borderBottomColor: colors.border }]}>
-                    <Pressable onPress={onClose}><X size={24} color={colors.subtext} /></Pressable>
-                    <Text style={[styles.headerTitle, { color: colors.text }]}>Countdowns</Text>
-                    <Pressable onPress={() => setShowAdd(true)}><Plus size={24} color={colors.accent} /></Pressable>
+                    <View style={styles.titleRow}>
+                        <Target size={24} color={colors.accent} />
+                        <Text style={[styles.headerTitle, { color: colors.text }]}>Countdowns</Text>
+                    </View>
+                    <Pressable onPress={onClose} style={[styles.closeBtn, { backgroundColor: colors.border }]}>
+                        <X size={24} color={colors.subtext} />
+                    </Pressable>
                 </View>
 
-                <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+                <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 100 }}>
                     {isLoading ? <ActivityIndicator color={colors.accent} style={{ paddingVertical: 40 }} /> :
                         countdowns.length === 0 ? (
                             <View style={styles.empty}>
@@ -143,6 +149,11 @@ export const FamilyCountdowns: React.FC<CountdownsProps> = ({ visible, onClose }
                         )}
                 </ScrollView>
 
+                {/* FAB */}
+                <Pressable style={[styles.fab, { backgroundColor: colors.accent }]} onPress={() => setShowAdd(true)}>
+                    <Plus size={24} color="#fff" />
+                </Pressable>
+
                 {/* Add Modal */}
                 <Modal visible={showAdd} transparent animationType="fade">
                     <View style={styles.overlay}><View style={[styles.popup, { backgroundColor: colors.card }]}>
@@ -180,8 +191,10 @@ export const FamilyCountdowns: React.FC<CountdownsProps> = ({ visible, onClose }
 
 const styles = StyleSheet.create({
     container: { flex: 1 },
-    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1 },
-    headerTitle: { fontSize: 18, fontWeight: 'bold' },
+    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1 },
+    titleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    headerTitle: { fontSize: 20, fontWeight: 'bold' },
+    closeBtn: { padding: 4, borderRadius: 20 },
     empty: { alignItems: 'center', paddingVertical: 60, gap: 12 },
     emptyText: { fontSize: 15, textAlign: 'center', lineHeight: 22 },
     countdownCard: { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 16, borderWidth: 1, marginBottom: 8 },
@@ -191,6 +204,13 @@ const styles = StyleSheet.create({
     countdownTitle: { fontSize: 16, fontWeight: '700' },
     countdownDate: { fontSize: 12, marginTop: 2 },
     sectionTitle: { fontSize: 13, fontWeight: '700', marginBottom: 8 },
+    fab: {
+        position: 'absolute', bottom: 30, right: 20,
+        width: 56, height: 56, borderRadius: 28,
+        justifyContent: 'center', alignItems: 'center',
+        elevation: 6, shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8,
+    },
     overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 24 },
     popup: { borderRadius: 20, padding: 20 },
     popupTitle: { fontSize: 18, fontWeight: '800', marginBottom: 12 },
