@@ -242,7 +242,7 @@ export default function Media() {
             const player = entities.find(e => e.entity_id === entityId);
             // Only open Spotify picker if player is truly empty (no media loaded)
             // Cast devices go to 'idle' after pause — if media_title exists, just resume
-            if (player && (player.state === 'idle' || player.state === 'off' || player.state === 'unavailable')) {
+            if (player && (player.state === 'idle' || player.state === 'off' || player.state === 'unavailable' || player.state === 'paused')) {
                 const hasMedia = player.attributes?.media_title || player.attributes?.media_content_id;
                 if (!hasMedia) {
                     handleSpotify(entityId);

@@ -297,7 +297,10 @@ export class HomeAssistantService {
                     // console.log(`✅ Service ${domain}.${service} executed successfully for ${entityId}`);
                     resolve(response.result);
                 } else {
-                    console.warn(`❌ Service ${domain}.${service} failed for ${entityId}:`, response.error);
+                    // Only log non-trivial errors (skip "service not supported" noise)
+                    if (response.error?.translation_key !== 'service_not_supported') {
+                        console.warn(`❌ Service ${domain}.${service} failed for ${entityId}:`, response.error);
+                    }
                     reject(response.error);
                 }
             });

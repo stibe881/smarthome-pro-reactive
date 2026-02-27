@@ -8,7 +8,8 @@ import { useHomeAssistant } from '../../contexts/HomeAssistantContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { COUNTDOWN_ICONS } from '../../components/FamilyCountdowns';
-import { Lightbulb, Blinds, Thermometer, Droplets, Wind, Lock, Unlock, Zap, Music, Play, Pause, SkipForward, SkipBack, Bot, PartyPopper, Calendar, CloudRain, Cloud, Sun, Moon, ShoppingCart, Info, Loader2, UtensilsCrossed, Shirt, Clapperboard, BedDouble, ChevronRight, Shield, LucideIcon, DoorOpen, DoorClosed, WifiOff, Tv, X, Wifi, RefreshCw, Power, Battery, PlayCircle, Home, Map, MapPin, Fan, Clock, Video, Star, Square, Bell, Baby, Cake, Search } from 'lucide-react-native';
+import { Lightbulb, Blinds, Thermometer, Droplets, Wind, Lock, Unlock, Zap, Music, Play, Pause, SkipForward, SkipBack, Bot, PartyPopper, Calendar, CloudRain, Cloud, Sun, Moon, ShoppingCart, Info, Loader2, UtensilsCrossed, Shirt, Clapperboard, BedDouble, ChevronRight, Shield, LucideIcon, DoorOpen, DoorClosed, WifiOff, Tv, X, Wifi, RefreshCw, Power, Battery, PlayCircle, Home, Map, MapPin, Fan, Clock, Video, Star, Square, Bell, Baby, Cake, Search, Speaker, Volume1, Volume2, VolumeX, Minus, Plus } from 'lucide-react-native';
+import Slider from '@react-native-community/slider';
 import * as Haptics from 'expo-haptics';
 import SecurityModal from '../../components/SecurityModal';
 import { WHITELISTED_PLAYERS } from '../../config/mediaPlayers';
@@ -542,7 +543,11 @@ export default function Dashboard() {
     const [homescreenCountdowns, setHomescreenCountdowns] = useState<any[]>([]);
     const [countdownDetail, setCountdownDetail] = useState<any | null>(null);
     const { householdId } = useHousehold();
-    const { dashboardConfig } = useHomeAssistant();
+    const { dashboardConfig, haBaseUrl } = useHomeAssistant();
+
+    // Dashboard Media Player Modal
+    const [mediaPlayerModalVisible, setMediaPlayerModalVisible] = useState(false);
+    const [activeMediaPlayer, setActiveMediaPlayer] = useState<any | null>(null);
 
     const loadHomescreenCountdowns = useCallback(async () => {
         if (!householdId) return;
@@ -653,7 +658,6 @@ export default function Dashboard() {
         setShoppingListVisible,
         startShoppingGeofencing,
         debugShoppingLogic,
-        haBaseUrl,
         isHAInitialized
     } = useHomeAssistant();
 
@@ -909,7 +913,7 @@ export default function Dashboard() {
     const lightsOn = useMemo(() => lights.filter(l => l.state === 'on').length, [lights]);
     const coversOpen = useMemo(() => covers.filter(c => (c.attributes.friendly_name !== 'Alle Storen') && (c.state === 'open' || (c.attributes.current_position && c.attributes.current_position > 0))).length, [covers]);
     const activeVacuums = useMemo(() => vacuums.filter(v => v.state === 'cleaning').length, [vacuums]);
-    const playingMedia = useMemo(() => mediaPlayers.filter((m: any) => m.state === 'playing').length, [mediaPlayers]);
+    const playingMediaCount = useMemo(() => mediaPlayers.filter((m: any) => m.state === 'playing').length, [mediaPlayers]);
     const shoppingListCount = useMemo(() => {
         if (!shoppingList || isNaN(parseInt(shoppingList.state))) return 0;
         return parseInt(shoppingList.state);
@@ -1257,32 +1261,74 @@ export default function Dashboard() {
                 contentContainerStyle={[styles.scrollContent, { paddingHorizontal: isTablet ? 24 : 16 }]}
                 showsVerticalScrollIndicator={false}
             >
-                {/* 1. Homescreen Countdowns (TOP) */}
-                {homescreenCountdowns.length > 0 && (
-                    <View style={[styles.section, { marginBottom: 12 }]}>
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingLeft: 20, paddingRight: 20 }}>
-                            {homescreenCountdowns.map((cd: any) => {
-                                const days = getCountdownDays(cd.target_date, cd.target_time);
-                                const isToday = days === 0;
-                                const isSoon = days <= 7;
-                                const accent = isToday ? '#EF4444' : isSoon ? '#F59E0B' : '#3B82F6';
-                                return (
-                                    <Pressable key={cd.id} onPress={() => setCountdownDetail(cd)}
-                                        style={[styles.countdownCard, { backgroundColor: accent + '15', borderColor: accent + '40' }]}
-                                    >
-                                        {(() => { const IconC = COUNTDOWN_ICONS[cd.emoji] || Search; return <IconC size={20} color={accent} />; })()}
-                                        <LiveCountdown
-                                            targetDate={cd.target_date}
-                                            targetTime={cd.target_time}
-                                            displayFormat={cd.display_format}
-                                            isHomescreen={true}
-                                            color={accent}
-                                            textStyle={[styles.countdownDays, { color: accent }]}
-                                        />
-                                    </Pressable>
-                                );
-                            })}
-                        </ScrollView>
+                {/* 1. Homescreen Countdowns and Media Player (TOP) */}
+                {(homescreenCountdowns.length > 0 || playingMediaCount > 0) && (
+                    <View style={{ marginBottom: 12, flexDirection: 'row', alignItems: 'center' }}>
+                        {/* Countdowns (scrollable, takes available space) */}
+                        {homescreenCountdowns.length > 0 && (
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ gap: 10, paddingLeft: 20, paddingRight: playingMediaCount > 0 ? 10 : 20 }}>
+                                {homescreenCountdowns.map((cd: any) => {
+                                    const days = getCountdownDays(cd.target_date, cd.target_time);
+                                    const isToday = days === 0;
+                                    const isSoon = days <= 7;
+                                    const accent = isToday ? '#EF4444' : isSoon ? '#F59E0B' : '#3B82F6';
+                                    return (
+                                        <Pressable key={cd.id} onPress={() => setCountdownDetail(cd)}
+                                            style={[styles.countdownCard, { backgroundColor: accent + '15', borderColor: accent + '40' }]}
+                                        >
+                                            {(() => { const IconC = COUNTDOWN_ICONS[cd.emoji] || Search; return <IconC size={20} color={accent} />; })()}
+                                            <LiveCountdown
+                                                targetDate={cd.target_date}
+                                                targetTime={cd.target_time}
+                                                displayFormat={cd.display_format}
+                                                isHomescreen={true}
+                                                color={accent}
+                                                textStyle={[styles.countdownDays, { color: accent }]}
+                                            />
+                                        </Pressable>
+                                    );
+                                })}
+                            </ScrollView>
+                        )}
+
+                        {/* Media Player Widget (right-aligned) */}
+                        {(() => {
+                            if (playingMediaCount === 0) return null;
+                            const activePlayer = mediaPlayers.find((p: any) => p.state === 'playing');
+                            if (!activePlayer) return null;
+                            const imageUrl = getEntityPictureUrl(activePlayer?.attributes?.entity_picture);
+
+                            return (
+                                <Pressable
+                                    onPress={() => {
+                                        setActiveMediaPlayer(activePlayer);
+                                        setMediaPlayerModalVisible(true);
+                                    }}
+                                    style={{
+                                        width: 60,
+                                        height: 60,
+                                        borderRadius: 16,
+                                        backgroundColor: colors.card,
+                                        borderWidth: 1,
+                                        borderColor: colors.border,
+                                        overflow: 'hidden',
+                                        justifyContent: 'center',
+                                        alignItems: 'center',
+                                        marginRight: 20,
+                                        marginLeft: homescreenCountdowns.length > 0 ? 0 : 'auto',
+                                    }}
+                                >
+                                    {imageUrl ? (
+                                        <Image source={{ uri: imageUrl }} style={{ width: '100%', height: '100%' }} />
+                                    ) : (
+                                        <Music size={24} color={colors.subtext} />
+                                    )}
+                                    <View style={{ position: 'absolute', backgroundColor: 'rgba(0,0,0,0.4)', width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
+                                        <Speaker size={20} color="#FFF" />
+                                    </View>
+                                </Pressable>
+                            );
+                        })()}
                     </View>
                 )}
 
@@ -1367,127 +1413,131 @@ export default function Dashboard() {
 
                 {/* --- APPLIANCE STATUS ROW (Dynamic) --- */}
                 {/* --- APPLIANCE STATUS ROW (Specific) --- */}
-                {(() => {
-                    const activeAppliances = [
-                        { status: dishwasherStatus, label: 'Geschirrspüler', icon: UtensilsCrossed },
-                        { status: washerStatus, label: 'Waschmaschine', icon: Shirt },
-                        { status: tumblerStatus, label: 'Tumbler', icon: Wind },
-                    ].filter(item => item.status !== null);
+                {
+                    (() => {
+                        const activeAppliances = [
+                            { status: dishwasherStatus, label: 'Geschirrspüler', icon: UtensilsCrossed },
+                            { status: washerStatus, label: 'Waschmaschine', icon: Shirt },
+                            { status: tumblerStatus, label: 'Tumbler', icon: Wind },
+                        ].filter(item => item.status !== null);
 
-                    if (activeAppliances.length === 0) return null;
+                        if (activeAppliances.length === 0) return null;
 
-                    return (
-                        <View style={[styles.applianceRow, { marginBottom: 16, flexDirection: 'row' }]}>
-                            {activeAppliances.map((app, index) => (
-                                <View key={index} style={{ flex: 1 }}>
-                                    <SpecificApplianceTile
-                                        label={app.label}
-                                        icon={app.icon}
-                                        statusText={app.status!.text}
-                                        isRunning={app.status!.isRunning}
-                                        isFinished={app.status!.isFinished}
-                                        compact={true}
-                                    />
-                                </View>
-                            ))}
-                        </View>
-                    );
-                })()}
+                        return (
+                            <View style={[styles.applianceRow, { marginBottom: 16, flexDirection: 'row' }]}>
+                                {activeAppliances.map((app, index) => (
+                                    <View key={index} style={{ flex: 1 }}>
+                                        <SpecificApplianceTile
+                                            label={app.label}
+                                            icon={app.icon}
+                                            statusText={app.status!.text}
+                                            isRunning={app.status!.isRunning}
+                                            isFinished={app.status!.isFinished}
+                                            compact={true}
+                                        />
+                                    </View>
+                                ))}
+                            </View>
+                        );
+                    })()
+                }
 
                 {/* Door Opener Buttons */}
-                {(cfgDoorFront || cfgDoorApart) && (() => {
-                    const handleDoorOpen = (entityId: string) => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                        // Support lock, button, switch, and script entities
-                        if (entityId.startsWith('lock.')) {
-                            callService('lock', 'unlock', entityId);
-                        } else if (entityId.startsWith('button.')) {
-                            callService('button', 'press', entityId);
-                        } else if (entityId.startsWith('switch.')) {
-                            callService('switch', 'turn_on', entityId);
-                        } else if (entityId.startsWith('script.')) {
-                            callService('script', 'turn_on', entityId);
-                        } else {
-                            callService('lock', 'unlock', entityId);
-                        }
-                    };
-
-                    // Toggle lock: lock if unlocked, unlock if locked
-                    const handleDoorToggle = (entityId: string) => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                        if (entityId.startsWith('lock.')) {
-                            const lockEntity = entities.find(e => e.entity_id === entityId);
-                            if (lockEntity?.state === 'unlocked') {
-                                callService('lock', 'lock', entityId);
+                {
+                    (cfgDoorFront || cfgDoorApart) && (() => {
+                        const handleDoorOpen = (entityId: string) => {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                            // Support lock, button, switch, and script entities
+                            if (entityId.startsWith('lock.')) {
+                                callService('lock', 'unlock', entityId);
+                            } else if (entityId.startsWith('button.')) {
+                                callService('button', 'press', entityId);
+                            } else if (entityId.startsWith('switch.')) {
+                                callService('switch', 'turn_on', entityId);
+                            } else if (entityId.startsWith('script.')) {
+                                callService('script', 'turn_on', entityId);
                             } else {
                                 callService('lock', 'unlock', entityId);
                             }
-                        } else {
-                            handleDoorOpen(entityId);
-                        }
-                    };
+                        };
 
-                    // Dynamic state for Wohnungstüre button
-                    const apartLockEntity = cfgDoorApart ? entities.find(e => e.entity_id === cfgDoorApart) : null;
-                    const apartDoorSensor = cfgDoorApartSensor ? entities.find(e => e.entity_id === cfgDoorApartSensor) : null;
-                    const isApartUnlocked = apartLockEntity?.state === 'unlocked';
-                    const isApartDoorOpen = apartDoorSensor?.state === 'on';
+                        // Toggle lock: lock if unlocked, unlock if locked
+                        const handleDoorToggle = (entityId: string) => {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                            if (entityId.startsWith('lock.')) {
+                                const lockEntity = entities.find(e => e.entity_id === entityId);
+                                if (lockEntity?.state === 'unlocked') {
+                                    callService('lock', 'lock', entityId);
+                                } else {
+                                    callService('lock', 'unlock', entityId);
+                                }
+                            } else {
+                                handleDoorOpen(entityId);
+                            }
+                        };
 
-                    // Determine Wohnungstüre button color
-                    const getApartBtnColor = () => {
-                        if (isApartDoorOpen) return '#F97316';
-                        if (isApartUnlocked) return '#EF4444';
-                        return '#8B5CF6';
-                    };
-                    const apartBtnColor = getApartBtnColor();
+                        // Dynamic state for Wohnungstüre button
+                        const apartLockEntity = cfgDoorApart ? entities.find(e => e.entity_id === cfgDoorApart) : null;
+                        const apartDoorSensor = cfgDoorApartSensor ? entities.find(e => e.entity_id === cfgDoorApartSensor) : null;
+                        const isApartUnlocked = apartLockEntity?.state === 'unlocked';
+                        const isApartDoorOpen = apartDoorSensor?.state === 'on';
 
-                    return (
-                        <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
-                            {cfgDoorFront ? (
-                                <Pressable
-                                    onPress={() => handleDoorOpen(cfgDoorFront)}
-                                    style={({ pressed }) => [{
-                                        flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-                                        gap: 8, paddingVertical: 14, borderRadius: 14,
-                                        backgroundColor: pressed ? colors.accent + '40' : colors.card,
-                                        borderWidth: 1, borderColor: colors.border,
-                                    }]}
-                                >
-                                    <DoorOpen size={18} color={colors.accent} />
-                                    <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600' }}>Haustüre</Text>
-                                </Pressable>
-                            ) : null}
-                            {cfgDoorApart ? (
-                                <DoorApartButton
-                                    onPress={() => handleDoorToggle(cfgDoorApart)}
-                                    isUnlocked={isApartUnlocked}
-                                    isDoorOpen={isApartDoorOpen}
-                                    btnColor={apartBtnColor}
-                                    cardColor={colors.card}
-                                    textColor={colors.text}
-                                    borderColor={colors.border}
-                                />
-                            ) : null}
-                            {cfgDoorFront && cfgDoorApart ? (
-                                <Pressable
-                                    onPress={() => {
-                                        handleDoorOpen(cfgDoorFront);
-                                        handleDoorOpen(cfgDoorApart);
-                                    }}
-                                    style={({ pressed }) => [{
-                                        flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-                                        gap: 8, paddingVertical: 14, borderRadius: 14,
-                                        backgroundColor: pressed ? '#10B981' + '40' : colors.card,
-                                        borderWidth: 1, borderColor: '#10B981' + '60',
-                                    }]}
-                                >
-                                    <DoorOpen size={18} color="#10B981" />
-                                    <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600' }}>Beide</Text>
-                                </Pressable>
-                            ) : null}
-                        </View>
-                    );
-                })()}
+                        // Determine Wohnungstüre button color
+                        const getApartBtnColor = () => {
+                            if (isApartDoorOpen) return '#F97316';
+                            if (isApartUnlocked) return '#EF4444';
+                            return '#8B5CF6';
+                        };
+                        const apartBtnColor = getApartBtnColor();
+
+                        return (
+                            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
+                                {cfgDoorFront ? (
+                                    <Pressable
+                                        onPress={() => handleDoorOpen(cfgDoorFront)}
+                                        style={({ pressed }) => [{
+                                            flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+                                            gap: 8, paddingVertical: 14, borderRadius: 14,
+                                            backgroundColor: pressed ? colors.accent + '40' : colors.card,
+                                            borderWidth: 1, borderColor: colors.border,
+                                        }]}
+                                    >
+                                        <DoorOpen size={18} color={colors.accent} />
+                                        <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600' }}>Haustüre</Text>
+                                    </Pressable>
+                                ) : null}
+                                {cfgDoorApart ? (
+                                    <DoorApartButton
+                                        onPress={() => handleDoorToggle(cfgDoorApart)}
+                                        isUnlocked={isApartUnlocked}
+                                        isDoorOpen={isApartDoorOpen}
+                                        btnColor={apartBtnColor}
+                                        cardColor={colors.card}
+                                        textColor={colors.text}
+                                        borderColor={colors.border}
+                                    />
+                                ) : null}
+                                {cfgDoorFront && cfgDoorApart ? (
+                                    <Pressable
+                                        onPress={() => {
+                                            handleDoorOpen(cfgDoorFront);
+                                            handleDoorOpen(cfgDoorApart);
+                                        }}
+                                        style={({ pressed }) => [{
+                                            flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+                                            gap: 8, paddingVertical: 14, borderRadius: 14,
+                                            backgroundColor: pressed ? '#10B981' + '40' : colors.card,
+                                            borderWidth: 1, borderColor: '#10B981' + '60',
+                                        }]}
+                                    >
+                                        <DoorOpen size={18} color="#10B981" />
+                                        <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600' }}>Beide</Text>
+                                    </Pressable>
+                                ) : null}
+                            </View>
+                        );
+                    })()
+                }
 
                 {/* Quick Actions (Data-driven) */}
                 <View style={styles.section}>
@@ -1554,60 +1604,62 @@ export default function Dashboard() {
                 </View>
 
                 {/* Main Shortcuts (configurable by admin) */}
-                {(dashboardConfig.homescreenShortcuts?.length > 0) && (
-                    <View style={styles.section}>
-                        <View style={{ flexDirection: 'row', gap: 12 }}>
-                            {(dashboardConfig.homescreenShortcuts || []).map((shortcut: any) => {
-                                const entity = entities.find((e: any) => e.entity_id === shortcut.id);
-                                if (!entity) return null;
+                {
+                    (dashboardConfig.homescreenShortcuts?.length > 0) && (
+                        <View style={styles.section}>
+                            <View style={{ flexDirection: 'row', gap: 12 }}>
+                                {(dashboardConfig.homescreenShortcuts || []).map((shortcut: any) => {
+                                    const entity = entities.find((e: any) => e.entity_id === shortcut.id);
+                                    if (!entity) return null;
 
-                                const isOn = entity.state === 'on';
-                                const domain = shortcut.id.split('.')[0];
-                                const label = shortcut.name || entity.attributes.friendly_name || shortcut.id;
+                                    const isOn = entity.state === 'on';
+                                    const domain = shortcut.id.split('.')[0];
+                                    const label = shortcut.name || entity.attributes.friendly_name || shortcut.id;
 
-                                const handleToggle = () => {
-                                    if (isOn) {
-                                        callService(domain, 'turn_off', shortcut.id);
-                                    } else {
-                                        callService(domain, 'turn_on', shortcut.id);
-                                    }
-                                };
+                                    const handleToggle = () => {
+                                        if (isOn) {
+                                            callService(domain, 'turn_off', shortcut.id);
+                                        } else {
+                                            callService(domain, 'turn_on', shortcut.id);
+                                        }
+                                    };
 
-                                return (
-                                    <View key={shortcut.id} style={{ flex: 1 }}>
-                                        <Pressable
-                                            onPress={handleToggle}
-                                            style={[
-                                                styles.tile,
-                                                { backgroundColor: colors.card, borderColor: colors.border },
-                                                {
-                                                    minHeight: 60,
-                                                    padding: 12,
-                                                    justifyContent: 'center',
-                                                    marginBottom: 0
-                                                },
-                                                isOn && { backgroundColor: colors.accent + '26', borderColor: colors.accent + '80' }
-                                            ]}
-                                        >
-                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                                                <View style={[
-                                                    styles.tileIcon,
-                                                    { width: 32, height: 32, backgroundColor: colors.background },
-                                                    isOn && { backgroundColor: colors.accent }
-                                                ]}>
-                                                    <Lightbulb size={18} color={isOn ? "#FFF" : colors.subtext} />
+                                    return (
+                                        <View key={shortcut.id} style={{ flex: 1 }}>
+                                            <Pressable
+                                                onPress={handleToggle}
+                                                style={[
+                                                    styles.tile,
+                                                    { backgroundColor: colors.card, borderColor: colors.border },
+                                                    {
+                                                        minHeight: 60,
+                                                        padding: 12,
+                                                        justifyContent: 'center',
+                                                        marginBottom: 0
+                                                    },
+                                                    isOn && { backgroundColor: colors.accent + '26', borderColor: colors.accent + '80' }
+                                                ]}
+                                            >
+                                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                                                    <View style={[
+                                                        styles.tileIcon,
+                                                        { width: 32, height: 32, backgroundColor: colors.background },
+                                                        isOn && { backgroundColor: colors.accent }
+                                                    ]}>
+                                                        <Lightbulb size={18} color={isOn ? "#FFF" : colors.subtext} />
+                                                    </View>
+                                                    <View style={{ flex: 1 }}>
+                                                        <Text style={[styles.tileName, { marginTop: 0, fontSize: 13, color: colors.text }, isOn && { color: '#FFF' }]} numberOfLines={1}>{label}</Text>
+                                                    </View>
                                                 </View>
-                                                <View style={{ flex: 1 }}>
-                                                    <Text style={[styles.tileName, { marginTop: 0, fontSize: 13, color: colors.text }, isOn && { color: '#FFF' }]} numberOfLines={1}>{label}</Text>
-                                                </View>
-                                            </View>
-                                        </Pressable>
-                                    </View>
-                                );
-                            })}
+                                            </Pressable>
+                                        </View>
+                                    );
+                                })}
+                            </View>
                         </View>
-                    </View>
-                )}
+                    )
+                }
 
 
 
@@ -1655,16 +1707,18 @@ export default function Dashboard() {
                     </View>
                 </Modal>
 
-                {calendars.length > 0 && (
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitleSmall}>Nächste Termine</Text>
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
-                            {calendars.map(calendar => (
-                                <EventTile key={calendar.entity_id} calendar={calendar} onPress={() => handleCalendarPress(calendar)} />
-                            ))}
-                        </ScrollView>
-                    </View>
-                )}
+                {
+                    calendars.length > 0 && (
+                        <View style={styles.section}>
+                            <Text style={styles.sectionTitleSmall}>Nächste Termine</Text>
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
+                                {calendars.map(calendar => (
+                                    <EventTile key={calendar.entity_id} calendar={calendar} onPress={() => handleCalendarPress(calendar)} />
+                                ))}
+                            </ScrollView>
+                        </View>
+                    )
+                }
 
 
                 {/* Hero Stats */}
@@ -1740,11 +1794,11 @@ export default function Dashboard() {
                         <HeroStatCard
                             icon={Tv}
                             iconColor={colors.accent}
-                            value={playingMedia}
+                            value={playingMediaCount}
                             total={mediaPlayers.length}
                             label="Wiedergabe"
                             gradient={[colors.accent, colors.accent + 'CC']}
-                            isActive={playingMedia > 0}
+                            isActive={playingMediaCount > 0}
                             cardWidth={cardWidth}
                             onPress={() => router.push('/media')}
                         />
@@ -1776,7 +1830,7 @@ export default function Dashboard() {
 
 
 
-            </ScrollView>
+            </ScrollView >
 
             {/* LIGHTS MODAL */}
             {/* LIGHTS MODAL */}
@@ -2026,6 +2080,140 @@ export default function Dashboard() {
                 visible={showSleepTimer}
                 onClose={() => setShowSleepTimer(false)}
             />
+
+            {/* Dashboard Media Player Modal (Bottom-Sheet Popup) */}
+            <Modal visible={mediaPlayerModalVisible} animationType="slide" transparent={true} onRequestClose={() => setMediaPlayerModalVisible(false)}>
+                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
+                    <Pressable style={{ flex: 1 }} onPress={() => setMediaPlayerModalVisible(false)} />
+                    <View style={{ backgroundColor: colors.card, borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: 'hidden', maxHeight: '70%' }}>
+                        {(() => {
+                            // Use live entity from HA state instead of stale snapshot
+                            const livePlayer = activeMediaPlayer ? entities.find(e => e.entity_id === activeMediaPlayer.entity_id) || activeMediaPlayer : null;
+                            if (!livePlayer) return null;
+                            const isOff = livePlayer.state === 'off';
+                            const isPlaying = livePlayer.state === 'playing';
+                            const imageUrl = getEntityPictureUrl(livePlayer.attributes?.entity_picture) || null;
+                            const mediaTitle = livePlayer.attributes.media_title || 'Unbekanntes Medium';
+                            const artist = livePlayer.attributes.media_artist || '';
+                            const playerName = livePlayer.attributes.friendly_name || livePlayer.entity_id;
+                            const features = livePlayer.attributes.supported_features || 0;
+                            const supportsVolume = (features & 4) !== 0;
+                            const currentVolume = livePlayer.attributes.volume_level ?? 0.5;
+                            const isMuted = livePlayer.attributes.is_volume_muted === true;
+
+                            // MASS player resolution (same logic as media page)
+                            const getMassPlayerId = (id: string): string | null => {
+                                if (!id) return null;
+                                const MASS_ID_MAPPING: Record<string, string> = {
+                                    'media_player.nest_buro': 'media_player.nest_garage_2',
+                                };
+                                if (MASS_ID_MAPPING[id]) return MASS_ID_MAPPING[id];
+                                if (id.startsWith('media_player.ma_') || id.startsWith('media_player.mass_')) return id;
+                                const massId = id.replace('media_player.', 'media_player.mass_');
+                                if (entities.find(e => e.entity_id === massId)) return massId;
+                                const coreName = id.replace('media_player.', '').replace('nest_', '').replace('google_', '').replace('hub_', '').replace('home_', '');
+                                const massCandidate = entities.find(e => (e.entity_id.startsWith('media_player.mass_') || e.entity_id.startsWith('media_player.ma_')) && e.entity_id.includes(coreName));
+                                return massCandidate ? massCandidate.entity_id : null;
+                            };
+
+                            const resolveTarget = (entityId: string): string => getMassPlayerId(entityId) || entityId;
+
+                            const handlePlayPause = () => {
+                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                                callService('media_player', isPlaying ? 'media_pause' : 'media_play', resolveTarget(livePlayer.entity_id));
+                            };
+                            const handleNext = () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); callService('media_player', 'media_next_track', resolveTarget(livePlayer.entity_id)); };
+                            const handlePrev = () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); callService('media_player', 'media_previous_track', resolveTarget(livePlayer.entity_id)); };
+                            const handlePower = () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); callService('media_player', isOff ? 'turn_on' : 'turn_off', livePlayer.entity_id); };
+                            const handleMuteToggle = () => {
+                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                callService('media_player', 'volume_mute', resolveTarget(livePlayer.entity_id), { is_volume_muted: !isMuted });
+                            };
+                            const handleVolumeChange = (value: number) => {
+                                callService('media_player', 'volume_set', resolveTarget(livePlayer.entity_id), { volume_level: Math.round(value * 100) / 100 });
+                            };
+
+                            return (
+                                <View style={{ position: 'relative' }}>
+                                    {/* Blurred Background - wrapped in View with pointerEvents none */}
+                                    {imageUrl && (
+                                        <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+                                            <Image source={{ uri: imageUrl }} style={{ width: '100%', height: '100%', opacity: 0.3 }} blurRadius={50} />
+                                        </View>
+                                    )}
+
+                                    {/* Handle bar */}
+                                    <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 6 }}>
+                                        <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: colors.subtext + '40' }} />
+                                    </View>
+
+                                    {/* Player Name */}
+                                    <Text style={{ color: colors.subtext, fontSize: 12, fontWeight: '600', textAlign: 'center', textTransform: 'uppercase', letterSpacing: 1 }}>{playerName}</Text>
+
+                                    {/* Content */}
+                                    <View style={{ padding: 24, alignItems: 'center' }}>
+                                        {/* Artwork */}
+                                        <View style={{ width: 160, height: 160, borderRadius: 20, shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 12, elevation: 10, marginBottom: 20 }}>
+                                            {imageUrl ? (
+                                                <Image source={{ uri: imageUrl }} style={{ width: '100%', height: '100%', borderRadius: 20 }} />
+                                            ) : (
+                                                <View style={{ width: '100%', height: '100%', borderRadius: 20, backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' }}>
+                                                    <Music size={48} color={colors.subtext} />
+                                                </View>
+                                            )}
+                                        </View>
+
+                                        {/* Metadata */}
+                                        <Text style={{ fontSize: 20, fontWeight: '700', color: colors.text, textAlign: 'center', marginBottom: 4 }} numberOfLines={1}>{mediaTitle}</Text>
+                                        {artist ? <Text style={{ fontSize: 15, color: colors.subtext, textAlign: 'center' }} numberOfLines={1}>{artist}</Text> : null}
+
+                                        {/* Controls */}
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 28, marginTop: 28 }}>
+                                            <Pressable onPress={handlePrev} hitSlop={12} style={{ padding: 10 }}>
+                                                <SkipBack size={28} color={colors.text} />
+                                            </Pressable>
+
+                                            <Pressable onPress={handlePlayPause} hitSlop={8} style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' }}>
+                                                {isPlaying ? <Pause size={28} color="#FFF" fill="#FFF" /> : <Play size={28} color="#FFF" fill="#FFF" style={{ marginLeft: 3 }} />}
+                                            </Pressable>
+
+                                            <Pressable onPress={handleNext} hitSlop={12} style={{ padding: 10 }}>
+                                                <SkipForward size={28} color={colors.text} />
+                                            </Pressable>
+                                        </View>
+
+                                        {/* Volume Slider */}
+                                        {supportsVolume && (
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 24, width: '100%', paddingHorizontal: 4 }}>
+                                                <Pressable onPress={handleMuteToggle} hitSlop={8} style={{ padding: 4 }}>
+                                                    {isMuted ? <VolumeX size={20} color={colors.subtext} /> : currentVolume < 0.3 ? <Volume1 size={20} color={colors.text} /> : <Volume2 size={20} color={colors.text} />}
+                                                </Pressable>
+                                                <Slider
+                                                    style={{ flex: 1, height: 36 }}
+                                                    minimumValue={0}
+                                                    maximumValue={1}
+                                                    step={0.02}
+                                                    value={currentVolume}
+                                                    onSlidingComplete={handleVolumeChange}
+                                                    minimumTrackTintColor={isMuted ? colors.subtext : colors.accent}
+                                                    maximumTrackTintColor={colors.background}
+                                                    thumbTintColor={isMuted ? colors.subtext : colors.accent}
+                                                />
+                                                <Text style={{ color: colors.subtext, fontSize: 12, fontWeight: '600', minWidth: 32, textAlign: 'right' }}>{Math.round(currentVolume * 100)}%</Text>
+                                            </View>
+                                        )}
+
+                                        {/* Power Button */}
+                                        <Pressable onPress={handlePower} hitSlop={8} style={{ marginTop: 20, padding: 10, backgroundColor: colors.background, borderRadius: 16 }}>
+                                            <Power size={20} color={!isOff ? '#EF4444' : colors.subtext} />
+                                        </Pressable>
+                                    </View>
+                                </View>
+                            );
+                        })()}
+                    </View>
+                </View>
+            </Modal>
         </SafeAreaView >
     );
 }
@@ -2107,6 +2295,8 @@ const styles = StyleSheet.create({
     // Modal
     modalOverlay: { flex: 1, backgroundColor: '#000' },
     modalContent: { flex: 1, backgroundColor: '#020617' },
+    playerModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'flex-end' },
+    playerModalContent: { height: 580, borderTopLeftRadius: 32, borderTopRightRadius: 32 },
     modalHeader: { paddingVertical: 24, paddingHorizontal: 20, paddingTop: 60, borderBottomLeftRadius: 32, borderBottomRightRadius: 32, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
     modalTitle: { fontSize: 24, fontWeight: 'bold', color: '#fff' },
     closeBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.2)', alignItems: 'center', justifyContent: 'center' },

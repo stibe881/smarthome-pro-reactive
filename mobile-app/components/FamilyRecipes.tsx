@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     View, Text, StyleSheet, Pressable, ScrollView, TextInput,
     ActivityIndicator, Alert, Modal, Image, KeyboardAvoidingView, Platform,
-    Dimensions, Linking, TouchableWithoutFeedback, Animated,
+    Dimensions, Linking, TouchableWithoutFeedback, Animated, useWindowDimensions
 } from 'react-native';
 import {
     X, Plus, Search, Clock, Users, Trash2, Edit3, Check, ChevronRight,
@@ -15,13 +15,37 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as DocumentPicker from 'expo-document-picker';
-import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
+import { activateKeepAwakeAsync, deactivateKeepAwake, useKeepAwake } from 'expo-keep-awake';
+
+const CookingModeKeepAwake = () => {
+    useKeepAwake();
+    return null;
+};
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useHomeAssistant } from '../contexts/HomeAssistantContext';
 import { useHousehold } from '../hooks/useHousehold';
 import { supabase } from '../lib/supabase';
+
+const showAlert = (title: string, message?: string, buttons?: { text?: string, style?: 'default' | 'cancel' | 'destructive', onPress?: () => void }[]) => {
+    if (Platform.OS === 'web') {
+        if (buttons && buttons.length > 1) {
+            const okBtn = buttons.find(b => b.style === 'destructive' || b.style === 'default' || (b.text !== 'Abbrechen' && b.style !== 'cancel'));
+            if (okBtn) {
+                if (window.confirm(`${title}\n${message || ''}`)) {
+                    okBtn.onPress?.();
+                }
+            } else {
+                window.alert(`${title}\n${message || ''}`);
+            }
+        } else {
+            window.alert(`${title}\n${message || ''}`);
+        }
+    } else {
+        Alert.alert(title, message, buttons);
+    }
+};
 
 interface Recipe {
     id: string;
@@ -87,6 +111,10 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
     const { user } = useAuth();
     const { addTodoItem } = useHomeAssistant();
     const { householdId } = useHousehold();
+
+    const { width: screenWidth } = useWindowDimensions();
+    const numColumns = screenWidth > 1200 ? 6 : screenWidth > 900 ? 5 : screenWidth > 600 ? 4 : 2;
+    const dynamicCardWidth = (screenWidth - 32 - ((numColumns - 1) * 12)) / numColumns;
 
     const [recipes, setRecipes] = useState<Recipe[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -194,15 +222,7 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
         } else { fadeAnim.setValue(0); }
     }, [visible, loadRecipes, loadMembers]);
 
-    // Keep awake when in cooking mode
-    useEffect(() => {
-        if (viewMode === 'cooking') {
-            activateKeepAwakeAsync();
-        } else {
-            deactivateKeepAwake();
-        }
-        return () => { deactivateKeepAwake(); };
-    }, [viewMode]);
+
 
     // Timer tick interval
     useEffect(() => {
@@ -220,7 +240,7 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
         Object.entries(activeTimers).forEach(([stepIdx, timer]) => {
             if (timer.endTime > 0 && nowMs >= timer.endTime) {
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                Alert.alert('⏱️ Timer abgelaufen!', 'Ein Zubereitungsschritt ist fertig.');
+                showAlert('⏱️ Timer abgelaufen!', 'Ein Zubereitungsschritt ist fertig.');
                 setActiveTimers(prev => {
                     const next = { ...prev };
                     delete next[parseInt(stepIdx)];
@@ -251,7 +271,7 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
     };
 
     const getRecipeCategories = (r: Recipe): string[] => {
-        if (r.categories && r.categories.length > 0) return r.categories;
+        if (r.categories && Array.isArray(r.categories) && r.categories.length > 0) return r.categories;
         return r.category ? [r.category] : ['other'];
     };
 
@@ -445,19 +465,29 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
             const asset = result.assets[0];
             const fileExt = asset.uri.split('.').pop() || 'jpg';
             const filePath = `recipes/${householdId}/${Date.now()}.${fileExt}`;
-            const base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: 'base64' });
-            const binaryData = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-            const { error } = await supabase.storage.from('family-documents')
-                .upload(filePath, binaryData, { contentType: `image/${fileExt}` });
-            if (error) throw error;
+
+            if (Platform.OS === 'web') {
+                const res = await fetch(asset.uri);
+                const blob = await res.blob();
+                const { error } = await supabase.storage.from('family-documents')
+                    .upload(filePath, blob, { contentType: blob.type || `image/${fileExt}` });
+                if (error) throw error;
+            } else {
+                const base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: 'base64' });
+                const binaryData = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+                const { error } = await supabase.storage.from('family-documents')
+                    .upload(filePath, binaryData, { contentType: `image/${fileExt}` });
+                if (error) throw error;
+            }
+
             const { data: urlData } = supabase.storage.from('family-documents').getPublicUrl(filePath);
             setFormImageUrl(urlData.publicUrl);
-        } catch (e: any) { Alert.alert('Fehler', e.message); }
+        } catch (e: any) { showAlert('Fehler', e.message); }
     };
 
     const handleSaveOwn = async () => {
         if (!formTitle.trim() || formIngredients.length === 0 || formInstructions.length === 0 || !householdId) {
-            Alert.alert('Fehler', 'Bitte gib Titel, mindestens eine Zutat und einen Schritt ein.');
+            showAlert('Fehler', 'Bitte gib Titel, mindestens eine Zutat und einen Schritt ein.');
             return;
         }
 
@@ -493,7 +523,7 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
     };
 
     const handleSaveWeb = async () => {
-        if (!formSourceUrl.trim() || !householdId) return Alert.alert('Fehler', 'Bitte gib eine URL ein.');
+        if (!formSourceUrl.trim() || !householdId) return showAlert('Fehler', 'Bitte gib eine URL ein.');
         setIsSaving(true);
         try {
             const url = formSourceUrl.trim();
@@ -513,7 +543,7 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
             });
             if (error) throw error;
             setViewMode('list'); resetForm(); loadRecipes();
-        } catch (e: any) { Alert.alert('Fehler', e.message); }
+        } catch (e: any) { showAlert('Fehler', e.message); }
         finally { setIsSaving(false); }
     };
 
@@ -575,14 +605,14 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
             }
 
             if (importedCount > 0) {
-                Alert.alert('Erfolg ✓', `${importedCount} Rezept(e) erfolgreich importiert.`);
+                showAlert('Erfolg ✓', `${importedCount} Rezept(e) erfolgreich importiert.`);
                 loadRecipes();
             } else {
-                Alert.alert('Fehler', 'Keine gültigen Rezepte in der JSON-Datei gefunden.');
+                showAlert('Fehler', 'Keine gültigen Rezepte in der JSON-Datei gefunden.');
             }
         } catch (e: any) {
             console.error('JSON Import Error:', e);
-            Alert.alert('Import Fehler', 'Fehler beim Lesen der JSON-Datei. Stelle sicher, dass das Dateiformat korrekt ist.');
+            showAlert('Import Fehler', 'Fehler beim Lesen der JSON-Datei. Stelle sicher, dass das Dateiformat korrekt ist.');
         } finally {
             setIsLoading(false);
             setShowNewPicker(false);
@@ -590,7 +620,7 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
     };
 
     const handleDelete = (recipe: Recipe) => {
-        Alert.alert('Löschen', `"${recipe.title}" wirklich löschen?`, [
+        showAlert('Löschen', `"${recipe.title}" wirklich löschen?`, [
             { text: 'Abbrechen', style: 'cancel' },
             {
                 text: 'Löschen', style: 'destructive', onPress: async () => {
@@ -631,18 +661,18 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
                 type: 'recipe', date: today, recipe_id: recipe.id,
             });
             if (error) throw error;
-            Alert.alert('Geplant ✓', `"${recipe.title}" wurde zum Planer hinzugefügt.`);
-        } catch (e: any) { Alert.alert('Fehler', e.message); }
+            showAlert('Geplant ✓', `"${recipe.title}" wurde zum Planer hinzugefügt.`);
+        } catch (e: any) { showAlert('Fehler', e.message); }
     };
 
     const handleAddToShoppingList = async (recipe: Recipe) => {
         const lines = recipe.ingredients.split('\n').filter(Boolean).map(l => l.trim());
-        if (!lines.length) return Alert.alert('Keine Zutaten', 'Dieses Rezept hat keine Zutaten.');
+        if (!lines.length) return showAlert('Keine Zutaten', 'Dieses Rezept hat keine Zutaten.');
         const ENTITY_ID = 'todo.google_keep_einkaufsliste';
         try {
             for (const line of lines) { await addTodoItem(ENTITY_ID, line); }
-            Alert.alert('Hinzugefügt ✓', `${lines.length} Zutaten wurden zur Einkaufsliste hinzugefügt.`);
-        } catch (e: any) { Alert.alert('Fehler', e.message); }
+            showAlert('Hinzugefügt ✓', `${lines.length} Zutaten wurden zur Einkaufsliste hinzugefügt.`);
+        } catch (e: any) { showAlert('Fehler', e.message); }
     };
 
     const handleRandomRecipe = () => {
@@ -653,7 +683,7 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
     };
 
     const getDifficultyInfo = (d: string | null) => DIFFICULTY_LEVELS.find(l => l.key === d) || DIFFICULTY_LEVELS[1];
-    const getCategoryInfo = (c: string) => RECIPE_CATEGORIES.find(cat => cat.key === c) || RECIPE_CATEGORIES[6];
+    const getCategoryInfo = (c: string) => RECIPE_CATEGORIES.find(cat => cat.key === c) || { key: c || 'other', label: c || 'Sonstiges', emoji: '🏷️' };
     const getTotalTime = (r: Recipe) => (r.prep_time || 0) + (r.cook_time || 0) + (r.rest_time || 0);
 
     const scaleIngredient = (line: string, mult: number) => {
@@ -749,12 +779,12 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
                             const diff = getDifficultyInfo(recipe.difficulty);
                             const totalTime = getTotalTime(recipe);
                             return (
-                                <Pressable key={recipe.id} style={({ pressed }) => [s.recipeCard, { transform: [{ scale: pressed ? 0.96 : 1 }] }]}
+                                <Pressable key={recipe.id} style={({ pressed }) => [s.recipeCard, { width: dynamicCardWidth }, { transform: [{ scale: pressed ? 0.96 : 1 }] }]}
                                     onPress={() => { setSelectedRecipe(recipe); setViewMode('detail'); setCheckedIngredients(new Set()); setPortionMultiplier(1); }}>
                                     {recipe.image_url ? (
-                                        <Image source={{ uri: recipe.image_url }} style={s.cardImage} />
+                                        <Image source={{ uri: recipe.image_url }} style={[s.cardImage, { height: dynamicCardWidth * 1.2 }]} />
                                     ) : (
-                                        <LinearGradient colors={[colors.accent + '30', colors.accent + '10']} style={s.cardImagePlaceholder}>
+                                        <LinearGradient colors={[colors.accent + '30', colors.accent + '10']} style={[s.cardImagePlaceholder, { height: dynamicCardWidth * 1.2 }]}>
                                             <Text style={{ fontSize: 36 }}>{getCategoryInfo(getRecipeCategories(recipe)[0]).emoji}</Text>
                                         </LinearGradient>
                                     )}
@@ -922,21 +952,7 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
                         </View>
                     )}
 
-                    {/* Action buttons under Hero */}
-                    <View style={s.detailActionsHero}>
-                        <Pressable
-                            style={[s.actionBtnMain, { backgroundColor: colors.accent }]}
-                            onPress={() => {
-                                setCookingPhase('mise_en_place');
-                                setCookingStep(0);
-                                setCheckedIngredients(new Set());
-                                setActiveTimers({});
-                                setViewMode('cooking');
-                            }}
-                        >
-                            <ChefHat size={18} color="#fff" /><Text style={[s.actionBtnTextMain, { color: '#fff' }]}>Kochmodus starten</Text>
-                        </Pressable>
-                    </View>
+
 
                     {/* Portion calculator */}
                     {ingredientLines.length > 0 && (
@@ -1053,7 +1069,7 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
                         <ChefHat size={18} color="#fff" /><Text style={s.bottomBtnText}>Planen</Text>
                     </Pressable>
                     {instructionLines.length > 0 && (
-                        <Pressable style={[s.bottomBtn, { backgroundColor: '#22C55E' }]} onPress={() => { setCookingStep(0); setViewMode('cooking'); }}>
+                        <Pressable style={[s.bottomBtn, { backgroundColor: '#22C55E' }]} onPress={() => { setCookingPhase('mise_en_place'); setCookingStep(0); setCheckedIngredients(new Set()); setActiveTimers({}); setViewMode('cooking'); }}>
                             <ChefHat size={18} color="#fff" /><Text style={s.bottomBtnText}>Kochen</Text>
                         </Pressable>
                     )}
@@ -1461,6 +1477,7 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
         if (cookingPhase === 'mise_en_place') {
             return (
                 <View style={[s.cookingContainer, { backgroundColor: colors.background }]}>
+                    <CookingModeKeepAwake />
                     <View style={s.cookingHeader}>
                         <Pressable onPress={() => setViewMode('detail')}><ArrowLeft size={24} color={colors.text} /></Pressable>
                         <Text style={[s.cookingTitle, { color: colors.text }]}>Mise en Place</Text>
@@ -1513,6 +1530,7 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
 
             return (
                 <View style={[s.cookingContainer, { backgroundColor: colors.background }]}>
+                    <CookingModeKeepAwake />
                     <View style={s.cookingHeader}>
                         <Pressable onPress={() => setViewMode('detail')}><X size={24} color={colors.text} /></Pressable>
                         <Text style={[s.cookingTitle, { color: colors.subtext, textAlign: 'center' }]}>{r.title}</Text>

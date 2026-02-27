@@ -7,11 +7,47 @@ import { KidsProvider } from "../contexts/KidsContext";
 import { SubscriptionProvider } from "../contexts/SubscriptionContext";
 import { SleepTimerProvider } from "../hooks/useSleepTimer";
 import { useEffect } from "react";
-import { View, ActivityIndicator } from "react-native";
+import { View, ActivityIndicator, LogBox } from "react-native";
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 import ChangePasswordModal from "../components/ChangePasswordModal";
 import { DoorbellModal } from "../components/DoorbellModal";
+
+const originalConsoleLog = console.log;
+console.log = (...args) => {
+    const isMuted = args.some(arg => {
+        if (typeof arg !== 'string') return false;
+        return arg.includes('[web] Logs will appear in the browser console') ||
+            arg.includes('[WidgetReload] Native module not available') ||
+            arg.includes('[FamilyLocations] react-native-maps not available') ||
+            arg.includes('RevenueCat: Skipped') ||
+            arg.includes('expo-notifications');
+    });
+
+    if (isMuted) return;
+    originalConsoleLog(...args);
+};
+
+const originalConsoleWarn = console.warn;
+console.warn = (...args) => {
+    const isMuted = args.some(arg => {
+        if (typeof arg !== 'string') return false;
+        return arg.includes('expo-notifications') ||
+            arg.includes('Widget native module not found');
+    });
+
+    if (isMuted) return;
+    originalConsoleWarn(...args);
+};
+
+LogBox.ignoreLogs([
+    'expo-notifications:',
+    '`expo-notifications` functionality is not fully supported in Expo Go',
+    '[WidgetReload] Native module not available',
+    'Widget native module not found.',
+    '[FamilyLocations] react-native-maps not available',
+    'RevenueCat: Skipped (Expo Go / Web)',
+]);
 
 /** Bridges sun.sun entity from HA to ThemeContext for auto theme switching */
 function SunThemeBridge() {
