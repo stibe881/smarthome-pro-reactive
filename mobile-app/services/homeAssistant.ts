@@ -151,7 +151,7 @@ export class HomeAssistantService {
                             HomeAssistantService.RECONNECT_MAX
                         );
                         this.reconnectAttempt++;
-                        console.log(`🔄 Reconnecting in ${delay / 1000}s (attempt ${this.reconnectAttempt})`);
+                        // reconnect silently
                         this.reconnectTimer = setTimeout(() => {
                             if (this.shouldReconnect && this.credentials) {
                                 this.connect(this.credentials.url, this.credentials.token);

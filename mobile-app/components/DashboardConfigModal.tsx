@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { View, Text, Pressable, ScrollView, Modal, StyleSheet, ActivityIndicator, Alert, TextInput, Dimensions } from 'react-native';
-import { X, Plus, Trash2, Lightbulb, Blinds, Bot, Shield, Search, Pencil, Check, ChevronUp, ChevronDown, Zap, CheckCircle2, Circle } from 'lucide-react-native';
+import { X, Plus, Trash2, Lightbulb, Blinds, Bot, Shield, Search, Pencil, Check, ChevronUp, ChevronDown, Zap, CheckCircle2, Circle, Target } from 'lucide-react-native';
 import { useHomeAssistant, EntityState } from '../contexts/HomeAssistantContext';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -9,7 +9,7 @@ interface DashboardConfigModalProps {
     onClose: () => void;
 }
 
-type SectionType = 'lights' | 'covers' | 'vacuum' | 'alarm' | 'homescreenShortcuts';
+type SectionType = 'lights' | 'covers' | 'vacuum' | 'alarm' | 'homescreenShortcuts' | 'countdowns';
 
 const TABS: { key: SectionType; label: string; icon: any; domain: string; single?: boolean; allEntities?: boolean }[] = [
     { key: 'lights', label: 'Lichter', icon: Lightbulb, domain: 'light.' },
@@ -17,6 +17,7 @@ const TABS: { key: SectionType; label: string; icon: any; domain: string; single
     { key: 'vacuum', label: 'Saugroboter', icon: Bot, domain: 'vacuum.', single: true },
     { key: 'alarm', label: 'Alarmanlage', icon: Shield, domain: 'alarm_control_panel.', single: true, allEntities: true },
     { key: 'homescreenShortcuts', label: 'Shortcuts', icon: Zap, domain: '', allEntities: true },
+    { key: 'countdowns', label: 'Countdowns', icon: Target, domain: '__none__' },
 ];
 
 export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalProps) => {
@@ -240,282 +241,318 @@ export const DashboardConfigModal = ({ visible, onClose }: DashboardConfigModalP
                 </ScrollView>
 
                 {/* Main Content – single ScrollView */}
-                <ScrollView style={s.mainScroll} contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
-
-                    {/* Configured Entities Section */}
-                    <Text style={[s.sectionLabel, { color: colors.subtext }]}>
-                        {activeTab.single ? 'AUSGEWÄHLTE ENTITÄT' : 'ZUGEORDNETE ENTITÄTEN'}
-                    </Text>
-
-                    {currentMapped.length === 0 ? (
-                        <View style={[s.emptyCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                            <Circle size={32} color={colors.border} strokeWidth={1.5} />
-                            <Text style={[s.emptyTitle, { color: colors.subtext }]}>
-                                {activeTab.single ? 'Keine Entität ausgewählt' : 'Keine Entitäten zugeordnet'}
-                            </Text>
-                            <Text style={[s.emptyHint, { color: colors.subtext }]}>
-                                Suche unten nach Entitäten und tippe zum Hinzufügen.
-                            </Text>
-                        </View>
-                    ) : (
-                        <View style={{ gap: 8 }}>
-                            {currentMapped.map((m: any, idx: number) => (
-                                <View key={m.id} style={[s.configCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                                    {editingId === m.id && !activeTab.single ? (
-                                        <View style={s.editRow}>
-                                            <TextInput
-                                                value={editName}
-                                                onChangeText={setEditName}
-                                                autoFocus
-                                                style={[s.editInput, { color: colors.text, borderColor: colors.accent, backgroundColor: colors.background }]}
-                                                onSubmitEditing={() => handleRename(m.id, editName)}
-                                                placeholder="Name eingeben..."
-                                                placeholderTextColor={colors.subtext}
-                                            />
-                                            <Pressable onPress={() => handleRename(m.id, editName)} style={[s.editConfirm, { backgroundColor: colors.accent }]}>
-                                                <Check size={16} color="#fff" />
-                                            </Pressable>
-                                        </View>
-                                    ) : (
-                                        <>
-                                            <View style={[s.configDot, { backgroundColor: colors.accent }]} />
-                                            <Pressable
-                                                style={{ flex: 1 }}
-                                                onPress={() => {
-                                                    if (!activeTab.single) { setEditingId(m.id); setEditName(m.name); }
-                                                }}
-                                            >
-                                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                                    <Text style={[s.configName, { color: colors.text }]} numberOfLines={1}>{m.name}</Text>
-                                                    {!activeTab.single && <Pencil size={11} color={colors.subtext} />}
-                                                </View>
-                                                <Text style={[s.configId, { color: colors.subtext }]} numberOfLines={1}>{m.id}</Text>
-                                            </Pressable>
-                                            {!activeTab.single && (
-                                                <View style={s.orderBtns}>
-                                                    <Pressable onPress={() => handleMove(m.id, 'up')} style={s.orderBtn} disabled={idx === 0}>
-                                                        <ChevronUp size={16} color={idx === 0 ? colors.border : colors.subtext} />
-                                                    </Pressable>
-                                                    <Pressable onPress={() => handleMove(m.id, 'down')} style={s.orderBtn} disabled={idx === currentMapped.length - 1}>
-                                                        <ChevronDown size={16} color={idx === currentMapped.length - 1 ? colors.border : colors.subtext} />
-                                                    </Pressable>
-                                                </View>
-                                            )}
-                                            <Pressable onPress={() => handleRemove(m.id)} hitSlop={8} style={s.removeBtn}>
-                                                <Trash2 size={16} color="#EF4444" />
-                                            </Pressable>
-                                        </>
-                                    )}
-                                </View>
-                            ))}
-                        </View>
-                    )}
-
-                    {/* Vacuum Sub-Config */}
-                    {activeSection === 'vacuum' && dashboardConfig.vacuum && (
-                        <View style={{ marginTop: 20 }}>
-                            <Text style={[s.sectionLabel, { color: colors.subtext }]}>SAUGROBOTER-KONFIGURATION</Text>
-                            {renderConfigChip('Akku-Sensor', dashboardConfig.vacuumBatterySensor, async () => {
-                                setIsSaving(true);
-                                try { await saveDashboardConfig({ ...dashboardConfig, vacuumBatterySensor: null }); }
-                                catch { } finally { setIsSaving(false); }
+                {/* Countdown Settings */}
+                {activeSection === 'countdowns' && (
+                    <ScrollView style={s.mainScroll} contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
+                        <Text style={[s.sectionLabel, { color: colors.subtext }]}>AUTOMATISCH AUF HOMESCREEN ANZEIGEN</Text>
+                        <Text style={{ color: colors.subtext, fontSize: 13, marginBottom: 12, paddingHorizontal: 4, lineHeight: 18 }}>
+                            Countdowns werden automatisch auf dem Homescreen angezeigt, wenn sie weniger als die ausgewählte Anzahl Tage entfernt sind.
+                        </Text>
+                        <View style={{ gap: 6 }}>
+                            {[{ label: 'Aus', value: 0 }, { label: '3 Tage vorher', value: 3 }, { label: '7 Tage vorher', value: 7 }, { label: '14 Tage vorher', value: 14 }, { label: '30 Tage vorher', value: 30 }].map(opt => {
+                                const current = dashboardConfig?.countdownAutoShowDays ?? 0;
+                                const active = current === opt.value;
+                                return (
+                                    <Pressable
+                                        key={opt.value}
+                                        style={[s.configCard, { backgroundColor: active ? colors.accent + '15' : colors.card, borderColor: active ? colors.accent : colors.border }]}
+                                        onPress={async () => {
+                                            setIsSaving(true);
+                                            try { await saveDashboardConfig({ ...dashboardConfig, countdownAutoShowDays: opt.value }); }
+                                            catch { Alert.alert('Fehler', 'Einstellung konnte nicht gespeichert werden.'); }
+                                            finally { setIsSaving(false); }
+                                        }}
+                                    >
+                                        {active ? <CheckCircle2 size={18} color={colors.accent} /> : <Circle size={18} color={colors.border} />}
+                                        <Text style={[s.configName, { color: active ? colors.accent : colors.text }]}>{opt.label}</Text>
+                                    </Pressable>
+                                );
                             })}
-                            {renderConfigChip('Karten-Kamera', dashboardConfig.vacuumMapCamera, async () => {
-                                setIsSaving(true);
-                                try { await saveDashboardConfig({ ...dashboardConfig, vacuumMapCamera: null }); }
-                                catch { } finally { setIsSaving(false); }
-                            })}
+                        </View>
+                        <Text style={{ color: colors.subtext, fontSize: 12, marginTop: 12, paddingHorizontal: 4, lineHeight: 16 }}>
+                            Du kannst einzelne Countdowns auch manuell im Family Hub auf "Auf Homescreen anzeigen" setzen.
+                        </Text>
+                    </ScrollView>
+                )}
 
-                            <Text style={[s.sectionLabel, { color: colors.subtext, marginTop: 16 }]}>DOCKINGSTATION-ENTITÄTEN</Text>
-                            {((dashboardConfig.vacuumDockEntities || []) as string[]).length > 0 ? (
-                                <View style={{ gap: 6 }}>
-                                    {((dashboardConfig.vacuumDockEntities || []) as string[]).map((dockId: string, idx: number) => {
-                                        const dockEntity = entities.find(e => e.entity_id === dockId);
-                                        const dockList = (dashboardConfig.vacuumDockEntities || []) as string[];
-                                        return (
-                                            <View key={dockId} style={[s.configCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                                                <View style={[s.configDot, { backgroundColor: '#3B82F6' }]} />
-                                                <View style={{ flex: 1 }}>
-                                                    <Text style={[s.configName, { color: colors.text }]} numberOfLines={1}>
-                                                        {dockEntity?.attributes?.friendly_name || dockId}
-                                                    </Text>
-                                                    <Text style={[s.configId, { color: colors.subtext }]} numberOfLines={1}>{dockId}</Text>
-                                                </View>
-                                                <View style={s.orderBtns}>
-                                                    <Pressable onPress={async () => {
-                                                        if (idx === 0) return;
-                                                        const arr = [...dockList];
-                                                        [arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]];
-                                                        setIsSaving(true);
-                                                        try { await saveDashboardConfig({ ...dashboardConfig, vacuumDockEntities: arr }); }
-                                                        catch { } finally { setIsSaving(false); }
-                                                    }} style={s.orderBtn}>
-                                                        <ChevronUp size={16} color={idx === 0 ? colors.border : colors.subtext} />
-                                                    </Pressable>
-                                                    <Pressable onPress={async () => {
-                                                        if (idx === dockList.length - 1) return;
-                                                        const arr = [...dockList];
-                                                        [arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]];
-                                                        setIsSaving(true);
-                                                        try { await saveDashboardConfig({ ...dashboardConfig, vacuumDockEntities: arr }); }
-                                                        catch { } finally { setIsSaving(false); }
-                                                    }} style={s.orderBtn}>
-                                                        <ChevronDown size={16} color={idx === dockList.length - 1 ? colors.border : colors.subtext} />
-                                                    </Pressable>
-                                                </View>
-                                                <Pressable onPress={async () => {
-                                                    setIsSaving(true);
-                                                    try {
-                                                        const updated = dockList.filter((id: string) => id !== dockId);
-                                                        await saveDashboardConfig({ ...dashboardConfig, vacuumDockEntities: updated });
-                                                    } catch { } finally { setIsSaving(false); }
-                                                }} hitSlop={8} style={s.removeBtn}>
-                                                    <Trash2 size={16} color="#EF4444" />
+                {activeSection !== 'countdowns' && (
+                    <ScrollView style={s.mainScroll} contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
+
+                        {/* Configured Entities Section */}
+                        <Text style={[s.sectionLabel, { color: colors.subtext }]}>
+                            {activeTab.single ? 'AUSGEWÄHLTE ENTITÄT' : 'ZUGEORDNETE ENTITÄTEN'}
+                        </Text>
+
+                        {currentMapped.length === 0 ? (
+                            <View style={[s.emptyCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                                <Circle size={32} color={colors.border} strokeWidth={1.5} />
+                                <Text style={[s.emptyTitle, { color: colors.subtext }]}>
+                                    {activeTab.single ? 'Keine Entität ausgewählt' : 'Keine Entitäten zugeordnet'}
+                                </Text>
+                                <Text style={[s.emptyHint, { color: colors.subtext }]}>
+                                    Suche unten nach Entitäten und tippe zum Hinzufügen.
+                                </Text>
+                            </View>
+                        ) : (
+                            <View style={{ gap: 8 }}>
+                                {currentMapped.map((m: any, idx: number) => (
+                                    <View key={m.id} style={[s.configCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                                        {editingId === m.id && !activeTab.single ? (
+                                            <View style={s.editRow}>
+                                                <TextInput
+                                                    value={editName}
+                                                    onChangeText={setEditName}
+                                                    autoFocus
+                                                    style={[s.editInput, { color: colors.text, borderColor: colors.accent, backgroundColor: colors.background }]}
+                                                    onSubmitEditing={() => handleRename(m.id, editName)}
+                                                    placeholder="Name eingeben..."
+                                                    placeholderTextColor={colors.subtext}
+                                                />
+                                                <Pressable onPress={() => handleRename(m.id, editName)} style={[s.editConfirm, { backgroundColor: colors.accent }]}>
+                                                    <Check size={16} color="#fff" />
                                                 </Pressable>
                                             </View>
-                                        );
-                                    })}
-                                </View>
-                            ) : (
-                                <View style={[s.emptyCard, { backgroundColor: colors.card, borderColor: colors.border, paddingVertical: 16 }]}>
-                                    <Text style={[s.emptyHint, { color: colors.subtext }]}>
-                                        Keine Dockingstation-Entitäten. Wähle beliebige Entities unten aus.
-                                    </Text>
-                                </View>
-                            )}
-                        </View>
-                    )}
-
-                    {/* Alarm Sensors Config */}
-                    {activeSection === 'alarm' && (
-                        <View style={{ marginTop: 20 }}>
-                            <Text style={[s.sectionLabel, { color: colors.subtext }]}>ALARM-SENSOREN</Text>
-                            {((dashboardConfig.alarmSensors || []) as string[]).length > 0 ? (
-                                <View style={{ gap: 6 }}>
-                                    {((dashboardConfig.alarmSensors || []) as string[]).map((sensorId: string, idx: number) => {
-                                        const sensorEntity = entities.find(e => e.entity_id === sensorId);
-                                        const sensorList = (dashboardConfig.alarmSensors || []) as string[];
-                                        return (
-                                            <View key={sensorId} style={[s.configCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                                                <View style={[s.configDot, { backgroundColor: '#EF4444' }]} />
-                                                <View style={{ flex: 1 }}>
-                                                    <Text style={[s.configName, { color: colors.text }]} numberOfLines={1}>
-                                                        {sensorEntity?.attributes?.friendly_name || sensorId}
-                                                    </Text>
-                                                    <Text style={[s.configId, { color: colors.subtext }]} numberOfLines={1}>{sensorId}</Text>
-                                                </View>
-                                                <View style={s.orderBtns}>
-                                                    <Pressable onPress={async () => {
-                                                        if (idx === 0) return;
-                                                        const arr = [...sensorList];
-                                                        [arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]];
-                                                        setIsSaving(true);
-                                                        try { await saveDashboardConfig({ ...dashboardConfig, alarmSensors: arr }); }
-                                                        catch { } finally { setIsSaving(false); }
-                                                    }} style={s.orderBtn}>
-                                                        <ChevronUp size={16} color={idx === 0 ? colors.border : colors.subtext} />
-                                                    </Pressable>
-                                                    <Pressable onPress={async () => {
-                                                        if (idx === sensorList.length - 1) return;
-                                                        const arr = [...sensorList];
-                                                        [arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]];
-                                                        setIsSaving(true);
-                                                        try { await saveDashboardConfig({ ...dashboardConfig, alarmSensors: arr }); }
-                                                        catch { } finally { setIsSaving(false); }
-                                                    }} style={s.orderBtn}>
-                                                        <ChevronDown size={16} color={idx === sensorList.length - 1 ? colors.border : colors.subtext} />
-                                                    </Pressable>
-                                                </View>
-                                                <Pressable onPress={async () => {
-                                                    setIsSaving(true);
-                                                    try {
-                                                        const updated = sensorList.filter((id: string) => id !== sensorId);
-                                                        await saveDashboardConfig({ ...dashboardConfig, alarmSensors: updated });
-                                                    } catch { } finally { setIsSaving(false); }
-                                                }} hitSlop={8} style={s.removeBtn}>
-                                                    <Trash2 size={16} color="#EF4444" />
-                                                </Pressable>
-                                            </View>
-                                        );
-                                    })}
-                                </View>
-                            ) : (
-                                <View style={[s.emptyCard, { backgroundColor: colors.card, borderColor: colors.border, paddingVertical: 16 }]}>
-                                    <Text style={[s.emptyHint, { color: colors.subtext }]}>
-                                        Keine Sensoren konfiguriert. Wähle Tür-/Fenstersensoren unten aus.
-                                    </Text>
-                                </View>
-                            )}
-                        </View>
-                    )}
-
-                    {/* Search & Entity Picker */}
-                    <Text style={[s.sectionLabel, { color: colors.subtext, marginTop: 24 }]}>ENTITÄT HINZUFÜGEN</Text>
-                    <View style={[s.searchBar, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                        <Search size={18} color={colors.subtext} />
-                        <TextInput
-                            style={[s.searchInput, { color: colors.text }]}
-                            placeholder="Entität suchen..."
-                            placeholderTextColor={colors.subtext}
-                            value={searchQuery}
-                            onChangeText={setSearchQuery}
-                            autoCapitalize="none"
-                        />
-                        {searchQuery.length > 0 && (
-                            <Pressable onPress={() => setSearchQuery('')} hitSlop={8}>
-                                <X size={16} color={colors.subtext} />
-                            </Pressable>
-                        )}
-                    </View>
-
-                    {/* Entity Cards Grid */}
-                    <View style={s.entityGrid}>
-                        {availableEntities.map(e => {
-                            const added = isEntityAdded(e.entity_id);
-                            const friendlyName = e.attributes.friendly_name || e.entity_id;
-                            const domain = e.entity_id.split('.')[0];
-                            return (
-                                <Pressable
-                                    key={e.entity_id}
-                                    onPress={() => !added && handleAdd(e)}
-                                    style={({ pressed }) => [
-                                        s.entityCard,
-                                        {
-                                            backgroundColor: added ? (colors.accent + '15') : colors.card,
-                                            borderColor: added ? colors.accent : colors.border,
-                                            opacity: pressed && !added ? 0.7 : 1,
-                                        }
-                                    ]}
-                                >
-                                    <View style={s.entityCardHeader}>
-                                        <View style={[s.domainBadge, { backgroundColor: added ? (colors.accent + '30') : (colors.subtext + '15') }]}>
-                                            <Text style={[s.domainText, { color: added ? colors.accent : colors.subtext }]}>{domain}</Text>
-                                        </View>
-                                        {added ? (
-                                            <CheckCircle2 size={18} color={colors.accent} />
                                         ) : (
-                                            <Plus size={18} color={colors.accent} />
+                                            <>
+                                                <View style={[s.configDot, { backgroundColor: colors.accent }]} />
+                                                <Pressable
+                                                    style={{ flex: 1 }}
+                                                    onPress={() => {
+                                                        if (!activeTab.single) { setEditingId(m.id); setEditName(m.name); }
+                                                    }}
+                                                >
+                                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                                        <Text style={[s.configName, { color: colors.text }]} numberOfLines={1}>{m.name}</Text>
+                                                        {!activeTab.single && <Pencil size={11} color={colors.subtext} />}
+                                                    </View>
+                                                    <Text style={[s.configId, { color: colors.subtext }]} numberOfLines={1}>{m.id}</Text>
+                                                </Pressable>
+                                                {!activeTab.single && (
+                                                    <View style={s.orderBtns}>
+                                                        <Pressable onPress={() => handleMove(m.id, 'up')} style={s.orderBtn} disabled={idx === 0}>
+                                                            <ChevronUp size={16} color={idx === 0 ? colors.border : colors.subtext} />
+                                                        </Pressable>
+                                                        <Pressable onPress={() => handleMove(m.id, 'down')} style={s.orderBtn} disabled={idx === currentMapped.length - 1}>
+                                                            <ChevronDown size={16} color={idx === currentMapped.length - 1 ? colors.border : colors.subtext} />
+                                                        </Pressable>
+                                                    </View>
+                                                )}
+                                                <Pressable onPress={() => handleRemove(m.id)} hitSlop={8} style={s.removeBtn}>
+                                                    <Trash2 size={16} color="#EF4444" />
+                                                </Pressable>
+                                            </>
                                         )}
                                     </View>
-                                    <Text style={[s.entityCardName, { color: added ? colors.accent : colors.text }]} numberOfLines={2}>
-                                        {friendlyName}
-                                    </Text>
-                                    <Text style={[s.entityCardId, { color: colors.subtext }]} numberOfLines={1}>
-                                        {e.entity_id}
-                                    </Text>
-                                </Pressable>
-                            );
-                        })}
-                    </View>
+                                ))}
+                            </View>
+                        )}
 
-                    {availableEntities.length === 0 && (
-                        <View style={[s.emptyCard, { backgroundColor: colors.card, borderColor: colors.border, marginTop: 8 }]}>
-                            <Search size={28} color={colors.border} />
-                            <Text style={[s.emptyTitle, { color: colors.subtext }]}>Keine Entitäten gefunden</Text>
-                            <Text style={[s.emptyHint, { color: colors.subtext }]}>Versuche einen anderen Suchbegriff.</Text>
+                        {/* Vacuum Sub-Config */}
+                        {activeSection === 'vacuum' && dashboardConfig.vacuum && (
+                            <View style={{ marginTop: 20 }}>
+                                <Text style={[s.sectionLabel, { color: colors.subtext }]}>SAUGROBOTER-KONFIGURATION</Text>
+                                {renderConfigChip('Akku-Sensor', dashboardConfig.vacuumBatterySensor, async () => {
+                                    setIsSaving(true);
+                                    try { await saveDashboardConfig({ ...dashboardConfig, vacuumBatterySensor: null }); }
+                                    catch { } finally { setIsSaving(false); }
+                                })}
+                                {renderConfigChip('Karten-Kamera', dashboardConfig.vacuumMapCamera, async () => {
+                                    setIsSaving(true);
+                                    try { await saveDashboardConfig({ ...dashboardConfig, vacuumMapCamera: null }); }
+                                    catch { } finally { setIsSaving(false); }
+                                })}
+
+                                <Text style={[s.sectionLabel, { color: colors.subtext, marginTop: 16 }]}>DOCKINGSTATION-ENTITÄTEN</Text>
+                                {((dashboardConfig.vacuumDockEntities || []) as string[]).length > 0 ? (
+                                    <View style={{ gap: 6 }}>
+                                        {((dashboardConfig.vacuumDockEntities || []) as string[]).map((dockId: string, idx: number) => {
+                                            const dockEntity = entities.find(e => e.entity_id === dockId);
+                                            const dockList = (dashboardConfig.vacuumDockEntities || []) as string[];
+                                            return (
+                                                <View key={dockId} style={[s.configCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                                                    <View style={[s.configDot, { backgroundColor: '#3B82F6' }]} />
+                                                    <View style={{ flex: 1 }}>
+                                                        <Text style={[s.configName, { color: colors.text }]} numberOfLines={1}>
+                                                            {dockEntity?.attributes?.friendly_name || dockId}
+                                                        </Text>
+                                                        <Text style={[s.configId, { color: colors.subtext }]} numberOfLines={1}>{dockId}</Text>
+                                                    </View>
+                                                    <View style={s.orderBtns}>
+                                                        <Pressable onPress={async () => {
+                                                            if (idx === 0) return;
+                                                            const arr = [...dockList];
+                                                            [arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]];
+                                                            setIsSaving(true);
+                                                            try { await saveDashboardConfig({ ...dashboardConfig, vacuumDockEntities: arr }); }
+                                                            catch { } finally { setIsSaving(false); }
+                                                        }} style={s.orderBtn}>
+                                                            <ChevronUp size={16} color={idx === 0 ? colors.border : colors.subtext} />
+                                                        </Pressable>
+                                                        <Pressable onPress={async () => {
+                                                            if (idx === dockList.length - 1) return;
+                                                            const arr = [...dockList];
+                                                            [arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]];
+                                                            setIsSaving(true);
+                                                            try { await saveDashboardConfig({ ...dashboardConfig, vacuumDockEntities: arr }); }
+                                                            catch { } finally { setIsSaving(false); }
+                                                        }} style={s.orderBtn}>
+                                                            <ChevronDown size={16} color={idx === dockList.length - 1 ? colors.border : colors.subtext} />
+                                                        </Pressable>
+                                                    </View>
+                                                    <Pressable onPress={async () => {
+                                                        setIsSaving(true);
+                                                        try {
+                                                            const updated = dockList.filter((id: string) => id !== dockId);
+                                                            await saveDashboardConfig({ ...dashboardConfig, vacuumDockEntities: updated });
+                                                        } catch { } finally { setIsSaving(false); }
+                                                    }} hitSlop={8} style={s.removeBtn}>
+                                                        <Trash2 size={16} color="#EF4444" />
+                                                    </Pressable>
+                                                </View>
+                                            );
+                                        })}
+                                    </View>
+                                ) : (
+                                    <View style={[s.emptyCard, { backgroundColor: colors.card, borderColor: colors.border, paddingVertical: 16 }]}>
+                                        <Text style={[s.emptyHint, { color: colors.subtext }]}>
+                                            Keine Dockingstation-Entitäten. Wähle beliebige Entities unten aus.
+                                        </Text>
+                                    </View>
+                                )}
+                            </View>
+                        )}
+
+                        {/* Alarm Sensors Config */}
+                        {activeSection === 'alarm' && (
+                            <View style={{ marginTop: 20 }}>
+                                <Text style={[s.sectionLabel, { color: colors.subtext }]}>ALARM-SENSOREN</Text>
+                                {((dashboardConfig.alarmSensors || []) as string[]).length > 0 ? (
+                                    <View style={{ gap: 6 }}>
+                                        {((dashboardConfig.alarmSensors || []) as string[]).map((sensorId: string, idx: number) => {
+                                            const sensorEntity = entities.find(e => e.entity_id === sensorId);
+                                            const sensorList = (dashboardConfig.alarmSensors || []) as string[];
+                                            return (
+                                                <View key={sensorId} style={[s.configCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                                                    <View style={[s.configDot, { backgroundColor: '#EF4444' }]} />
+                                                    <View style={{ flex: 1 }}>
+                                                        <Text style={[s.configName, { color: colors.text }]} numberOfLines={1}>
+                                                            {sensorEntity?.attributes?.friendly_name || sensorId}
+                                                        </Text>
+                                                        <Text style={[s.configId, { color: colors.subtext }]} numberOfLines={1}>{sensorId}</Text>
+                                                    </View>
+                                                    <View style={s.orderBtns}>
+                                                        <Pressable onPress={async () => {
+                                                            if (idx === 0) return;
+                                                            const arr = [...sensorList];
+                                                            [arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]];
+                                                            setIsSaving(true);
+                                                            try { await saveDashboardConfig({ ...dashboardConfig, alarmSensors: arr }); }
+                                                            catch { } finally { setIsSaving(false); }
+                                                        }} style={s.orderBtn}>
+                                                            <ChevronUp size={16} color={idx === 0 ? colors.border : colors.subtext} />
+                                                        </Pressable>
+                                                        <Pressable onPress={async () => {
+                                                            if (idx === sensorList.length - 1) return;
+                                                            const arr = [...sensorList];
+                                                            [arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]];
+                                                            setIsSaving(true);
+                                                            try { await saveDashboardConfig({ ...dashboardConfig, alarmSensors: arr }); }
+                                                            catch { } finally { setIsSaving(false); }
+                                                        }} style={s.orderBtn}>
+                                                            <ChevronDown size={16} color={idx === sensorList.length - 1 ? colors.border : colors.subtext} />
+                                                        </Pressable>
+                                                    </View>
+                                                    <Pressable onPress={async () => {
+                                                        setIsSaving(true);
+                                                        try {
+                                                            const updated = sensorList.filter((id: string) => id !== sensorId);
+                                                            await saveDashboardConfig({ ...dashboardConfig, alarmSensors: updated });
+                                                        } catch { } finally { setIsSaving(false); }
+                                                    }} hitSlop={8} style={s.removeBtn}>
+                                                        <Trash2 size={16} color="#EF4444" />
+                                                    </Pressable>
+                                                </View>
+                                            );
+                                        })}
+                                    </View>
+                                ) : (
+                                    <View style={[s.emptyCard, { backgroundColor: colors.card, borderColor: colors.border, paddingVertical: 16 }]}>
+                                        <Text style={[s.emptyHint, { color: colors.subtext }]}>
+                                            Keine Sensoren konfiguriert. Wähle Tür-/Fenstersensoren unten aus.
+                                        </Text>
+                                    </View>
+                                )}
+                            </View>
+                        )}
+
+                        {/* Search & Entity Picker */}
+                        <Text style={[s.sectionLabel, { color: colors.subtext, marginTop: 24 }]}>ENTITÄT HINZUFÜGEN</Text>
+                        <View style={[s.searchBar, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                            <Search size={18} color={colors.subtext} />
+                            <TextInput
+                                style={[s.searchInput, { color: colors.text }]}
+                                placeholder="Entität suchen..."
+                                placeholderTextColor={colors.subtext}
+                                value={searchQuery}
+                                onChangeText={setSearchQuery}
+                                autoCapitalize="none"
+                            />
+                            {searchQuery.length > 0 && (
+                                <Pressable onPress={() => setSearchQuery('')} hitSlop={8}>
+                                    <X size={16} color={colors.subtext} />
+                                </Pressable>
+                            )}
                         </View>
-                    )}
-                </ScrollView>
+
+                        {/* Entity Cards Grid */}
+                        <View style={s.entityGrid}>
+                            {availableEntities.map(e => {
+                                const added = isEntityAdded(e.entity_id);
+                                const friendlyName = e.attributes.friendly_name || e.entity_id;
+                                const domain = e.entity_id.split('.')[0];
+                                return (
+                                    <Pressable
+                                        key={e.entity_id}
+                                        onPress={() => !added && handleAdd(e)}
+                                        style={({ pressed }) => [
+                                            s.entityCard,
+                                            {
+                                                backgroundColor: added ? (colors.accent + '15') : colors.card,
+                                                borderColor: added ? colors.accent : colors.border,
+                                                opacity: pressed && !added ? 0.7 : 1,
+                                            }
+                                        ]}
+                                    >
+                                        <View style={s.entityCardHeader}>
+                                            <View style={[s.domainBadge, { backgroundColor: added ? (colors.accent + '30') : (colors.subtext + '15') }]}>
+                                                <Text style={[s.domainText, { color: added ? colors.accent : colors.subtext }]}>{domain}</Text>
+                                            </View>
+                                            {added ? (
+                                                <CheckCircle2 size={18} color={colors.accent} />
+                                            ) : (
+                                                <Plus size={18} color={colors.accent} />
+                                            )}
+                                        </View>
+                                        <Text style={[s.entityCardName, { color: added ? colors.accent : colors.text }]} numberOfLines={2}>
+                                            {friendlyName}
+                                        </Text>
+                                        <Text style={[s.entityCardId, { color: colors.subtext }]} numberOfLines={1}>
+                                            {e.entity_id}
+                                        </Text>
+                                    </Pressable>
+                                );
+                            })}
+                        </View>
+
+                        {availableEntities.length === 0 && (
+                            <View style={[s.emptyCard, { backgroundColor: colors.card, borderColor: colors.border, marginTop: 8 }]}>
+                                <Search size={28} color={colors.border} />
+                                <Text style={[s.emptyTitle, { color: colors.subtext }]}>Keine Entitäten gefunden</Text>
+                                <Text style={[s.emptyHint, { color: colors.subtext }]}>Versuche einen anderen Suchbegriff.</Text>
+                            </View>
+                        )}
+                    </ScrollView>
+                )}
 
                 {isSaving && (
                     <View style={s.overlay}>

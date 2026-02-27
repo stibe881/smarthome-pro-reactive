@@ -6,7 +6,7 @@ import {
 import DateTimePicker from '@react-native-community/datetimepicker';
 import {
     X, Check, Plus, Cake, Heart, PartyPopper, Trash2, Bell, BellOff,
-    CalendarDays, Eye, RotateCcw, ChevronRight, Link2,
+    CalendarDays, Eye, RotateCcw, ChevronRight, Link2, Home,
 } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -29,6 +29,7 @@ interface CelebrationItem {
     repeat_type: string;
     reminder_time: string;
     visibility: string;
+    show_on_homescreen: boolean;
     created_at: string;
 }
 
@@ -98,6 +99,7 @@ export const FamilyCelebrations: React.FC<FamilyCelebrationsProps> = ({ visible,
     const [editingItem, setEditingItem] = useState<CelebrationItem | null>(null);
     const [showColorPicker, setShowColorPicker] = useState(false);
     const [showReminderPicker, setShowReminderPicker] = useState(false);
+    const [formShowOnHomescreen, setFormShowOnHomescreen] = useState(false);
 
     // HA Birthday calendar integration
     const [birthdayCalSource, setBirthdayCalSource] = useState<{ entity_id: string } | null>(null);
@@ -175,6 +177,7 @@ export const FamilyCelebrations: React.FC<FamilyCelebrationsProps> = ({ visible,
                         repeat_type: 'yearly',
                         reminder_time: 'none',
                         visibility: 'everyone',
+                        show_on_homescreen: false,
                         created_at: '',
                     };
                 });
@@ -197,6 +200,7 @@ export const FamilyCelebrations: React.FC<FamilyCelebrationsProps> = ({ visible,
         setEditingItem(null);
         setShowColorPicker(false);
         setShowReminderPicker(false);
+        setFormShowOnHomescreen(false);
     };
 
     const openTypePicker = () => {
@@ -221,6 +225,7 @@ export const FamilyCelebrations: React.FC<FamilyCelebrationsProps> = ({ visible,
         setFormColor(item.color);
         setFormRepeat(item.repeat_type);
         setFormReminder(item.reminder_time);
+        setFormShowOnHomescreen(item.show_on_homescreen ?? false);
         setViewMode('form');
     };
 
@@ -247,6 +252,7 @@ export const FamilyCelebrations: React.FC<FamilyCelebrationsProps> = ({ visible,
                 repeat_type: formRepeat,
                 reminder_time: formReminder,
                 visibility: 'everyone',
+                show_on_homescreen: formShowOnHomescreen,
             };
 
             if (editingItem) {
@@ -376,8 +382,14 @@ export const FamilyCelebrations: React.FC<FamilyCelebrationsProps> = ({ visible,
                             <Pressable
                                 key={item.id}
                                 style={[styles.celebrationCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-                                onPress={() => !isHaEvent && openEditForm(item)}
-                                onLongPress={() => !isHaEvent && handleDelete(item)}
+                                onPress={() => {
+                                    if (isHaEvent) return;
+                                    openEditForm(item);
+                                }}
+                                onLongPress={() => {
+                                    if (isHaEvent) return;
+                                    handleDelete(item);
+                                }}
                             >
                                 <View style={[styles.celebEmoji, { backgroundColor: item.color + '25' }]}>
                                     <Text style={{ fontSize: 28 }}>{item.emoji}</Text>
@@ -578,6 +590,22 @@ export const FamilyCelebrations: React.FC<FamilyCelebrationsProps> = ({ visible,
                     ))}
                 </View>
             )}
+
+            {/* Show on homescreen toggle */}
+            <View style={[styles.formSection, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <View style={styles.formRow}>
+                    <View style={[styles.formIcon, { backgroundColor: '#8B5CF620' }]}>
+                        <Home size={16} color="#8B5CF6" />
+                    </View>
+                    <Text style={[styles.formLabel, { color: colors.text }]}>Auf Homescreen anzeigen</Text>
+                    <Switch
+                        value={formShowOnHomescreen}
+                        onValueChange={setFormShowOnHomescreen}
+                        trackColor={{ false: colors.border, true: '#8B5CF6' + '60' }}
+                        thumbColor={formShowOnHomescreen ? '#8B5CF6' : '#f4f3f4'}
+                    />
+                </View>
+            </View>
 
             {/* Delete button if editing */}
             {editingItem && (

@@ -7,7 +7,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useHomeAssistant } from '../../contexts/HomeAssistantContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { Lightbulb, Blinds, Thermometer, Droplets, Wind, Lock, Unlock, Zap, Music, Play, Pause, SkipForward, SkipBack, Bot, PartyPopper, Calendar, CloudRain, Cloud, Sun, Moon, ShoppingCart, Info, Loader2, UtensilsCrossed, Shirt, Clapperboard, BedDouble, ChevronRight, Shield, LucideIcon, DoorOpen, DoorClosed, WifiOff, Tv, X, Wifi, RefreshCw, Power, Battery, PlayCircle, Home, Map, MapPin, Fan, Clock, Video, Star, Square, Bell, Baby } from 'lucide-react-native';
+import { COUNTDOWN_ICONS } from '../../components/FamilyCountdowns';
+import { Lightbulb, Blinds, Thermometer, Droplets, Wind, Lock, Unlock, Zap, Music, Play, Pause, SkipForward, SkipBack, Bot, PartyPopper, Calendar, CloudRain, Cloud, Sun, Moon, ShoppingCart, Info, Loader2, UtensilsCrossed, Shirt, Clapperboard, BedDouble, ChevronRight, Shield, LucideIcon, DoorOpen, DoorClosed, WifiOff, Tv, X, Wifi, RefreshCw, Power, Battery, PlayCircle, Home, Map, MapPin, Fan, Clock, Video, Star, Square, Bell, Baby, Cake, Search } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import SecurityModal from '../../components/SecurityModal';
 import { WHITELISTED_PLAYERS } from '../../config/mediaPlayers';
@@ -17,6 +18,7 @@ import { ConnectionWizard } from '../../components/ConnectionWizard';
 import { useKidsMode, KIDS_GENDER_THEMES } from '../../contexts/KidsContext';
 import { KidsDashboard } from '../../components/KidsDashboard';
 import { GuestDashboard } from '../../components/GuestDashboard';
+import { LiveCountdown } from '../../components/LiveCountdown';
 // LinearGradient removed to fix compatibility issue
 
 // =====================================================
@@ -33,6 +35,8 @@ import ShutterControlModal from '../../components/ShutterControlModal';
 import NotificationBell from '../../components/NotificationBell';
 import SleepTimerModal from '../../components/SleepTimerModal';
 import { EntityState } from '../../contexts/HomeAssistantContext';
+import { supabase } from '../../lib/supabase';
+import { useHousehold } from '../../hooks/useHousehold';
 
 interface HeroStatCardProps {
     icon: LucideIcon;
@@ -302,7 +306,7 @@ const LockTile = memo(({ lock, callService, entities }: { lock: any, callService
 
     const toggleLock = () => {
         if (isLocked) {
-            Alert.alert('Tür aufschliessen', `Möchtest du ${friendlyName} aufschliessen?`, [
+            Alert.alert('Tür aufschliessen', `Möchtest du ${friendlyName} aufschliessen ? `, [
                 { text: 'Abbrechen', style: 'cancel' },
                 { text: 'Aufschliessen', onPress: () => callService('lock', 'unlock', lock.entity_id) }
             ]);
@@ -316,25 +320,25 @@ const LockTile = memo(({ lock, callService, entities }: { lock: any, callService
         const isHaustuer = lock.entity_id.includes('haustuer') || lock.entity_id.includes('haustür') || (lock.attributes.friendly_name && lock.attributes.friendly_name.toLowerCase().includes('haustür'));
 
         if (isHaustuer) {
-            Alert.alert('Tür öffnen', `Möchtest du die Haustür öffnen?`, [
+            Alert.alert('Tür öffnen', `Möchtest du die Haustür öffnen ? `, [
                 { text: 'Abbrechen', style: 'cancel' },
                 { text: 'ÖFFNEN', style: 'destructive', onPress: () => callService('button', 'press', 'button.hausture_tur_offnen') }
             ]);
         } else if (isNukiWohnung) {
             // Dynamic action based on current state
             if (isUnlocked) {
-                Alert.alert('Tür verriegeln', `Möchtest du ${friendlyName} verriegeln?`, [
+                Alert.alert('Tür verriegeln', `Möchtest du ${friendlyName} verriegeln ? `, [
                     { text: 'Abbrechen', style: 'cancel' },
                     { text: 'VERRIEGELN', onPress: () => callService('lock', 'lock', lock.entity_id) }
                 ]);
             } else {
-                Alert.alert('Tür entriegeln', `Möchtest du ${friendlyName} entriegeln?`, [
+                Alert.alert('Tür entriegeln', `Möchtest du ${friendlyName} entriegeln ? `, [
                     { text: 'Abbrechen', style: 'cancel' },
                     { text: 'ENTRIEGELN', style: 'destructive', onPress: () => callService('lock', 'unlock', lock.entity_id) }
                 ]);
             }
         } else {
-            Alert.alert('Tür öffnen', `Möchtest du die Falle von ${friendlyName} ziehen (Tür öffnen)?`, [
+            Alert.alert('Tür öffnen', `Möchtest du die Falle von ${friendlyName} ziehen(Tür öffnen) ? `, [
                 { text: 'Abbrechen', style: 'cancel' },
                 { text: 'ÖFFNEN', style: 'destructive', onPress: () => callService('lock', 'unlock', lock.entity_id) }
             ]);
@@ -533,6 +537,78 @@ export default function Dashboard() {
     const [showShoppingList, setShowShoppingList] = useState(false);
     const [showWeatherForecast, setShowWeatherForecast] = useState(false);
     const [activeFeedback, setActiveFeedback] = useState<'sleep' | 'morning' | 'movie' | 'covers_open' | 'covers_close' | 'vacuum' | 'shop_debug' | null>(null);
+
+    // Homescreen countdowns
+    const [homescreenCountdowns, setHomescreenCountdowns] = useState<any[]>([]);
+    const [countdownDetail, setCountdownDetail] = useState<any | null>(null);
+    const { householdId } = useHousehold();
+    const { dashboardConfig } = useHomeAssistant();
+
+    const loadHomescreenCountdowns = useCallback(async () => {
+        if (!householdId) return;
+        try {
+            // Fetch all countdowns, then filter client-side for show_on_homescreen or auto-show
+            const { data } = await supabase
+                .from('family_countdowns')
+                .select('*')
+                .eq('household_id', householdId)
+                .order('target_date', { ascending: true });
+            if (!data) { setHomescreenCountdowns([]); return; }
+
+            const autoShowDays = dashboardConfig?.countdownAutoShowDays ?? 0;
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            const filtered = data.filter((cd: any) => {
+                if (cd.show_on_homescreen) return true;
+
+                const target = new Date(cd.target_date + 'T00:00:00');
+                if (cd.target_time) {
+                    const [h, m] = cd.target_time.split(':');
+                    target.setHours(parseInt(h), parseInt(m), 0, 0);
+                } else {
+                    target.setHours(0, 0, 0, 0);
+                }
+                const msLeft = target.getTime() - today.getTime();
+                const daysLeft = Math.ceil(msLeft / 86400000);
+
+                if (cd.auto_show_days !== null && cd.auto_show_days !== undefined) {
+                    return daysLeft >= 0 && daysLeft <= cd.auto_show_days;
+                }
+
+                if (autoShowDays > 0) {
+                    return daysLeft >= 0 && daysLeft <= autoShowDays;
+                }
+                return false;
+            });
+            setHomescreenCountdowns(filtered);
+        } catch (e) {
+            console.error('Error loading homescreen countdowns:', e);
+        }
+    }, [householdId, dashboardConfig?.countdownAutoShowDays]);
+
+    // Load on focus AND on initial mount / householdId change
+    useFocusEffect(useCallback(() => {
+        loadHomescreenCountdowns();
+    }, [loadHomescreenCountdowns]));
+
+    useEffect(() => {
+        loadHomescreenCountdowns();
+    }, [loadHomescreenCountdowns]);
+
+    const getCountdownDays = (dateStr: string, timeStr?: string) => {
+        const target = new Date(dateStr + 'T00:00:00');
+        if (timeStr) {
+            const [h, m] = timeStr.split(':');
+            target.setHours(parseInt(h), parseInt(m), 0, 0);
+        } else {
+            target.setHours(0, 0, 0, 0);
+        }
+        const today = new Date();
+        const msLeft = target.getTime() - today.getTime();
+        return Math.ceil(msLeft / 86400000);
+    };
+
     const [quickActionInfo, setQuickActionInfo] = useState<QuickActionInfo | null>(null);
     const [showSleepTimer, setShowSleepTimer] = useState(false);
 
@@ -560,8 +636,8 @@ export default function Dashboard() {
         isConnected,
         isConnecting,
         hasEverConnected,
-        connect,
         toggleLight,
+        connect,
         activateScene,
         openCover,
         closeCover,
@@ -577,7 +653,6 @@ export default function Dashboard() {
         setShoppingListVisible,
         startShoppingGeofencing,
         debugShoppingLogic,
-        dashboardConfig,
         haBaseUrl,
         isHAInitialized
     } = useHomeAssistant();
@@ -637,7 +712,7 @@ export default function Dashboard() {
             (async () => {
                 // 1. Try user-specific config
                 if (user?.id) {
-                    const userCfg = await AsyncStorage.getItem(`@quick_actions_user_${user.id}`);
+                    const userCfg = await AsyncStorage.getItem(`@quick_actions_user_${user.id} `);
                     if (userCfg) {
                         try { setQuickActions(JSON.parse(userCfg)); return; } catch { }
                     }
@@ -834,7 +909,7 @@ export default function Dashboard() {
     const lightsOn = useMemo(() => lights.filter(l => l.state === 'on').length, [lights]);
     const coversOpen = useMemo(() => covers.filter(c => (c.attributes.friendly_name !== 'Alle Storen') && (c.state === 'open' || (c.attributes.current_position && c.attributes.current_position > 0))).length, [covers]);
     const activeVacuums = useMemo(() => vacuums.filter(v => v.state === 'cleaning').length, [vacuums]);
-    const playingMedia = useMemo(() => mediaPlayers.filter(m => m.state === 'playing').length, [mediaPlayers]);
+    const playingMedia = useMemo(() => mediaPlayers.filter((m: any) => m.state === 'playing').length, [mediaPlayers]);
     const shoppingListCount = useMemo(() => {
         if (!shoppingList || isNaN(parseInt(shoppingList.state))) return 0;
         return parseInt(shoppingList.state);
@@ -1182,6 +1257,35 @@ export default function Dashboard() {
                 contentContainerStyle={[styles.scrollContent, { paddingHorizontal: isTablet ? 24 : 16 }]}
                 showsVerticalScrollIndicator={false}
             >
+                {/* 1. Homescreen Countdowns (TOP) */}
+                {homescreenCountdowns.length > 0 && (
+                    <View style={[styles.section, { marginBottom: 12 }]}>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingLeft: 20, paddingRight: 20 }}>
+                            {homescreenCountdowns.map((cd: any) => {
+                                const days = getCountdownDays(cd.target_date, cd.target_time);
+                                const isToday = days === 0;
+                                const isSoon = days <= 7;
+                                const accent = isToday ? '#EF4444' : isSoon ? '#F59E0B' : '#3B82F6';
+                                return (
+                                    <Pressable key={cd.id} onPress={() => setCountdownDetail(cd)}
+                                        style={[styles.countdownCard, { backgroundColor: accent + '15', borderColor: accent + '40' }]}
+                                    >
+                                        {(() => { const IconC = COUNTDOWN_ICONS[cd.emoji] || Search; return <IconC size={20} color={accent} />; })()}
+                                        <LiveCountdown
+                                            targetDate={cd.target_date}
+                                            targetTime={cd.target_time}
+                                            displayFormat={cd.display_format}
+                                            isHomescreen={true}
+                                            color={accent}
+                                            textStyle={[styles.countdownDays, { color: accent }]}
+                                        />
+                                    </Pressable>
+                                );
+                            })}
+                        </ScrollView>
+                    </View>
+                )}
+
                 {/* Header */}
                 <View style={styles.header}>
                     <View>
@@ -1510,6 +1614,46 @@ export default function Dashboard() {
 
                 {/* --- EXTRA INFOS (Security: Locks & Haustüre) --- */}
 
+                {/* Countdown Detail Popup */}
+                <Modal visible={!!countdownDetail} transparent animationType="fade" onRequestClose={() => setCountdownDetail(null)}>
+                    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+                        <Pressable style={StyleSheet.absoluteFill} onPress={() => setCountdownDetail(null)}>
+                            <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)' }} />
+                        </Pressable>
+                        {countdownDetail && (() => {
+                            const days = getCountdownDays(countdownDetail.target_date, countdownDetail.target_time);
+                            const isToday = days === 0;
+                            const isSoon = days <= 7;
+                            const accent = isToday ? '#EF4444' : isSoon ? '#F59E0B' : '#3B82F6';
+                            const d = new Date(countdownDetail.target_date);
+                            const dateStr = `${d.getDate()}.${d.getMonth() + 1}.${d.getFullYear()}` + (countdownDetail.target_time ? ` ${countdownDetail.target_time}` : '');
+                            return (
+                                <View style={{ width: '100%', maxWidth: 300, backgroundColor: '#1E293B', borderRadius: 24, overflow: 'hidden', borderWidth: 1, borderColor: accent }}>
+                                    <View style={{ height: 70, backgroundColor: accent, alignItems: 'center', justifyContent: 'center' }}>
+                                        {(() => { const IconC = COUNTDOWN_ICONS[countdownDetail.emoji] || Search; return <IconC size={36} color="#fff" />; })()}
+                                    </View>
+                                    <View style={{ padding: 24, alignItems: 'center' }}>
+                                        <Text style={{ fontSize: 20, fontWeight: '800', color: '#fff', marginBottom: 6, textAlign: 'center' }}>{countdownDetail.title}</Text>
+                                        <Text style={{ fontSize: 14, color: '#94A3B8', marginBottom: 16 }}>📅 {dateStr}</Text>
+                                        <View style={{ backgroundColor: accent + '20', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 14 }}>
+                                            <LiveCountdown
+                                                targetDate={countdownDetail.target_date}
+                                                targetTime={countdownDetail.target_time}
+                                                displayFormat={countdownDetail.display_format}
+                                                color={accent}
+                                                textStyle={{ fontSize: 18, fontWeight: '900', color: accent, textAlign: 'center' }}
+                                            />
+                                        </View>
+                                        <Pressable onPress={() => setCountdownDetail(null)}
+                                            style={{ marginTop: 20, backgroundColor: accent, paddingVertical: 10, paddingHorizontal: 28, borderRadius: 12, width: '100%', alignItems: 'center' }}>
+                                            <Text style={{ color: '#fff', fontWeight: '600', fontSize: 15 }}>OK</Text>
+                                        </Pressable>
+                                    </View>
+                                </View>
+                            );
+                        })()}
+                    </View>
+                </Modal>
 
                 {calendars.length > 0 && (
                     <View style={styles.section}>
@@ -1773,7 +1917,7 @@ export default function Dashboard() {
                                                         <Blinds size={24} color={(c.state === 'open' || c.attributes.current_position > 0) ? '#FFF' : colors.accent} />
                                                     </View>
                                                     <Text style={[styles.tileState, { color: colors.subtext }]}>
-                                                        {c.attributes?.current_position != null ? `${c.attributes.current_position}%` : c.state}
+                                                        {c.attributes?.current_position != null ? `${c.attributes.current_position}% ` : c.state}
                                                     </Text>
                                                 </View>
                                                 <Text numberOfLines={1} style={[styles.tileName, { color: colors.text }]}>
@@ -1955,6 +2099,10 @@ const styles = StyleSheet.create({
     eventInfo: { flex: 1 },
     eventTitle: { color: '#fff', fontWeight: '600', fontSize: 14, marginBottom: 4 },
     eventTime: { color: '#94A3B8', fontSize: 12 },
+
+    // Countdown cards (compact: emoji + days only)
+    countdownCard: { width: 56, height: 56, borderRadius: 16, borderWidth: 1, alignItems: 'center', justifyContent: 'center', gap: 2 },
+    countdownDays: { fontSize: 13, fontWeight: '900' },
 
     // Modal
     modalOverlay: { flex: 1, backgroundColor: '#000' },

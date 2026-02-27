@@ -1100,7 +1100,7 @@ export default function Settings() {
         saveDashboardConfig
     } = useHomeAssistant();
     const { theme, setTheme, colors, autoTheme, setAutoTheme } = useTheme();
-    const { isKidsMode } = useKidsMode();
+    const { isKidsModeActive: isKidsMode } = useKidsMode();
     const router = useRouter();
 
     const [haUrl, setHaUrl] = useState('');
@@ -1339,7 +1339,7 @@ export default function Settings() {
     const handleSaveAndConnect = async () => {
         setIsSaving(true);
         try {
-            await connect(haUrl, haToken);
+            await connect({ url: haUrl, token: haToken });
             Alert.alert('Erfolg', 'Verbindung erfolgreich hergestellt!');
             setIsHAExpanded(false);
         } catch (e: any) {

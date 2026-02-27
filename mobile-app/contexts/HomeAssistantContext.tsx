@@ -1338,7 +1338,7 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
     };
 
     const connect = async (internalCreds?: { url: string; token: string }): Promise<boolean> => {
-        let creds = internalCreds;
+        let creds: { url: string; token: string } | undefined | null = internalCreds;
         if (!creds) {
             creds = await getCredentials();
         }
