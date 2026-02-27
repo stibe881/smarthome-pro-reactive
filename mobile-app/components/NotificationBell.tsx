@@ -152,7 +152,7 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
                 .limit(1);
 
             if (existing && existing.length > 0) {
-                console.log('🔔 Skipping duplicate notification (DB check):', title);
+                // console.log('🔔 Skipping duplicate notification (DB check):', title);
                 return;
             }
 
@@ -304,7 +304,7 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
                     typeDisplay[t.category_key] = { icon: t.icon || 'bell', color: t.color || '#3B82F6' };
                 }
 
-                console.log('🔔 Dynamic prefs loaded:', JSON.stringify(categoryPrefs));
+                // console.log('🔔 Dynamic prefs loaded:', JSON.stringify(categoryPrefs));
                 setDynamicPrefs(categoryPrefs);
                 setNotifTypes(typeDisplay);
                 // Cache for use in notification handler (HomeAssistantContext)
@@ -412,7 +412,7 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
         processedIds.current.add(id);
         // Only save if this category is enabled in settings
         const enabled = isCategoryEnabledRef.current(title, pushCategoryKey);
-        console.log(`🔔 saveNotification: title="${title}", catKey="${pushCategoryKey}", enabled=${enabled}`);
+        // console.log(`🔔 saveNotification: title="${title}", catKey="${pushCategoryKey}", enabled=${enabled}`);
         if (!enabled) return;
         addNotificationRef.current(title || 'Benachrichtigung', body || '', deliveredAt);
     }, []);
@@ -424,7 +424,7 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
             const id = notification.request.identifier;
             const pushCatKey = (data as any)?.category_key || '';
             const deliveredAt = toJsDate(notification.date);
-            console.log('🔔 FOREGROUND push:', title, 'category_key:', pushCatKey);
+            // console.log('🔔 FOREGROUND push:', title, 'category_key:', pushCatKey);
             saveNotification(id, title || '', body || '', pushCatKey || undefined, deliveredAt);
         });
         return () => sub.remove();
@@ -437,7 +437,7 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
             const id = response.notification.request.identifier;
             const pushCatKey = (data as any)?.category_key || '';
             const deliveredAt = toJsDate(response.notification.date);
-            console.log('🔔 TAPPED push:', title, 'category_key:', pushCatKey);
+            // console.log('🔔 TAPPED push:', title, 'category_key:', pushCatKey);
             saveNotification(id, title || '', body || '', pushCatKey || undefined, deliveredAt);
         });
         return () => sub.remove();
