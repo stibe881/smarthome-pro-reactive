@@ -8,7 +8,7 @@ import { useHomeAssistant } from '../../contexts/HomeAssistantContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { COUNTDOWN_ICONS } from '../../components/FamilyCountdowns';
-import { Lightbulb, Blinds, Thermometer, Droplets, Wind, Lock, Unlock, Zap, Music, Play, Pause, SkipForward, SkipBack, Bot, PartyPopper, Calendar, CloudRain, Cloud, Sun, Moon, ShoppingCart, Info, Loader2, UtensilsCrossed, Shirt, Clapperboard, BedDouble, ChevronRight, ChevronLeft, Shield, LucideIcon, DoorOpen, DoorClosed, WifiOff, Tv, X, Wifi, RefreshCw, Power, Battery, PlayCircle, Home, Map, MapPin, Fan, Clock, Video, Star, Square, Bell, Baby, Cake, Search, Speaker, Volume1, Volume2, VolumeX, Minus, Plus, Shuffle } from 'lucide-react-native';
+import { Lightbulb, Blinds, Thermometer, Droplets, Wind, Lock, Unlock, Zap, Music, Play, Pause, SkipForward, SkipBack, Bot, PartyPopper, Calendar, CloudRain, Cloud, Sun, Moon, ShoppingCart, Info, Loader2, UtensilsCrossed, Shirt, Clapperboard, BedDouble, ChevronRight, ChevronLeft, Shield, LucideIcon, DoorOpen, DoorClosed, WifiOff, Tv, X, Wifi, RefreshCw, Power, Battery, PlayCircle, Home, Map, MapPin, Fan, Clock, Video, Star, Square, Bell, Baby, Cake, Search, Speaker, Volume1, Volume2, VolumeX, Minus, Plus, Shuffle, Disc } from 'lucide-react-native';
 import Slider from '@react-native-community/slider';
 import * as Haptics from 'expo-haptics';
 import SecurityModal from '../../components/SecurityModal';
@@ -558,6 +558,38 @@ export default function Dashboard() {
     const [popupPlaylistTracks, setPopupPlaylistTracks] = useState<any[]>([]);
     const [selectedPopupPlaylistItem, setSelectedPopupPlaylistItem] = useState<any>(null);
     const [loadingPopupTracks, setLoadingPopupTracks] = useState(false);
+    const [pendingModal, setPendingModal] = useState<'picker' | 'spotify' | null>(null);
+
+    // When main modal closes and a pending modal is set, open it
+    useEffect(() => {
+        if (!mediaPlayerModalVisible && pendingModal) {
+            const timer = setTimeout(() => {
+                if (pendingModal === 'picker') setShowPopupPlayerPicker(true);
+                if (pendingModal === 'spotify') {
+                    setSpotifyPopupVisible(true);
+                    // Fetch playlists
+                    setLoadingPopupPlaylists(true);
+                    const spotifyEntity = entities.find(e => e.entity_id.startsWith('media_player.spotify'));
+                    if (spotifyEntity) {
+                        browseMedia(spotifyEntity.entity_id)
+                            .then((root: any) => {
+                                if (!root?.children) throw new Error('Root empty');
+                                const playlistFolder = root.children.find((c: any) => c.title === 'Playlists' || c.title === 'Bibliothek' || c.media_content_type === 'playlist');
+                                if (playlistFolder) {
+                                    return browseMedia(spotifyEntity.entity_id, playlistFolder.media_content_id, playlistFolder.media_content_type)
+                                        .then((content: any) => setPopupPlaylists(content?.children || []));
+                                }
+                                setPopupPlaylists(root.children);
+                            })
+                            .catch(() => Alert.alert('Fehler', 'Playlists konnten nicht geladen werden.'))
+                            .finally(() => setLoadingPopupPlaylists(false));
+                    }
+                }
+                setPendingModal(null);
+            }, 300);
+            return () => clearTimeout(timer);
+        }
+    }, [mediaPlayerModalVisible, pendingModal]);
 
     const loadHomescreenCountdowns = useCallback(async () => {
         if (!householdId) return;
@@ -2190,7 +2222,7 @@ export default function Dashboard() {
                                     </View>
 
                                     {/* Player Name - tappable to switch player */}
-                                    <Pressable onPress={() => setShowPopupPlayerPicker(true)} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 4 }}>
+                                    <Pressable onPress={() => { setPendingModal('picker'); setMediaPlayerModalVisible(false); }} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 4 }}>
                                         <Text style={{ color: colors.subtext, fontSize: 12, fontWeight: '600', textAlign: 'center', textTransform: 'uppercase', letterSpacing: 1 }}>{playerName}</Text>
                                         <ChevronRight size={14} color={colors.subtext} />
                                     </Pressable>
@@ -2259,28 +2291,13 @@ export default function Dashboard() {
                                                         if (spotifyPromptAsync) spotifyPromptAsync();
                                                         return;
                                                     }
-                                                    // Fetch playlists and show picker
-                                                    setLoadingPopupPlaylists(true);
-                                                    const spotifyEntity = entities.find(e => e.entity_id.startsWith('media_player.spotify'));
-                                                    if (!spotifyEntity) { Alert.alert('Fehler', 'Kein Spotify-Player gefunden.'); setLoadingPopupPlaylists(false); return; }
-                                                    browseMedia(spotifyEntity.entity_id)
-                                                        .then((root: any) => {
-                                                            if (!root?.children) throw new Error('Root empty');
-                                                            const playlistFolder = root.children.find((c: any) => c.title === 'Playlists' || c.title === 'Bibliothek' || c.media_content_type === 'playlist');
-                                                            if (playlistFolder) {
-                                                                return browseMedia(spotifyEntity.entity_id, playlistFolder.media_content_id, playlistFolder.media_content_type)
-                                                                    .then((content: any) => setPopupPlaylists(content?.children || []));
-                                                            }
-                                                            setPopupPlaylists(root.children);
-                                                        })
-                                                        .catch(() => Alert.alert('Fehler', 'Playlists konnten nicht geladen werden.'))
-                                                        .finally(() => setLoadingPopupPlaylists(false));
-                                                    setSpotifyPopupVisible(true);
+                                                    setPendingModal('spotify');
+                                                    setMediaPlayerModalVisible(false);
                                                 }}
                                                 hitSlop={8}
                                                 style={{ padding: 10, backgroundColor: '#1DB954' + '20', borderRadius: 16 }}
                                             >
-                                                <Music size={20} color="#1DB954" />
+                                                <Disc size={20} color="#1DB954" />
                                             </Pressable>
                                         </View>
                                     </View>
@@ -2328,6 +2345,8 @@ export default function Dashboard() {
                                                         setSelectedPopupPlayer(item.entity_id);
                                                         setActiveMediaPlayer(item);
                                                         setShowPopupPlayerPicker(false);
+                                                        // Reopen main media modal after picker closes
+                                                        setTimeout(() => setMediaPlayerModalVisible(true), 300);
                                                     }}
                                                     style={{
                                                         flexDirection: 'row', alignItems: 'center', gap: 12,
