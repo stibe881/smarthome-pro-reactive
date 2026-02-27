@@ -2404,6 +2404,7 @@ export default function Dashboard() {
                                         onPress={async () => {
                                             if (!activeMediaPlayer) return;
                                             setSpotifyPopupVisible(false);
+                                            setTimeout(() => setMediaPlayerModalVisible(true), 300);
                                             const item = selectedPopupPlaylistItem;
                                             const targetId = activeMediaPlayer.entity_id;
                                             // MASS resolution
@@ -2440,6 +2441,7 @@ export default function Dashboard() {
                                                 onPress={async () => {
                                                     if (!activeMediaPlayer) return;
                                                     setSpotifyPopupVisible(false);
+                                                    setTimeout(() => setMediaPlayerModalVisible(true), 300);
                                                     const targetId = activeMediaPlayer.entity_id;
                                                     const getMassId = (id: string) => {
                                                         const map: Record<string, string> = { 'media_player.nest_buro': 'media_player.nest_garage_2' };
