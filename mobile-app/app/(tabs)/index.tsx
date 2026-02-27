@@ -1,6 +1,6 @@
 import { useRouter, useFocusEffect } from 'expo-router';
 import React, { useMemo, useState, useCallback, memo, useEffect } from 'react';
-import { View, Text, ScrollView, Pressable, useWindowDimensions, Modal, StyleSheet, Image, ActivityIndicator, Alert, Animated, TextInput } from 'react-native';
+import { View, Text, ScrollView, Pressable, useWindowDimensions, Modal, StyleSheet, Image, ActivityIndicator, Alert, Animated, TextInput, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -8,11 +8,12 @@ import { useHomeAssistant } from '../../contexts/HomeAssistantContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { COUNTDOWN_ICONS } from '../../components/FamilyCountdowns';
-import { Lightbulb, Blinds, Thermometer, Droplets, Wind, Lock, Unlock, Zap, Music, Play, Pause, SkipForward, SkipBack, Bot, PartyPopper, Calendar, CloudRain, Cloud, Sun, Moon, ShoppingCart, Info, Loader2, UtensilsCrossed, Shirt, Clapperboard, BedDouble, ChevronRight, Shield, LucideIcon, DoorOpen, DoorClosed, WifiOff, Tv, X, Wifi, RefreshCw, Power, Battery, PlayCircle, Home, Map, MapPin, Fan, Clock, Video, Star, Square, Bell, Baby, Cake, Search, Speaker, Volume1, Volume2, VolumeX, Minus, Plus } from 'lucide-react-native';
+import { Lightbulb, Blinds, Thermometer, Droplets, Wind, Lock, Unlock, Zap, Music, Play, Pause, SkipForward, SkipBack, Bot, PartyPopper, Calendar, CloudRain, Cloud, Sun, Moon, ShoppingCart, Info, Loader2, UtensilsCrossed, Shirt, Clapperboard, BedDouble, ChevronRight, ChevronLeft, Shield, LucideIcon, DoorOpen, DoorClosed, WifiOff, Tv, X, Wifi, RefreshCw, Power, Battery, PlayCircle, Home, Map, MapPin, Fan, Clock, Video, Star, Square, Bell, Baby, Cake, Search, Speaker, Volume1, Volume2, VolumeX, Minus, Plus, Shuffle } from 'lucide-react-native';
 import Slider from '@react-native-community/slider';
 import * as Haptics from 'expo-haptics';
 import SecurityModal from '../../components/SecurityModal';
-import { WHITELISTED_PLAYERS } from '../../config/mediaPlayers';
+import { WHITELISTED_PLAYERS, MEDIA_PLAYER_CONFIG } from '../../config/mediaPlayers';
+import { useSpotifyAuth, saveSpotifyToken, getSpotifyToken, exchangeSpotifyCode } from '../../services/spotifyAuth';
 import { filterSecurityEntities } from '../../utils/securityHelpers';
 import CamerasModal from '../../components/CamerasModal';
 import { ConnectionWizard } from '../../components/ConnectionWizard';
@@ -548,6 +549,15 @@ export default function Dashboard() {
     // Dashboard Media Player Modal
     const [mediaPlayerModalVisible, setMediaPlayerModalVisible] = useState(false);
     const [activeMediaPlayer, setActiveMediaPlayer] = useState<any | null>(null);
+    const [selectedPopupPlayer, setSelectedPopupPlayer] = useState<string | null>(null);
+    const [showPopupPlayerPicker, setShowPopupPlayerPicker] = useState(false);
+    // Spotify state for popup
+    const [spotifyPopupVisible, setSpotifyPopupVisible] = useState(false);
+    const [popupPlaylists, setPopupPlaylists] = useState<any[]>([]);
+    const [loadingPopupPlaylists, setLoadingPopupPlaylists] = useState(false);
+    const [popupPlaylistTracks, setPopupPlaylistTracks] = useState<any[]>([]);
+    const [selectedPopupPlaylistItem, setSelectedPopupPlaylistItem] = useState<any>(null);
+    const [loadingPopupTracks, setLoadingPopupTracks] = useState(false);
 
     const loadHomescreenCountdowns = useCallback(async () => {
         if (!householdId) return;
@@ -658,10 +668,33 @@ export default function Dashboard() {
         setShoppingListVisible,
         startShoppingGeofencing,
         debugShoppingLogic,
-        isHAInitialized
+        isHAInitialized,
+        browseMedia
     } = useHomeAssistant();
 
     const { isKidsModeActive, config, setKidsModeActive, selectRoom } = useKidsMode();
+
+    // Spotify Auth
+    const { request: spotifyRequest, response: spotifyResponse, promptAsync: spotifyPromptAsync } = useSpotifyAuth();
+    const [spotifyToken, setSpotifyToken] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (spotifyResponse?.type === 'success') {
+            const { code } = spotifyResponse.params;
+            if (code && spotifyRequest?.codeVerifier) {
+                exchangeSpotifyCode(code, spotifyRequest.codeVerifier, spotifyRequest.redirectUri)
+                    .then(data => {
+                        if (data.access_token) {
+                            saveSpotifyToken(data.access_token, data.refresh_token, data.expires_in);
+                            setSpotifyToken(data.access_token);
+                        }
+                    })
+                    .catch(() => { });
+            }
+        }
+    }, [spotifyResponse]);
+
+    useEffect(() => { getSpotifyToken().then(setSpotifyToken); }, []);
 
     const [showWizard, setShowWizard] = useState(false);
 
@@ -1262,11 +1295,11 @@ export default function Dashboard() {
                 showsVerticalScrollIndicator={false}
             >
                 {/* 1. Homescreen Countdowns and Media Player (TOP) */}
-                {(homescreenCountdowns.length > 0 || playingMediaCount > 0) && (
+                {(homescreenCountdowns.length > 0 || mediaPlayers.length > 0) && (
                     <View style={{ marginBottom: 12, flexDirection: 'row', alignItems: 'center' }}>
                         {/* Countdowns (scrollable, takes available space) */}
                         {homescreenCountdowns.length > 0 && (
-                            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ gap: 10, paddingLeft: 20, paddingRight: playingMediaCount > 0 ? 10 : 20 }}>
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ gap: 10, paddingLeft: 20, paddingRight: mediaPlayers.length > 0 ? 10 : 20 }}>
                                 {homescreenCountdowns.map((cd: any) => {
                                     const days = getCountdownDays(cd.target_date, cd.target_time);
                                     const isToday = days === 0;
@@ -1291,17 +1324,23 @@ export default function Dashboard() {
                             </ScrollView>
                         )}
 
-                        {/* Media Player Widget (right-aligned) */}
-                        {(() => {
-                            if (playingMediaCount === 0) return null;
-                            const activePlayer = mediaPlayers.find((p: any) => p.state === 'playing');
-                            if (!activePlayer) return null;
-                            const imageUrl = getEntityPictureUrl(activePlayer?.attributes?.entity_picture);
+                        {/* Media Player Widget (always visible) */}
+                        {mediaPlayers.length > 0 && (() => {
+                            // Priority: selected > playing group > playing > first
+                            const popupPlayer = selectedPopupPlayer
+                                ? mediaPlayers.find((p: any) => p.entity_id === selectedPopupPlayer) || mediaPlayers[0]
+                                : mediaPlayers.find((p: any) => p.state === 'playing' && MEDIA_PLAYER_CONFIG[p.entity_id]?.isGroup)
+                                || mediaPlayers.find((p: any) => p.state === 'playing')
+                                || mediaPlayers.find((p: any) => p.state === 'idle' || p.state === 'paused')
+                                || mediaPlayers[0];
+                            if (!popupPlayer) return null;
+                            const imageUrl = getEntityPictureUrl(popupPlayer?.attributes?.entity_picture);
+                            const isPlaying = popupPlayer.state === 'playing';
 
                             return (
                                 <Pressable
                                     onPress={() => {
-                                        setActiveMediaPlayer(activePlayer);
+                                        setActiveMediaPlayer(popupPlayer);
                                         setMediaPlayerModalVisible(true);
                                     }}
                                     style={{
@@ -1310,7 +1349,7 @@ export default function Dashboard() {
                                         borderRadius: 16,
                                         backgroundColor: colors.card,
                                         borderWidth: 1,
-                                        borderColor: colors.border,
+                                        borderColor: isPlaying ? colors.accent + '80' : colors.border,
                                         overflow: 'hidden',
                                         justifyContent: 'center',
                                         alignItems: 'center',
@@ -1326,6 +1365,9 @@ export default function Dashboard() {
                                     <View style={{ position: 'absolute', backgroundColor: 'rgba(0,0,0,0.4)', width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
                                         <Speaker size={20} color="#FFF" />
                                     </View>
+                                    {isPlaying && (
+                                        <View style={{ position: 'absolute', bottom: 4, right: 4, width: 10, height: 10, borderRadius: 5, backgroundColor: '#1DB954', borderWidth: 1.5, borderColor: colors.card }} />
+                                    )}
                                 </Pressable>
                             );
                         })()}
@@ -2147,8 +2189,11 @@ export default function Dashboard() {
                                         <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: colors.subtext + '40' }} />
                                     </View>
 
-                                    {/* Player Name */}
-                                    <Text style={{ color: colors.subtext, fontSize: 12, fontWeight: '600', textAlign: 'center', textTransform: 'uppercase', letterSpacing: 1 }}>{playerName}</Text>
+                                    {/* Player Name - tappable to switch player */}
+                                    <Pressable onPress={() => setShowPopupPlayerPicker(true)} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 4 }}>
+                                        <Text style={{ color: colors.subtext, fontSize: 12, fontWeight: '600', textAlign: 'center', textTransform: 'uppercase', letterSpacing: 1 }}>{playerName}</Text>
+                                        <ChevronRight size={14} color={colors.subtext} />
+                                    </Pressable>
 
                                     {/* Content */}
                                     <View style={{ padding: 24, alignItems: 'center' }}>
@@ -2203,14 +2248,251 @@ export default function Dashboard() {
                                             </View>
                                         )}
 
-                                        {/* Power Button */}
-                                        <Pressable onPress={handlePower} hitSlop={8} style={{ marginTop: 20, padding: 10, backgroundColor: colors.background, borderRadius: 16 }}>
-                                            <Power size={20} color={!isOff ? '#EF4444' : colors.subtext} />
-                                        </Pressable>
+                                        {/* Power & Spotify Row */}
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 20 }}>
+                                            <Pressable onPress={handlePower} hitSlop={8} style={{ padding: 10, backgroundColor: colors.background, borderRadius: 16 }}>
+                                                <Power size={20} color={!isOff ? '#EF4444' : colors.subtext} />
+                                            </Pressable>
+                                            <Pressable
+                                                onPress={() => {
+                                                    if (!spotifyToken) {
+                                                        if (spotifyPromptAsync) spotifyPromptAsync();
+                                                        return;
+                                                    }
+                                                    // Fetch playlists and show picker
+                                                    setLoadingPopupPlaylists(true);
+                                                    const spotifyEntity = entities.find(e => e.entity_id.startsWith('media_player.spotify'));
+                                                    if (!spotifyEntity) { Alert.alert('Fehler', 'Kein Spotify-Player gefunden.'); setLoadingPopupPlaylists(false); return; }
+                                                    browseMedia(spotifyEntity.entity_id)
+                                                        .then((root: any) => {
+                                                            if (!root?.children) throw new Error('Root empty');
+                                                            const playlistFolder = root.children.find((c: any) => c.title === 'Playlists' || c.title === 'Bibliothek' || c.media_content_type === 'playlist');
+                                                            if (playlistFolder) {
+                                                                return browseMedia(spotifyEntity.entity_id, playlistFolder.media_content_id, playlistFolder.media_content_type)
+                                                                    .then((content: any) => setPopupPlaylists(content?.children || []));
+                                                            }
+                                                            setPopupPlaylists(root.children);
+                                                        })
+                                                        .catch(() => Alert.alert('Fehler', 'Playlists konnten nicht geladen werden.'))
+                                                        .finally(() => setLoadingPopupPlaylists(false));
+                                                    setSpotifyPopupVisible(true);
+                                                }}
+                                                hitSlop={8}
+                                                style={{ padding: 10, backgroundColor: '#1DB954' + '20', borderRadius: 16 }}
+                                            >
+                                                <Music size={20} color="#1DB954" />
+                                            </Pressable>
+                                        </View>
                                     </View>
                                 </View>
                             );
                         })()}
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Player Picker Modal (Bottom Sheet) */}
+            <Modal visible={showPopupPlayerPicker} animationType="slide" transparent={true} onRequestClose={() => setShowPopupPlayerPicker(false)}>
+                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
+                    <Pressable style={{ flex: 1 }} onPress={() => setShowPopupPlayerPicker(false)} />
+                    <View style={{ backgroundColor: colors.card, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '70%', padding: 20 }}>
+                        <View style={{ alignItems: 'center', marginBottom: 12 }}>
+                            <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: colors.subtext + '40' }} />
+                        </View>
+                        <Text style={{ color: colors.text, fontSize: 18, fontWeight: '700', marginBottom: 16, textAlign: 'center' }}>Lautsprecher wählen</Text>
+                        <ScrollView style={{ maxHeight: 400 }}>
+                            {(() => {
+                                const getPlayerName = (p: any) => {
+                                    const cfg = MEDIA_PLAYER_CONFIG[p.entity_id];
+                                    return p.attributes.friendly_name || cfg?.name || p.entity_id;
+                                };
+                                const groups = mediaPlayers.filter((p: any) => MEDIA_PLAYER_CONFIG[p.entity_id]?.isGroup);
+                                const speakers = mediaPlayers.filter((p: any) => MEDIA_PLAYER_CONFIG[p.entity_id]?.type === 'speaker' && !MEDIA_PLAYER_CONFIG[p.entity_id]?.isGroup);
+                                const tvs = mediaPlayers.filter((p: any) => MEDIA_PLAYER_CONFIG[p.entity_id]?.type === 'tv');
+                                const sections = [
+                                    { title: 'Gruppen', data: groups },
+                                    { title: 'Lautsprecher', data: speakers },
+                                    { title: 'Fernseher', data: tvs },
+                                ];
+                                return sections.map(s => s.data.length === 0 ? null : (
+                                    <View key={s.title} style={{ marginBottom: 12 }}>
+                                        <Text style={{ color: colors.subtext, fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 8 }}>{s.title}</Text>
+                                        {s.data.map((item: any) => {
+                                            const isSelected = item.entity_id === activeMediaPlayer?.entity_id;
+                                            const isItemPlaying = item.state === 'playing';
+                                            const IconComp = MEDIA_PLAYER_CONFIG[item.entity_id]?.type === 'tv' ? Tv : Speaker;
+                                            return (
+                                                <Pressable
+                                                    key={item.entity_id}
+                                                    onPress={() => {
+                                                        setSelectedPopupPlayer(item.entity_id);
+                                                        setActiveMediaPlayer(item);
+                                                        setShowPopupPlayerPicker(false);
+                                                    }}
+                                                    style={{
+                                                        flexDirection: 'row', alignItems: 'center', gap: 12,
+                                                        backgroundColor: isSelected ? colors.accent + '15' : colors.background,
+                                                        borderRadius: 14, padding: 12, marginBottom: 6,
+                                                        borderWidth: 1, borderColor: isSelected ? colors.accent + '40' : 'transparent',
+                                                    }}
+                                                >
+                                                    <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: isSelected ? colors.accent : colors.card, alignItems: 'center', justifyContent: 'center' }}>
+                                                        <IconComp size={20} color={isSelected ? '#FFF' : colors.subtext} />
+                                                    </View>
+                                                    <View style={{ flex: 1 }}>
+                                                        <Text style={{ color: isSelected ? colors.accent : colors.text, fontSize: 15, fontWeight: isSelected ? '700' : '500' }}>
+                                                            {getPlayerName(item)}
+                                                        </Text>
+                                                        {isItemPlaying && <Text style={{ fontSize: 11, color: '#1DB954', marginTop: 1 }}>Spielt gerade</Text>}
+                                                    </View>
+                                                    {isSelected && <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.accent }} />}
+                                                </Pressable>
+                                            );
+                                        })}
+                                    </View>
+                                ));
+                            })()}
+                        </ScrollView>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Spotify Playlist Browser Modal */}
+            <Modal visible={spotifyPopupVisible} animationType="slide" transparent={true} onRequestClose={() => { setSpotifyPopupVisible(false); setPopupPlaylistTracks([]); setSelectedPopupPlaylistItem(null); }}>
+                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
+                    <Pressable style={{ flex: 1 }} onPress={() => { setSpotifyPopupVisible(false); setPopupPlaylistTracks([]); setSelectedPopupPlaylistItem(null); }} />
+                    <View style={{ backgroundColor: colors.card, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '80%', padding: 20 }}>
+                        <View style={{ alignItems: 'center', marginBottom: 12 }}>
+                            <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: colors.subtext + '40' }} />
+                        </View>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+                            {selectedPopupPlaylistItem && (
+                                <Pressable onPress={() => { setPopupPlaylistTracks([]); setSelectedPopupPlaylistItem(null); }} style={{ marginRight: 12, padding: 4 }}>
+                                    <ChevronLeft size={24} color={colors.subtext} />
+                                </Pressable>
+                            )}
+                            <Text style={{ color: colors.text, fontSize: 18, fontWeight: '700', flex: 1 }}>
+                                {selectedPopupPlaylistItem ? selectedPopupPlaylistItem.title : 'Bibliothek'}
+                            </Text>
+                        </View>
+
+                        {selectedPopupPlaylistItem ? (
+                            loadingPopupTracks ? <ActivityIndicator color="#1DB954" size="large" /> : (
+                                <>
+                                    {/* Shuffle Start */}
+                                    <Pressable
+                                        style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#1DB954', padding: 14, borderRadius: 14, marginBottom: 12, justifyContent: 'center', gap: 8 }}
+                                        onPress={async () => {
+                                            if (!activeMediaPlayer) return;
+                                            setSpotifyPopupVisible(false);
+                                            const item = selectedPopupPlaylistItem;
+                                            const targetId = activeMediaPlayer.entity_id;
+                                            // MASS resolution
+                                            const getMassId = (id: string) => {
+                                                const map: Record<string, string> = { 'media_player.nest_buro': 'media_player.nest_garage_2' };
+                                                if (map[id]) return map[id];
+                                                if (id.startsWith('media_player.ma_') || id.startsWith('media_player.mass_')) return id;
+                                                const mId = id.replace('media_player.', 'media_player.mass_');
+                                                if (entities.find(e => e.entity_id === mId)) return mId;
+                                                return null;
+                                            };
+                                            const massTarget = getMassId(targetId) || targetId;
+                                            let contextUri = item.media_content_id;
+                                            if (!contextUri.startsWith('spotify:')) contextUri = `spotify:playlist:${contextUri}`;
+                                            try {
+                                                await callService('media_player', 'turn_on', targetId);
+                                                await new Promise(r => setTimeout(r, 2000));
+                                                await callService('media_player', 'shuffle_set', massTarget, { shuffle: true });
+                                                await callService('media_player', 'play_media', massTarget, { media_content_id: contextUri, media_content_type: 'playlist' });
+                                            } catch { try { await callService('music_assistant', 'play_media', massTarget, { media_id: contextUri, media_type: 'playlist' }); } catch { } }
+                                            setPopupPlaylistTracks([]); setSelectedPopupPlaylistItem(null);
+                                        }}
+                                    >
+                                        <Shuffle size={20} color="#FFF" />
+                                        <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 16 }}>Zufällig abspielen</Text>
+                                    </Pressable>
+                                    <FlatList
+                                        data={popupPlaylistTracks}
+                                        keyExtractor={(i, idx) => i.media_content_id + idx}
+                                        style={{ maxHeight: 300 }}
+                                        renderItem={({ item, index }) => (
+                                            <Pressable
+                                                style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 }}
+                                                onPress={async () => {
+                                                    if (!activeMediaPlayer) return;
+                                                    setSpotifyPopupVisible(false);
+                                                    const targetId = activeMediaPlayer.entity_id;
+                                                    const getMassId = (id: string) => {
+                                                        const map: Record<string, string> = { 'media_player.nest_buro': 'media_player.nest_garage_2' };
+                                                        if (map[id]) return map[id];
+                                                        const mId = id.replace('media_player.', 'media_player.mass_');
+                                                        if (entities.find(e => e.entity_id === mId)) return mId;
+                                                        return null;
+                                                    };
+                                                    const massTarget = getMassId(targetId) || targetId;
+                                                    let uri = selectedPopupPlaylistItem.media_content_id;
+                                                    if (!uri.startsWith('spotify:')) uri = `spotify:playlist:${uri}`;
+                                                    try {
+                                                        await callService('media_player', 'play_media', massTarget, { media_content_id: uri, media_content_type: 'playlist' });
+                                                    } catch { try { await callService('music_assistant', 'play_media', massTarget, { media_id: uri, media_type: 'playlist' }); } catch { } }
+                                                    setPopupPlaylistTracks([]); setSelectedPopupPlaylistItem(null);
+                                                }}
+                                            >
+                                                <Text style={{ color: colors.subtext, fontSize: 14, width: 30, textAlign: 'center' }}>{index + 1}</Text>
+                                                {item.thumbnail ? (
+                                                    <Image source={{ uri: getEntityPictureUrl(item.thumbnail) }} style={{ width: 40, height: 40, borderRadius: 4 }} />
+                                                ) : (
+                                                    <View style={{ width: 40, height: 40, borderRadius: 4, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' }}>
+                                                        <Music size={18} color={colors.subtext} />
+                                                    </View>
+                                                )}
+                                                <View style={{ flex: 1 }}>
+                                                    <Text style={{ color: colors.text, fontSize: 14, fontWeight: '500' }} numberOfLines={1}>{item.title}</Text>
+                                                </View>
+                                                <Play size={16} color={colors.subtext} />
+                                            </Pressable>
+                                        )}
+                                    />
+                                </>
+                            )
+                        ) : (
+                            loadingPopupPlaylists ? <ActivityIndicator color="#1DB954" size="large" /> : (
+                                <FlatList
+                                    data={popupPlaylists}
+                                    keyExtractor={i => i.media_content_id}
+                                    style={{ maxHeight: 400 }}
+                                    renderItem={({ item }) => (
+                                        <Pressable
+                                            style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 }}
+                                            onPress={async () => {
+                                                setSelectedPopupPlaylistItem(item);
+                                                setLoadingPopupTracks(true);
+                                                try {
+                                                    const spotifyEntity = entities.find(e => e.entity_id.startsWith('media_player.spotify'));
+                                                    if (spotifyEntity) {
+                                                        const content = await browseMedia(spotifyEntity.entity_id, item.media_content_id, item.media_content_type);
+                                                        setPopupPlaylistTracks(content?.children || []);
+                                                    }
+                                                } catch { } finally { setLoadingPopupTracks(false); }
+                                            }}
+                                        >
+                                            {item.thumbnail ? (
+                                                <Image source={{ uri: getEntityPictureUrl(item.thumbnail) }} style={{ width: 48, height: 48, borderRadius: 6 }} />
+                                            ) : (
+                                                <View style={{ width: 48, height: 48, borderRadius: 6, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' }}>
+                                                    <Music size={22} color={colors.subtext} />
+                                                </View>
+                                            )}
+                                            <View style={{ flex: 1 }}>
+                                                <Text style={{ color: colors.text, fontSize: 15, fontWeight: '600' }} numberOfLines={1}>{item.title}</Text>
+                                                <Text style={{ color: colors.subtext, fontSize: 12 }}>Playlist</Text>
+                                            </View>
+                                            <ChevronRight size={20} color={colors.subtext} />
+                                        </Pressable>
+                                    )}
+                                />
+                            )
+                        )}
                     </View>
                 </View>
             </Modal>
