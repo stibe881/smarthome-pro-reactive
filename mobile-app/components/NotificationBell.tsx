@@ -135,7 +135,7 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
         }
     }, [user]);
 
-    // Add new notification to Supabase
+    // Add new notification to Supabase (state update comes via Realtime subscription)
     const addNotification = useCallback(async (title: string, body: string, deliveredAt?: Date) => {
         if (!user) return;
 
@@ -152,7 +152,6 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
                 .limit(1);
 
             if (existing && existing.length > 0) {
-                // console.log('🔔 Skipping duplicate notification (DB check):', title);
                 return;
             }
 
@@ -162,35 +161,16 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
                 body,
                 is_read: false,
             };
-            // Use actual delivery timestamp if available
             if (deliveredAt) {
                 insertPayload.created_at = deliveredAt.toISOString();
             }
 
-            const { data, error } = await supabase
+            const { error } = await supabase
                 .from('notifications')
-                .insert(insertPayload)
-                .select()
-                .single();
+                .insert(insertPayload);
 
             if (error) throw error;
-
-            if (data) {
-                const newNotif = {
-                    id: data.id,
-                    title: data.title,
-                    body: data.body,
-                    timestamp: new Date(data.created_at).getTime(),
-                    isRead: data.is_read
-                };
-                setNotifications(prev => {
-                    const updated = [newNotif, ...prev];
-                    // Update badge with correct count
-                    const unread = updated.filter(n => !n.isRead).length;
-                    Notifications.setBadgeCountAsync(unread);
-                    return updated;
-                });
-            }
+            // State will be updated by the Realtime INSERT listener
         } catch (e) {
             console.warn('Failed to add notification:', e);
         }
@@ -339,17 +319,21 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
                 },
                 (payload) => {
                     const split = payload.new;
-                    const newNotif = {
-                        id: split.id,
-                        title: split.title,
-                        body: split.body,
-                        timestamp: new Date(split.created_at).getTime(),
-                        isRead: split.is_read,
-                        categoryKey: (split as any).category_key || getCatKey(split.title) || undefined,
-                    };
-                    setNotifications(prev => [newNotif, ...prev]);
-                    // Let the loadNotifications handle badge generally, or update here
-                    Notifications.getBadgeCountAsync().then(c => Notifications.setBadgeCountAsync(c + 1));
+                    // Dedup: skip if already in state
+                    setNotifications(prev => {
+                        if (prev.some(n => n.id === split.id)) return prev;
+                        const newNotif = {
+                            id: split.id,
+                            title: split.title,
+                            body: split.body,
+                            timestamp: new Date(split.created_at).getTime(),
+                            isRead: split.is_read,
+                            categoryKey: (split as any).category_key || getCatKey(split.title) || undefined,
+                        };
+                        const updated = [newNotif, ...prev];
+                        Notifications.setBadgeCountAsync(updated.filter(n => !n.isRead).length);
+                        return updated;
+                    });
                 }
             )
             .subscribe();
