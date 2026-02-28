@@ -52,7 +52,7 @@ interface GuestPermission {
 }
 
 export const GuestDashboard = () => {
-    const { user, logout } = useAuth();
+    const { user, logout, impersonatedUserId } = useAuth();
     const { entities, isConnected, callService } = useHomeAssistant();
     const { colors } = useTheme();
     const [permissions, setPermissions] = useState<GuestPermission | null>(null);
@@ -64,12 +64,15 @@ export const GuestDashboard = () => {
         setExpandedDomains(prev => ({ ...prev, [domain]: !prev[domain] }));
     }, []);
 
+    // Use the impersonated user's ID when in impersonation mode, otherwise the current user's ID
+    const effectiveUserId = impersonatedUserId || user?.id;
+
     const loadPermissions = useCallback(async () => {
         try {
             const { data, error } = await supabase
                 .from('guest_permissions')
                 .select('entity_ids, entity_config, is_active, valid_from, valid_until')
-                .eq('guest_user_id', user?.id)
+                .eq('guest_user_id', effectiveUserId)
                 .maybeSingle();
 
             if (error) throw error;
@@ -80,7 +83,7 @@ export const GuestDashboard = () => {
             setIsLoading(false);
             setRefreshing(false);
         }
-    }, [user?.id]);
+    }, [effectiveUserId]);
 
     useEffect(() => { loadPermissions(); }, [loadPermissions]);
 

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, Pressable, ActivityIndicator, TextInput, Modal, Alert, KeyboardAvoidingView, Platform, StyleSheet, Switch, Image } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useHousehold } from '../hooks/useHousehold';
@@ -31,10 +32,12 @@ interface Invitation {
 
 interface FamilyManagementProps {
     colors: any;
+    onClose?: () => void;
 }
 
-export const FamilyManagement = ({ colors }: FamilyManagementProps) => {
-    const { user, userRole, resetMemberPassword, removeMember, toggleMemberAccess } = useAuth();
+export const FamilyManagement = ({ colors, onClose }: FamilyManagementProps) => {
+    const { user, userRole, resetMemberPassword, removeMember, toggleMemberAccess, startImpersonation, impersonatedRole } = useAuth();
+    const router = useRouter();
     const { householdId } = useHousehold();
     const [members, setMembers] = useState<FamilyMember[]>([]);
     const [invitations, setInvitations] = useState<Invitation[]>([]);
@@ -59,6 +62,7 @@ export const FamilyManagement = ({ colors }: FamilyManagementProps) => {
     const [isAdminActionLoading, setIsAdminActionLoading] = useState(false);
     const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
     const [showGuestPermissions, setShowGuestPermissions] = useState(false);
+    const [dismissingForImpersonate, setDismissingForImpersonate] = useState(false);
 
     useEffect(() => {
         loadFamilyData();
@@ -432,7 +436,7 @@ export const FamilyManagement = ({ colors }: FamilyManagementProps) => {
             </View>
 
             {/* Admin Modal */}
-            <Modal visible={showAdminModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowAdminModal(false)}>
+            <Modal visible={showAdminModal} animationType={dismissingForImpersonate ? 'none' : 'slide'} presentationStyle={dismissingForImpersonate ? 'overFullScreen' : 'pageSheet'} onRequestClose={() => setShowAdminModal(false)}>
                 <View style={[styles.modalContent, { backgroundColor: colors.background }]}>
                     <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
                         <Text style={[styles.modalTitle, { color: colors.text }]}>Mitglied verwalten</Text>
@@ -514,6 +518,33 @@ export const FamilyManagement = ({ colors }: FamilyManagementProps) => {
                                     </Pressable>
                                 </View>
                             )}
+
+                            {/* View as this member */}
+                            <View style={[styles.adminSection, { borderTopColor: colors.border }]}>
+                                <Pressable
+                                    onPress={() => {
+                                        // Map DB roles to AuthContext roles: 'member' and 'child' -> 'user'
+                                        const memberRole = (selectedMember.role === 'admin' || selectedMember.role === 'guest') ? selectedMember.role : 'user';
+                                        const memberName = selectedMember.display_name || selectedMember.email?.split('@')[0] || 'Mitglied';
+                                        // Step 1: Switch admin modal to no-animation mode
+                                        setDismissingForImpersonate(true);
+                                        // Step 2: After next render (no-animation applied), close all modals + navigate
+                                        setTimeout(() => {
+                                            setShowAdminModal(false);
+                                            if (onClose) onClose(); // triggers family modal instant-dismiss
+                                            // Step 3: After modals dismissed, navigate and impersonate
+                                            setTimeout(() => {
+                                                startImpersonation(memberRole, memberName, selectedMember.user_id);
+                                                router.replace('/(tabs)/');
+                                            }, 100);
+                                        }, 50);
+                                    }}
+                                    style={[styles.actionBtn, { backgroundColor: '#3B82F6' }]}
+                                >
+                                    <Eye size={18} color="#fff" />
+                                    <Text style={styles.actionBtnText}>Ansicht als {selectedMember.display_name || selectedMember.email?.split('@')[0]}</Text>
+                                </Pressable>
+                            </View>
 
                             <View style={[styles.adminSection, { borderTopColor: colors.border, marginTop: 20 }]}>
                                 <Pressable onPress={handleRemoveMember} disabled={isAdminActionLoading} style={[styles.actionBtn, { backgroundColor: '#ef4444', opacity: 0.9 }]}>

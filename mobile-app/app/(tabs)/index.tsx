@@ -533,7 +533,7 @@ const EventTile = memo(({ calendar, onPress }: { calendar: any, onPress?: () => 
 export default function Dashboard() {
     const router = useRouter();
     const { colors } = useTheme();
-    const { user, userRole } = useAuth();
+    const { user, userRole, effectiveRole, impersonatedRole, impersonatedName, stopImpersonation } = useAuth();
     // --- Calendar Modal Logic ---
     const [calendarModal, setCalendarModal] = useState<{ visible: boolean, entityId: string, title: string, color: string }>({ visible: false, entityId: '', title: '', color: '' });
     const [showShoppingList, setShowShoppingList] = useState(false);
@@ -1183,9 +1183,21 @@ export default function Dashboard() {
     }
 
 
-    // Guest users get a restricted dashboard
-    if (userRole === 'guest') {
-        return <GuestDashboard />;
+    // Guest view: shown for real guests AND when admin impersonates a guest
+    if (effectiveRole === 'guest') {
+        return (
+            <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+                {impersonatedRole && (
+                    <View style={{ backgroundColor: '#3B82F6', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10 }}>
+                        <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>👁 Ansicht als {impersonatedName}</Text>
+                        <Pressable onPress={stopImpersonation} style={{ backgroundColor: 'rgba(255,255,255,0.25)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 }}>
+                            <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>Beenden</Text>
+                        </Pressable>
+                    </View>
+                )}
+                <GuestDashboard />
+            </SafeAreaView>
+        );
     }
 
     if (isKidsModeActive) {
@@ -1321,6 +1333,16 @@ export default function Dashboard() {
                 </View>
             )}
 
+            {/* Impersonation Banner */}
+            {impersonatedRole && (
+                <View style={{ backgroundColor: '#3B82F6', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10 }}>
+                    <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>👁 Ansicht als {impersonatedName}</Text>
+                    <Pressable onPress={stopImpersonation} style={{ backgroundColor: 'rgba(255,255,255,0.25)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 }}>
+                        <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>Beenden</Text>
+                    </Pressable>
+                </View>
+            )}
+
             <ScrollView
                 style={[styles.scrollView, { backgroundColor: 'transparent' }]}
                 contentContainerStyle={[styles.scrollContent, { paddingHorizontal: isTablet ? 24 : 16 }]}
@@ -1394,9 +1416,6 @@ export default function Dashboard() {
                                     ) : (
                                         <Music size={24} color={colors.subtext} />
                                     )}
-                                    <View style={{ position: 'absolute', backgroundColor: 'rgba(0,0,0,0.4)', width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
-                                        <Speaker size={20} color="#FFF" />
-                                    </View>
                                     {isPlaying && (
                                         <View style={{ position: 'absolute', bottom: 4, right: 4, width: 10, height: 10, borderRadius: 5, backgroundColor: '#1DB954', borderWidth: 1.5, borderColor: colors.card }} />
                                     )}
@@ -1621,16 +1640,23 @@ export default function Dashboard() {
                             const IconComp = ICON_MAP[qa.iconName] || Zap;
                             const gradient: [string, string] = [qa.color + '59', qa.color + '26'];
 
+                            const FEEDBACK_MAP: Record<string, 'sleep' | 'morning' | 'movie' | 'covers_open' | 'covers_close' | 'vacuum'> = {
+                                sleep: 'sleep', morning: 'morning', movie: 'movie',
+                            };
+
                             const handlePress = () => {
                                 switch (qa.type) {
                                     case 'script':
                                         if (qa.entityId) callService('script', 'turn_on', qa.entityId);
+                                        if (FEEDBACK_MAP[qa.id]) setActiveFeedback(FEEDBACK_MAP[qa.id]);
                                         break;
                                     case 'button':
                                         if (qa.entityId) callService('button', 'press', qa.entityId);
+                                        if (FEEDBACK_MAP[qa.id]) setActiveFeedback(FEEDBACK_MAP[qa.id]);
                                         break;
                                     case 'switch':
                                         if (qa.entityId) callService('switch', 'turn_on', qa.entityId);
+                                        if (FEEDBACK_MAP[qa.id]) setActiveFeedback(FEEDBACK_MAP[qa.id]);
                                         break;
                                     case 'cover_open':
                                         handleAllCoversOpen();

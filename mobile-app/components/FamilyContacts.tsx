@@ -3,7 +3,7 @@ import {
     View, Text, StyleSheet, Pressable, ScrollView, TextInput,
     ActivityIndicator, Alert, Modal, Linking,
 } from 'react-native';
-import { X, Plus, Trash2, Phone, MapPin, User, Edit3 } from 'lucide-react-native';
+import { X, Plus, Trash2, Phone, MapPin, User, Edit3, Siren, Hospital, GraduationCap, Baby, Users, ClipboardList, Heart } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useHousehold } from '../hooks/useHousehold';
@@ -20,12 +20,14 @@ interface Contact {
 }
 
 const CATEGORIES = [
-    { key: 'emergency', label: 'Notfall', emoji: '🚨', color: '#EF4444' },
-    { key: 'doctor', label: 'Arzt', emoji: '🏥', color: '#3B82F6' },
-    { key: 'school', label: 'Schule', emoji: '🏫', color: '#F59E0B' },
-    { key: 'babysitter', label: 'Babysitter', emoji: '👶', color: '#EC4899' },
-    { key: 'family', label: 'Familie', emoji: '👨‍👩‍👧‍👦', color: '#10B981' },
-    { key: 'other', label: 'Sonstige', emoji: '📋', color: '#6B7280' },
+    { key: 'emergency', label: 'Notfall', icon: Siren, color: '#EF4444' },
+    { key: 'doctor', label: 'Arzt', icon: Hospital, color: '#3B82F6' },
+    { key: 'school', label: 'Schule', icon: GraduationCap, color: '#F59E0B' },
+    { key: 'babysitter', label: 'Babysitter', icon: Baby, color: '#EC4899' },
+    { key: 'family', label: 'Familie', icon: Users, color: '#10B981' },
+    { key: 'mami', label: 'Mami', icon: Heart, color: '#F472B6' },
+    { key: 'papi', label: 'Papi', icon: User, color: '#6366F1' },
+    { key: 'other', label: 'Sonstige', icon: ClipboardList, color: '#6B7280' },
 ];
 
 interface ContactsProps { visible: boolean; onClose: () => void; }
@@ -89,7 +91,7 @@ export const FamilyContacts: React.FC<ContactsProps> = ({ visible, onClose }) =>
         ]);
     };
 
-    const getCategory = (key: string) => CATEGORIES.find(c => c.key === key) || CATEGORIES[5];
+    const getCategory = (key: string) => CATEGORIES.find(c => c.key === key) || CATEGORIES[CATEGORIES.length - 1];
 
     const groupedContacts = CATEGORIES.map(cat => ({
         ...cat,
@@ -119,11 +121,14 @@ export const FamilyContacts: React.FC<ContactsProps> = ({ visible, onClose }) =>
                         ) : (
                             groupedContacts.map(group => (
                                 <View key={group.key} style={{ marginBottom: 20 }}>
-                                    <Text style={[styles.groupTitle, { color: colors.subtext }]}>{group.emoji} {group.label}</Text>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                                        <group.icon size={16} color={group.color} />
+                                        <Text style={[styles.groupTitle, { color: colors.subtext }]}>{group.label}</Text>
+                                    </View>
                                     {group.items.map(c => (
                                         <Pressable key={c.id} style={[styles.contactCard, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => Linking.openURL(`tel:${c.phone}`)}>
                                             <View style={[styles.contactIcon, { backgroundColor: group.color + '15' }]}>
-                                                <Text style={{ fontSize: 18 }}>{group.emoji}</Text>
+                                                <group.icon size={20} color={group.color} />
                                             </View>
                                             <View style={{ flex: 1 }}>
                                                 <Text style={[styles.contactName, { color: colors.text }]}>{c.name}</Text>
@@ -155,7 +160,7 @@ export const FamilyContacts: React.FC<ContactsProps> = ({ visible, onClose }) =>
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10, maxHeight: 44 }}>
                             {CATEGORIES.map(cat => (
                                 <Pressable key={cat.key} style={[styles.catBtn, formCategory === cat.key && { backgroundColor: cat.color + '20', borderColor: cat.color }]} onPress={() => setFormCategory(cat.key)}>
-                                    <Text style={{ fontSize: 14 }}>{cat.emoji}</Text>
+                                    <cat.icon size={16} color={formCategory === cat.key ? cat.color : colors.subtext} />
                                     <Text style={{ fontSize: 10, color: formCategory === cat.key ? cat.color : colors.subtext }}>{cat.label}</Text>
                                 </Pressable>
                             ))}
@@ -180,7 +185,7 @@ const styles = StyleSheet.create({
     closeBtn: { padding: 4, borderRadius: 20 },
     empty: { alignItems: 'center', paddingVertical: 60, gap: 12 },
     emptyText: { fontSize: 15, textAlign: 'center', lineHeight: 22 },
-    groupTitle: { fontSize: 14, fontWeight: '700', marginBottom: 8 },
+    groupTitle: { fontSize: 14, fontWeight: '700' },
     contactCard: { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 14, borderWidth: 1, marginBottom: 8 },
     contactIcon: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
     contactName: { fontSize: 15, fontWeight: '600' },

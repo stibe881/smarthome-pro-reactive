@@ -253,9 +253,6 @@ export default function FamilyScreen() {
                         <Text style={[styles.greeting, { color: colors.subtext }]}>{getGreeting()} 👋</Text>
                         <Text style={[styles.title, { color: colors.text }]}>Family Hub</Text>
                     </View>
-                    <View style={[styles.avatarCircle, { backgroundColor: colors.accent + '18' }]}>
-                        <Users size={22} color={colors.accent} />
-                    </View>
                 </View>
 
                 {/* Quick Summary */}

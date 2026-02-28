@@ -6,23 +6,60 @@ import {
 import { X, ChevronLeft, ChevronRight, CalendarDays, CheckCircle2, Clock, LayoutList } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useHousehold } from '../hooks/useHousehold';
+import { useHomeAssistant } from '../contexts/HomeAssistantContext';
 import { supabase } from '../lib/supabase';
 
 const WEEKDAYS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 const DAY_NAMES = ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag'];
 
+const CALENDAR_LABELS = [
+    { key: 'geburtstage', label: 'Geburtstage', color: '#EC4899' },
+    { key: 'termine', label: 'Termine', color: '#3B82F6' },
+    { key: 'feiertage', label: 'Feiertage', color: '#10B981' },
+    { key: 'arbeit', label: 'Arbeit', color: '#F59E0B' },
+    { key: 'schule', label: 'Schule', color: '#8B5CF6' },
+    { key: 'sport', label: 'Sport', color: '#06B6D4' },
+    { key: 'sonstiges', label: 'Sonstiges', color: '#64748B' },
+];
+
+interface CalendarSource {
+    id: string;
+    entity_id: string;
+    label: string;
+    color: string;
+    enabled: boolean;
+}
+
 interface WeeklyOverviewProps { visible: boolean; onClose: () => void; onOpenModule?: (key: string) => void; }
 
+interface EventItem { id: string; title: string; color: string; start_date: string; all_day?: boolean }
+
 interface DayData {
-    events: { id: string; title: string; color: string; start_date: string; all_day?: boolean }[];
+    events: EventItem[];
     todos: { id: string; title: string; completed: boolean; priority: string }[];
     meals: { id: string; meal_name: string; meal_type: string }[];
     routines: { id: string; title: string; time_of_day: string }[];
 }
 
+// Helper: check if a date string falls on a given local day
+const isOnLocalDay = (dateStr: string, dayDate: Date): boolean => {
+    if (!dateStr) return false;
+    // Date-only strings (YYYY-MM-DD)
+    if (dateStr.length <= 10) {
+        const [y, m, d] = dateStr.split('-').map(Number);
+        return dayDate.getFullYear() === y && dayDate.getMonth() === m - 1 && dayDate.getDate() === d;
+    }
+    // Full datetime – compare in local timezone
+    const eventDate = new Date(dateStr);
+    return eventDate.getFullYear() === dayDate.getFullYear() &&
+        eventDate.getMonth() === dayDate.getMonth() &&
+        eventDate.getDate() === dayDate.getDate();
+};
+
 export const WeeklyOverview: React.FC<WeeklyOverviewProps> = ({ visible, onClose, onOpenModule }) => {
     const { colors } = useTheme();
     const { householdId } = useHousehold();
+    const { fetchCalendarEvents } = useHomeAssistant();
 
     const [weekOffset, setWeekOffset] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
@@ -54,19 +91,58 @@ export const WeeklyOverview: React.FC<WeeklyOverviewProps> = ({ visible, onClose
             const endDate = new Date(weekDates[6].getTime() + 86400000).toISOString();
             const ws = weekDates[0].toISOString().split('T')[0];
 
-            const [eventsRes, todosRes, mealsRes, routinesRes] = await Promise.all([
+            const [eventsRes, todosRes, mealsRes, routinesRes, calSourcesRes] = await Promise.all([
                 supabase.from('planner_events').select('id, title, color, start_date, all_day').eq('household_id', householdId).gte('start_date', startDate).lt('start_date', endDate),
                 supabase.from('family_todos').select('id, title, completed, priority, created_at').eq('household_id', householdId),
                 supabase.from('meal_plans').select('id, meal_name, meal_type, day_of_week').eq('household_id', householdId).eq('week_start', ws),
                 supabase.from('family_routines').select('id, title, time_of_day').eq('household_id', householdId).eq('is_active', true),
+                supabase.from('planner_calendar_sources').select('id, entity_id, label, color, enabled').eq('household_id', householdId),
             ]);
+
+            const supabaseEvents: EventItem[] = eventsRes.data || [];
+
+            // Load HA calendar events
+            let haEvents: EventItem[] = [];
+            const calSources: CalendarSource[] = (calSourcesRes.data || []).filter((s: any) => s.enabled);
+            if (calSources.length > 0 && fetchCalendarEvents) {
+                for (const src of calSources) {
+                    try {
+                        const data = await fetchCalendarEvents(src.entity_id, startDate, endDate);
+                        if (data && Array.isArray(data)) {
+                            const labelInfo = CALENDAR_LABELS.find(l => l.key === src.label) || CALENDAR_LABELS[6];
+                            data.forEach((evt: any, idx: number) => {
+                                const startStr = evt.start?.dateTime || evt.start?.date || evt.start || '';
+                                const isAllDay = !evt.start?.dateTime && (!!evt.start?.date || (typeof evt.start === 'string' && evt.start.length <= 10));
+                                haEvents.push({
+                                    id: `ha-${src.entity_id}-${idx}`,
+                                    title: evt.summary || evt.title || 'Ohne Titel',
+                                    color: src.color || labelInfo.color,
+                                    start_date: startStr,
+                                    all_day: isAllDay,
+                                });
+                            });
+                        }
+                    } catch (e) {
+                        console.error(`Error loading HA calendar ${src.entity_id}:`, e);
+                    }
+                }
+            }
+
+            // Deduplicate: remove HA events matching a Supabase event (same title + same day)
+            const dedupedHaEvents = haEvents.filter(ha => {
+                const haTitle = ha.title.toLowerCase().trim();
+                return !supabaseEvents.some(e => {
+                    return e.title.toLowerCase().trim() === haTitle && isOnLocalDay(ha.start_date, new Date(e.start_date));
+                });
+            });
+
+            const allEvents = [...supabaseEvents, ...dedupedHaEvents];
 
             const data: Record<number, DayData> = {};
             for (let i = 0; i < 7; i++) {
                 const dayDate = weekDates[i];
-                const dayStr = dayDate.toISOString().split('T')[0];
                 data[i] = {
-                    events: (eventsRes.data || []).filter(e => e.start_date.startsWith(dayStr)),
+                    events: allEvents.filter(e => isOnLocalDay(e.start_date, dayDate)),
                     todos: todosRes.data || [],
                     meals: (mealsRes.data || []).filter((m: any) => m.day_of_week === i),
                     routines: routinesRes.data || [],
@@ -75,7 +151,7 @@ export const WeeklyOverview: React.FC<WeeklyOverviewProps> = ({ visible, onClose
             setWeekData(data);
         } catch (e) { console.error(e); }
         finally { setIsLoading(false); }
-    }, [householdId, weekOffset]);
+    }, [householdId, weekOffset, fetchCalendarEvents]);
 
     useEffect(() => { if (visible) loadWeekData(); }, [visible, loadWeekData]);
 

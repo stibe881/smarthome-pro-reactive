@@ -15,7 +15,13 @@ interface AuthContextType {
     avatarUrl: string | null;
     updateProfilePicture: (uri: string) => Promise<void>;
     userRole: 'admin' | 'user' | 'guest' | null;
+    effectiveRole: 'admin' | 'user' | 'guest' | null;
     hasPlannerAccess: boolean;
+    impersonatedRole: 'admin' | 'user' | 'guest' | null;
+    impersonatedName: string | null;
+    impersonatedUserId: string | null;
+    startImpersonation: (role: string, name: string, userId?: string) => void;
+    stopImpersonation: () => void;
     isBiometricsSupported: boolean;
     isBiometricsEnabled: boolean;
     toggleBiometrics: () => Promise<void>;
@@ -61,6 +67,24 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const [needsSetup, setNeedsSetup] = useState(false);
     const [isBiometricsSupported, setIsBiometricsSupported] = useState(false);
     const [isBiometricsEnabled, setIsBiometricsEnabled] = useState(false);
+
+    // Impersonation (admin-only view-as-user)
+    const [impersonatedRole, setImpersonatedRole] = useState<'admin' | 'user' | 'guest' | null>(null);
+    const [impersonatedName, setImpersonatedName] = useState<string | null>(null);
+    const [impersonatedUserId, setImpersonatedUserId] = useState<string | null>(null);
+    const effectiveRole = impersonatedRole || userRole;
+
+    const startImpersonation = (role: string, name: string, userId?: string) => {
+        setImpersonatedRole(role as 'admin' | 'user' | 'guest');
+        setImpersonatedName(name);
+        setImpersonatedUserId(userId || null);
+    };
+
+    const stopImpersonation = () => {
+        setImpersonatedRole(null);
+        setImpersonatedName(null);
+        setImpersonatedUserId(null);
+    };
 
     useEffect(() => {
         checkBiometricsSupport();
@@ -541,7 +565,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             session,
             isLoading,
             userRole,
+            effectiveRole,
             hasPlannerAccess,
+            impersonatedRole,
+            impersonatedName,
+            impersonatedUserId,
+            startImpersonation,
+            stopImpersonation,
             avatarUrl,
             updateProfilePicture,
             isBiometricsSupported,

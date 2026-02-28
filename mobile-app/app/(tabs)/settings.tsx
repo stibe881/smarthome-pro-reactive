@@ -1082,7 +1082,8 @@ export default function Settings() {
     const { width } = useWindowDimensions();
     const isTablet = width >= 768;
 
-    const { logout, user, userRole, isBiometricsSupported, isBiometricsEnabled, toggleBiometrics, deleteAccount, avatarUrl, updateProfilePicture } = useAuth();
+    const { logout, user, userRole, effectiveRole, impersonatedRole, isBiometricsSupported, isBiometricsEnabled, toggleBiometrics, deleteAccount, avatarUrl, updateProfilePicture } = useAuth();
+    const isEffectiveGuest = effectiveRole === 'guest';
     const {
         isConnected,
         haBaseUrl,
@@ -1113,6 +1114,7 @@ export default function Settings() {
     const [changePasswordModalVisible, setChangePasswordModalVisible] = useState(false);
     const [isHAExpanded, setIsHAExpanded] = useState(false);
     const [familyModalVisible, setFamilyModalVisible] = useState(false);
+    const [familyModalDismissing, setFamilyModalDismissing] = useState(false);
     const [kidsModalVisible, setKidsModalVisible] = useState(false);
     const [showWizard, setShowWizard] = useState(false);
     const [shoppingLocationsVisible, setShoppingLocationsVisible] = useState(false);
@@ -1134,6 +1136,8 @@ export default function Settings() {
             }
         }
     }, []);
+
+
 
     const handleChangeAppIcon = async (iconKey: string | null) => {
         try {
@@ -1456,79 +1460,79 @@ export default function Settings() {
                             </View>
                         </View>
 
-                        {/* Automationen – standalone card like HA */}
-                        <View style={styles.section}>
-                            <Pressable
-                                onPress={() => setAutomationsModalVisible(true)}
-                                style={[styles.sectionContent, {
-                                    backgroundColor: colors.card,
-                                    borderColor: colors.border,
-                                    flexDirection: 'row',
-                                    alignItems: 'center',
-                                    padding: 16,
-                                    justifyContent: 'space-between'
-                                }]}
-                            >
-                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                    <View style={[styles.iconContainer, { backgroundColor: colors.accent + '20' }]}>
-                                        <Zap size={20} color={colors.accent} />
+                        {/* Automationen, Benachrichtigungen, Kindermodus – hidden for guests */}
+                        {!isEffectiveGuest && (<>
+                            <View style={styles.section}>
+                                <Pressable
+                                    onPress={() => setAutomationsModalVisible(true)}
+                                    style={[styles.sectionContent, {
+                                        backgroundColor: colors.card,
+                                        borderColor: colors.border,
+                                        flexDirection: 'row',
+                                        alignItems: 'center',
+                                        padding: 16,
+                                        justifyContent: 'space-between'
+                                    }]}
+                                >
+                                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                        <View style={[styles.iconContainer, { backgroundColor: colors.accent + '20' }]}>
+                                            <Zap size={20} color={colors.accent} />
+                                        </View>
+                                        <Text style={[styles.rowLabel, { color: colors.text }]}>Automationen</Text>
                                     </View>
-                                    <Text style={[styles.rowLabel, { color: colors.text }]}>Automationen</Text>
-                                </View>
-                                <ChevronRight size={20} color={colors.subtext} />
-                            </Pressable>
-                        </View>
+                                    <ChevronRight size={20} color={colors.subtext} />
+                                </Pressable>
+                            </View>
 
-                        {/* Benachrichtigungen – standalone card like HA */}
-                        <View style={styles.section}>
-                            <Pressable
-                                onPress={() => setNotificationModalVisible(true)}
-                                style={[styles.sectionContent, {
-                                    backgroundColor: colors.card,
-                                    borderColor: colors.border,
-                                    flexDirection: 'row',
-                                    alignItems: 'center',
-                                    padding: 16,
-                                    justifyContent: 'space-between'
-                                }]}
-                            >
-                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                    <View style={[styles.iconContainer, { backgroundColor: (notificationSettings.enabled ? colors.accent : colors.subtext) + '20' }]}>
-                                        <Bell size={20} color={notificationSettings.enabled ? colors.accent : colors.subtext} />
+                            <View style={styles.section}>
+                                <Pressable
+                                    onPress={() => setNotificationModalVisible(true)}
+                                    style={[styles.sectionContent, {
+                                        backgroundColor: colors.card,
+                                        borderColor: colors.border,
+                                        flexDirection: 'row',
+                                        alignItems: 'center',
+                                        padding: 16,
+                                        justifyContent: 'space-between'
+                                    }]}
+                                >
+                                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                        <View style={[styles.iconContainer, { backgroundColor: (notificationSettings.enabled ? colors.accent : colors.subtext) + '20' }]}>
+                                            <Bell size={20} color={notificationSettings.enabled ? colors.accent : colors.subtext} />
+                                        </View>
+                                        <View>
+                                            <Text style={[styles.rowLabel, { color: colors.text }]}>Benachrichtigungen</Text>
+                                            <Text style={[styles.rowValue, { color: notificationSettings.enabled ? colors.success : colors.subtext, marginTop: 2 }]}>
+                                                {notificationSettings.enabled ? 'Aktiv' : 'Inaktiv'}
+                                            </Text>
+                                        </View>
                                     </View>
-                                    <View>
-                                        <Text style={[styles.rowLabel, { color: colors.text }]}>Benachrichtigungen</Text>
-                                        <Text style={[styles.rowValue, { color: notificationSettings.enabled ? colors.success : colors.subtext, marginTop: 2 }]}>
-                                            {notificationSettings.enabled ? 'Aktiv' : 'Inaktiv'}
-                                        </Text>
-                                    </View>
-                                </View>
-                                <ChevronRight size={20} color={colors.subtext} />
-                            </Pressable>
-                        </View>
+                                    <ChevronRight size={20} color={colors.subtext} />
+                                </Pressable>
+                            </View>
 
-                        {/* Kindermodus – standalone card like HA */}
-                        <View style={styles.section}>
-                            <Pressable
-                                onPress={() => setKidsModalVisible(true)}
-                                style={[styles.sectionContent, {
-                                    backgroundColor: colors.card,
-                                    borderColor: colors.border,
-                                    flexDirection: 'row',
-                                    alignItems: 'center',
-                                    padding: 16,
-                                    justifyContent: 'space-between'
-                                }]}
-                            >
-                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                    <View style={[styles.iconContainer, { backgroundColor: colors.accent + '20' }]}>
-                                        <Baby size={20} color={colors.accent} />
+                            <View style={styles.section}>
+                                <Pressable
+                                    onPress={() => setKidsModalVisible(true)}
+                                    style={[styles.sectionContent, {
+                                        backgroundColor: colors.card,
+                                        borderColor: colors.border,
+                                        flexDirection: 'row',
+                                        alignItems: 'center',
+                                        padding: 16,
+                                        justifyContent: 'space-between'
+                                    }]}
+                                >
+                                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                        <View style={[styles.iconContainer, { backgroundColor: colors.accent + '20' }]}>
+                                            <Baby size={20} color={colors.accent} />
+                                        </View>
+                                        <Text style={[styles.rowLabel, { color: colors.text }]}>Kindermodus</Text>
                                     </View>
-                                    <Text style={[styles.rowLabel, { color: colors.text }]}>Kindermodus</Text>
-                                </View>
-                                <ChevronRight size={20} color={colors.subtext} />
-                            </Pressable>
-                        </View>
+                                    <ChevronRight size={20} color={colors.subtext} />
+                                </Pressable>
+                            </View>
+                        </>)}
 
                         {/* THEME SELECTION */}
                         <View style={styles.section}>
@@ -1709,7 +1713,7 @@ export default function Settings() {
 
 
 
-                        {userRole === 'admin' && (
+                        {userRole === 'admin' && !isEffectiveGuest && (
                             <SettingsSection title="Dashboard" colors={colors}>
                                 <SettingsRow
                                     icon={<SettingsIcon size={20} color={colors.accent} />}
@@ -1724,29 +1728,31 @@ export default function Settings() {
                             </SettingsSection>
                         )}
 
-                        <SettingsSection title="Schnellaktionen" colors={colors}>
-                            {userRole === 'admin' && (
+                        {!isEffectiveGuest && (
+                            <SettingsSection title="Schnellaktionen" colors={colors}>
+                                {userRole === 'admin' && (
+                                    <SettingsRow
+                                        icon={<Zap size={20} color="#F59E0B" />}
+                                        iconColor="#F59E0B"
+                                        label="Standard-Aktionen (Admin)"
+                                        value="Für alle Nutzer"
+                                        showChevron
+                                        onPress={() => setQuickActionsAdminVisible(true)}
+                                        colors={colors}
+                                    />
+                                )}
                                 <SettingsRow
-                                    icon={<Zap size={20} color="#F59E0B" />}
-                                    iconColor="#F59E0B"
-                                    label="Standard-Aktionen (Admin)"
-                                    value="Für alle Nutzer"
+                                    icon={<Zap size={20} color={colors.accent} />}
+                                    iconColor={colors.accent}
+                                    label="Meine Schnellaktionen"
+                                    value="Personalisieren"
                                     showChevron
-                                    onPress={() => setQuickActionsAdminVisible(true)}
+                                    onPress={() => setQuickActionsUserVisible(true)}
+                                    isLast
                                     colors={colors}
                                 />
-                            )}
-                            <SettingsRow
-                                icon={<Zap size={20} color={colors.accent} />}
-                                iconColor={colors.accent}
-                                label="Meine Schnellaktionen"
-                                value="Personalisieren"
-                                showChevron
-                                onPress={() => setQuickActionsUserVisible(true)}
-                                isLast
-                                colors={colors}
-                            />
-                        </SettingsSection>
+                            </SettingsSection>
+                        )}
 
 
 
@@ -1759,6 +1765,7 @@ export default function Settings() {
                                 showChevron
                                 onPress={() => setWidgetSettingsVisible(true)}
                                 colors={colors}
+                                isLast={isEffectiveGuest}
                             />
                             {userRole === 'admin' && (
                                 <SettingsRow
@@ -1850,171 +1857,173 @@ export default function Settings() {
                             onClose={() => setWidgetSettingsVisible(false)}
                         />
 
-                        <SettingsSection title="Standort" colors={colors}>
-                            <SettingsRow
-                                icon={<MapPin size={20} color={isGeofencingActive ? colors.success : colors.subtext} />}
-                                iconColor={isGeofencingActive ? colors.success : colors.subtext}
-                                label="Standort als Zuhause setzen"
-                                value={isGeofencingActive ? 'Aktiv' : 'Inaktiv'}
-                                onPress={setHomeLocation}
-                                colors={colors}
-                            />
-                            <SettingsRow
-                                icon={<Store size={20} color={colors.accent} />}
-                                iconColor={colors.accent}
-                                label="Einkaufsstandorte"
-                                value="Verwalten"
-                                showChevron
-                                onPress={() => setShoppingLocationsVisible(true)}
-                                isLast
-                                colors={colors}
-                            />
-                        </SettingsSection>
-
-                        <SettingsSection title="Sicherheit" colors={colors}>
-                            {isBiometricsSupported && (
+                        {!isEffectiveGuest && (<>
+                            <SettingsSection title="Standort" colors={colors}>
                                 <SettingsRow
-                                    icon={<ScanFace size={20} color={colors.accent} />}
-                                    iconColor={colors.accent}
-                                    label={Platform.OS === 'ios' ? 'Face ID / Touch ID' : 'Biometrie'}
-                                    value={isBiometricsEnabled ? 'Aktiv' : 'Inaktiv'}
-                                    onPress={toggleBiometrics}
+                                    icon={<MapPin size={20} color={isGeofencingActive ? colors.success : colors.subtext} />}
+                                    iconColor={isGeofencingActive ? colors.success : colors.subtext}
+                                    label="Standort als Zuhause setzen"
+                                    value={isGeofencingActive ? 'Aktiv' : 'Inaktiv'}
+                                    onPress={setHomeLocation}
                                     colors={colors}
                                 />
-                            )}
-                            <SettingsRow
-                                icon={<Key size={20} color={colors.accent} />}
-                                iconColor={colors.accent}
-                                label="Passwort ändern"
-                                showChevron
-                                onPress={() => setChangePasswordModalVisible(true)}
-                                colors={colors}
-                            />
-                            <SettingsRow
-                                icon={<Shield size={20} color={colors.success} />}
-                                iconColor={colors.success}
-                                label="Datenschutz"
-                                showChevron
-                                onPress={() => Linking.openURL('https://gross-ict.ch/datenschutz')}
-                                colors={colors}
-                            />
-                            <SettingsRow
-                                icon={<Trash2 size={20} color={colors.error} />}
-                                iconColor={colors.error}
-                                label="Konto löschen"
-                                onPress={handleDeleteAccount}
-                                isLast
-                                colors={colors}
-                            />
-                        </SettingsSection>
+                                <SettingsRow
+                                    icon={<Store size={20} color={colors.accent} />}
+                                    iconColor={colors.accent}
+                                    label="Einkaufsstandorte"
+                                    value="Verwalten"
+                                    showChevron
+                                    onPress={() => setShoppingLocationsVisible(true)}
+                                    isLast
+                                    colors={colors}
+                                />
+                            </SettingsSection>
+
+                            <SettingsSection title="Sicherheit" colors={colors}>
+                                {isBiometricsSupported && (
+                                    <SettingsRow
+                                        icon={<ScanFace size={20} color={colors.accent} />}
+                                        iconColor={colors.accent}
+                                        label={Platform.OS === 'ios' ? 'Face ID / Touch ID' : 'Biometrie'}
+                                        value={isBiometricsEnabled ? 'Aktiv' : 'Inaktiv'}
+                                        onPress={toggleBiometrics}
+                                        colors={colors}
+                                    />
+                                )}
+                                <SettingsRow
+                                    icon={<Key size={20} color={colors.accent} />}
+                                    iconColor={colors.accent}
+                                    label="Passwort ändern"
+                                    showChevron
+                                    onPress={() => setChangePasswordModalVisible(true)}
+                                    colors={colors}
+                                />
+                                <SettingsRow
+                                    icon={<Shield size={20} color={colors.success} />}
+                                    iconColor={colors.success}
+                                    label="Datenschutz"
+                                    showChevron
+                                    onPress={() => Linking.openURL('https://gross-ict.ch/datenschutz')}
+                                    colors={colors}
+                                />
+                                <SettingsRow
+                                    icon={<Trash2 size={20} color={colors.error} />}
+                                    iconColor={colors.error}
+                                    label="Konto löschen"
+                                    onPress={handleDeleteAccount}
+                                    isLast
+                                    colors={colors}
+                                />
+                            </SettingsSection>
 
 
 
-                        {/* HOME ASSISTANT - COLLAPSIBLE AT BOTTOM */}
-                        <View style={styles.section}>
-                            <Pressable
-                                onPress={() => setIsHAExpanded(!isHAExpanded)}
-                                style={[styles.sectionContent, {
-                                    backgroundColor: colors.card,
-                                    borderColor: colors.border,
-                                    flexDirection: 'row',
-                                    alignItems: 'center',
-                                    padding: 16,
-                                    justifyContent: 'space-between'
-                                }]}
-                            >
-                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                    <View style={[styles.iconContainer, { backgroundColor: isConnected ? colors.success + '20' : colors.error + '20' }]}>
-                                        <Server size={20} color={isConnected ? colors.success : colors.error} />
-                                    </View>
-                                    <View>
-                                        <Text style={[styles.rowLabel, { color: colors.text }]}>Home Assistant</Text>
-                                        <Text style={[styles.rowValue, { color: isConnected ? colors.success : colors.error, marginTop: 2 }]}>
-                                            {isConnected ? 'Verbunden' : 'Nicht verbunden'}
-                                        </Text>
-                                    </View>
-                                </View>
-                                {isHAExpanded ? <ChevronRight size={20} color={colors.subtext} style={{ transform: [{ rotate: '90deg' }] }} /> : <ChevronRight size={20} color={colors.subtext} />}
-                            </Pressable>
-
-                            {isHAExpanded && (
-                                <View style={[styles.sectionContent, {
-                                    marginTop: 8,
-                                    backgroundColor: colors.card,
-                                    borderColor: colors.border,
-                                    padding: 16
-                                }]}>
-                                    {/* URL Input */}
-                                    <View style={styles.inputContainer}>
-                                        <Text style={[styles.inputLabel, { color: colors.subtext }]}>Server URL</Text>
-                                        <View style={[styles.inputWrapper, { backgroundColor: colors.background, borderColor: colors.border }]}>
-                                            <View style={styles.inputIcon}>
-                                                <Server size={18} color={colors.subtext} />
-                                            </View>
-                                            <TextInput
-                                                style={[styles.input, { color: colors.text }]}
-                                                placeholder="http://homeassistant.local:8123"
-                                                placeholderTextColor={colors.subtext}
-                                                value={haUrl}
-                                                onChangeText={setHaUrl}
-                                                autoCapitalize="none"
-                                                autoCorrect={false}
-                                                keyboardType="url"
-                                            />
+                            {/* HOME ASSISTANT - COLLAPSIBLE AT BOTTOM */}
+                            <View style={styles.section}>
+                                <Pressable
+                                    onPress={() => setIsHAExpanded(!isHAExpanded)}
+                                    style={[styles.sectionContent, {
+                                        backgroundColor: colors.card,
+                                        borderColor: colors.border,
+                                        flexDirection: 'row',
+                                        alignItems: 'center',
+                                        padding: 16,
+                                        justifyContent: 'space-between'
+                                    }]}
+                                >
+                                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                        <View style={[styles.iconContainer, { backgroundColor: isConnected ? colors.success + '20' : colors.error + '20' }]}>
+                                            <Server size={20} color={isConnected ? colors.success : colors.error} />
+                                        </View>
+                                        <View>
+                                            <Text style={[styles.rowLabel, { color: colors.text }]}>Home Assistant</Text>
+                                            <Text style={[styles.rowValue, { color: isConnected ? colors.success : colors.error, marginTop: 2 }]}>
+                                                {isConnected ? 'Verbunden' : 'Nicht verbunden'}
+                                            </Text>
                                         </View>
                                     </View>
+                                    {isHAExpanded ? <ChevronRight size={20} color={colors.subtext} style={{ transform: [{ rotate: '90deg' }] }} /> : <ChevronRight size={20} color={colors.subtext} />}
+                                </Pressable>
 
-                                    {/* Token Input */}
-                                    <View style={[styles.inputContainer, styles.lastInput]}>
-                                        <Text style={[styles.inputLabel, { color: colors.subtext }]}>Access Token</Text>
-                                        <View style={[styles.inputWrapper, { backgroundColor: colors.background, borderColor: colors.border }]}>
-                                            <View style={styles.inputIcon}>
-                                                <Key size={18} color={colors.subtext} />
+                                {isHAExpanded && (
+                                    <View style={[styles.sectionContent, {
+                                        marginTop: 8,
+                                        backgroundColor: colors.card,
+                                        borderColor: colors.border,
+                                        padding: 16
+                                    }]}>
+                                        {/* URL Input */}
+                                        <View style={styles.inputContainer}>
+                                            <Text style={[styles.inputLabel, { color: colors.subtext }]}>Server URL</Text>
+                                            <View style={[styles.inputWrapper, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                                                <View style={styles.inputIcon}>
+                                                    <Server size={18} color={colors.subtext} />
+                                                </View>
+                                                <TextInput
+                                                    style={[styles.input, { color: colors.text }]}
+                                                    placeholder="http://homeassistant.local:8123"
+                                                    placeholderTextColor={colors.subtext}
+                                                    value={haUrl}
+                                                    onChangeText={setHaUrl}
+                                                    autoCapitalize="none"
+                                                    autoCorrect={false}
+                                                    keyboardType="url"
+                                                />
                                             </View>
-                                            <TextInput
-                                                style={[styles.input, { color: colors.text }]}
-                                                placeholder="Long-Lived Access Token"
-                                                placeholderTextColor={colors.subtext}
-                                                value={haToken}
-                                                onChangeText={setHaToken}
-                                                autoCapitalize="none"
-                                                autoCorrect={false}
-                                                secureTextEntry
-                                            />
                                         </View>
-                                        <Text style={[styles.helperText, { color: colors.subtext }]}>
-                                            Profil → Sicherheit → Long-Lived Access Token
-                                        </Text>
-                                    </View>
 
-                                    {/* Action Buttons */}
-                                    <View style={[styles.saveContainer, { flexDirection: 'row', gap: 12 }]}>
-                                        <Pressable
-                                            onPress={() => setShowWizard(true)}
-                                            style={[styles.saveButton, { backgroundColor: colors.accent, flex: 1, flexDirection: 'row', gap: 8 }]}
-                                        >
-                                            <Zap size={18} color="#fff" />
-                                            <Text style={styles.saveButtonText}>Setup Wizard</Text>
-                                        </Pressable>
-                                        <Pressable
-                                            onPress={handleSaveAndConnect}
-                                            disabled={isSaving || isConnecting}
-                                            style={[
-                                                styles.saveButton,
-                                                { backgroundColor: colors.success, flex: 1 },
-                                                (isSaving || isConnecting) && styles.saveButtonDisabled
-                                            ]}
-                                        >
-                                            {isSaving || isConnecting ? (
-                                                <ActivityIndicator size="small" color="white" />
-                                            ) : (
-                                                <Text style={styles.saveButtonText}>Speichern</Text>
-                                            )}
-                                        </Pressable>
+                                        {/* Token Input */}
+                                        <View style={[styles.inputContainer, styles.lastInput]}>
+                                            <Text style={[styles.inputLabel, { color: colors.subtext }]}>Access Token</Text>
+                                            <View style={[styles.inputWrapper, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                                                <View style={styles.inputIcon}>
+                                                    <Key size={18} color={colors.subtext} />
+                                                </View>
+                                                <TextInput
+                                                    style={[styles.input, { color: colors.text }]}
+                                                    placeholder="Long-Lived Access Token"
+                                                    placeholderTextColor={colors.subtext}
+                                                    value={haToken}
+                                                    onChangeText={setHaToken}
+                                                    autoCapitalize="none"
+                                                    autoCorrect={false}
+                                                    secureTextEntry
+                                                />
+                                            </View>
+                                            <Text style={[styles.helperText, { color: colors.subtext }]}>
+                                                Profil → Sicherheit → Long-Lived Access Token
+                                            </Text>
+                                        </View>
+
+                                        {/* Action Buttons */}
+                                        <View style={[styles.saveContainer, { flexDirection: 'row', gap: 12 }]}>
+                                            <Pressable
+                                                onPress={() => setShowWizard(true)}
+                                                style={[styles.saveButton, { backgroundColor: colors.accent, flex: 1, flexDirection: 'row', gap: 8 }]}
+                                            >
+                                                <Zap size={18} color="#fff" />
+                                                <Text style={styles.saveButtonText}>Setup Wizard</Text>
+                                            </Pressable>
+                                            <Pressable
+                                                onPress={handleSaveAndConnect}
+                                                disabled={isSaving || isConnecting}
+                                                style={[
+                                                    styles.saveButton,
+                                                    { backgroundColor: colors.success, flex: 1 },
+                                                    (isSaving || isConnecting) && styles.saveButtonDisabled
+                                                ]}
+                                            >
+                                                {isSaving || isConnecting ? (
+                                                    <ActivityIndicator size="small" color="white" />
+                                                ) : (
+                                                    <Text style={styles.saveButtonText}>Speichern</Text>
+                                                )}
+                                            </Pressable>
+                                        </View>
                                     </View>
-                                </View>
-                            )}
-                        </View>
+                                )}
+                            </View>
+                        </>)}
 
                         {/* Logout */}
                         <Pressable
@@ -2057,7 +2066,7 @@ export default function Settings() {
                     onClose={() => setShoppingLocationsVisible(false)}
                 />
                 {/* Family Management Modal */}
-                <Modal visible={familyModalVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setFamilyModalVisible(false)}>
+                <Modal visible={familyModalVisible} animationType={familyModalDismissing ? 'none' : 'slide'} presentationStyle={familyModalDismissing ? 'overFullScreen' : 'pageSheet'} onRequestClose={() => setFamilyModalVisible(false)}>
                     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: colors.border }}>
                             <Text style={{ color: colors.text, fontSize: 20, fontWeight: '700' }}>Familienmitglieder</Text>
@@ -2066,7 +2075,13 @@ export default function Settings() {
                             </Pressable>
                         </View>
                         <ScrollView style={{ flex: 1, padding: 16 }}>
-                            <FamilyManagement colors={colors} />
+                            <FamilyManagement colors={colors} onClose={() => {
+                                setFamilyModalDismissing(true);
+                                setTimeout(() => {
+                                    setFamilyModalVisible(false);
+                                    setFamilyModalDismissing(false);
+                                }, 50);
+                            }} />
                         </ScrollView>
                     </SafeAreaView>
                 </Modal>

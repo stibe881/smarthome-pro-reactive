@@ -10,18 +10,19 @@ export default function TabLayout() {
     const insets = useSafeAreaInsets();
     const { colors } = useTheme();
     const { isKidsModeActive } = useKidsMode();
-    const { userRole, hasPlannerAccess } = useAuth();
-    const isGuest = userRole === 'guest';
-    const hideFamilyTab = isGuest || !hasPlannerAccess;
+    const { effectiveRole, hasPlannerAccess } = useAuth();
+    const isGuest = effectiveRole === 'guest';
+    const hideFamilyTab = !hasPlannerAccess;
 
     return (
         <Tabs
-            tabBar={props => (isKidsModeActive || isGuest) ? null : <ResponsiveTabBar {...props} />}
+            key={effectiveRole || 'default'}
+            tabBar={props => isKidsModeActive ? null : <ResponsiveTabBar {...props} />}
             screenOptions={{
                 headerShown: false,
                 tabBarActiveTintColor: colors.accent,
                 tabBarInactiveTintColor: colors.subtext,
-                tabBarStyle: (isKidsModeActive || isGuest) ? { display: 'none' } : undefined,
+                tabBarStyle: isKidsModeActive ? { display: 'none' } : undefined,
             }}
         >
             <Tabs.Screen
@@ -60,7 +61,6 @@ export default function TabLayout() {
                 options={{
                     title: 'Optionen',
                     tabBarIcon: ({ color }) => <Settings size={24} stroke={color} />,
-                    href: isGuest ? null : undefined,
                 }}
             />
         </Tabs>
