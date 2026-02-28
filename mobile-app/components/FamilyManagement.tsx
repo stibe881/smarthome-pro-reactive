@@ -21,7 +21,26 @@ interface FamilyMember {
     created_at: string;
     avatar_url?: string;
     planner_access?: boolean;
+    allowed_modules?: string[] | null;
 }
+
+const ALL_FAMILY_MODULES: { key: string; label: string }[] = [
+    { key: 'calendar', label: 'Kalender' },
+    { key: 'todos', label: 'Aufgaben' },
+    { key: 'shopping', label: 'Einkaufsliste' },
+    { key: 'meals', label: 'Essensplaner' },
+    { key: 'pinboard', label: 'Pinnwand' },
+    { key: 'rewards', label: 'Belohnungen' },
+    { key: 'contacts', label: 'Kontakte' },
+    { key: 'routines', label: 'Routinen' },
+    { key: 'locations', label: 'Standort' },
+    { key: 'celebrations', label: 'Geburtstage' },
+    { key: 'packing', label: 'Packlisten' },
+    { key: 'countdowns', label: 'Countdowns' },
+    { key: 'weekly', label: 'Wochenübersicht' },
+    { key: 'recipes', label: 'Rezeptbuch' },
+    { key: 'documents', label: 'Dokumentsafe' },
+];
 
 interface Invitation {
     id: string;
@@ -306,6 +325,24 @@ export const FamilyManagement = ({ colors, onClose }: FamilyManagementProps) => 
         }
     };
 
+    const handleToggleModule = async (moduleKey: string, enabled: boolean) => {
+        if (!selectedMember) return;
+        const currentModules = selectedMember.allowed_modules || ALL_FAMILY_MODULES.map(m => m.key);
+        const newModules = enabled
+            ? [...currentModules, moduleKey]
+            : currentModules.filter(m => m !== moduleKey);
+        try {
+            await supabase
+                .from('family_members')
+                .update({ allowed_modules: newModules })
+                .eq('user_id', selectedMember.user_id);
+            setSelectedMember({ ...selectedMember, allowed_modules: newModules });
+            loadFamilyData();
+        } catch (e: any) {
+            Alert.alert('Fehler', e.message);
+        }
+    };
+
     const getInitials = (email: string) => (email || '??').substring(0, 2).toUpperCase();
     const getAvatarColor = (index: number) => {
         const palettes = [['#3B82F6', '#1D4ED8'], ['#8B5CF6', '#6D28D9'], ['#EC4899', '#DB2777'], ['#10B981', '#059669']];
@@ -482,6 +519,27 @@ export const FamilyManagement = ({ colors, onClose }: FamilyManagementProps) => 
                                     />
                                 </View>
                             </View>
+
+                            {/* Module Access Toggles – shown when planner access is enabled */}
+                            {selectedMember.planner_access !== false && (
+                                <View style={[styles.adminSection, { borderTopColor: colors.border }]}>
+                                    <Text style={[styles.label, { color: colors.subtext, marginBottom: 12 }]}>Family-Hub Module</Text>
+                                    {ALL_FAMILY_MODULES.map((mod, idx) => {
+                                        const memberModules = selectedMember.allowed_modules || ALL_FAMILY_MODULES.map(m => m.key);
+                                        const isEnabled = memberModules.includes(mod.key);
+                                        return (
+                                            <View key={mod.key} style={[styles.adminRow, idx > 0 && { marginTop: 8 }]}>
+                                                <Text style={[styles.label, { color: colors.text, marginBottom: 0, fontSize: 14 }]}>{mod.label}</Text>
+                                                <Switch
+                                                    value={isEnabled}
+                                                    onValueChange={(val) => handleToggleModule(mod.key, val)}
+                                                    trackColor={{ false: '#334155', true: '#10B981' }}
+                                                />
+                                            </View>
+                                        );
+                                    })}
+                                </View>
+                            )}
 
                             <View style={[styles.adminSection, { borderTopColor: colors.border }]}>
                                 <Text style={[styles.label, { color: colors.subtext }]}>Passwort zurücksetzen</Text>

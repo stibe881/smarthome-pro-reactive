@@ -41,17 +41,40 @@ interface ModuleStats {
 
 export default function FamilyScreen() {
     const { colors } = useTheme();
-    const { user } = useAuth();
+    const { user, effectiveRole, impersonatedUserId } = useAuth();
     const { householdId } = useHousehold();
     const { isProUser, presentPaywall } = useSubscription();
 
     const [activeModule, setActiveModule] = useState<ModuleKey | null>(null);
     const [stats, setStats] = useState<ModuleStats>({ todayEvents: 0, openTodos: 0, recentPins: 0 });
     const [fadeAnim] = useState(new Animated.Value(0));
+    const [allowedModules, setAllowedModules] = useState<string[] | null>(null);
 
     useEffect(() => {
         Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start();
     }, []);
+
+    // Fetch allowed modules for the current (or impersonated) user
+    useEffect(() => {
+        const fetchAllowedModules = async () => {
+            const userId = impersonatedUserId || user?.id;
+            if (!userId) return;
+            try {
+                const { data } = await supabase
+                    .from('family_members')
+                    .select('allowed_modules')
+                    .eq('user_id', userId)
+                    .single();
+                setAllowedModules(data?.allowed_modules ?? null);
+            } catch (e) {
+                setAllowedModules(null); // default: all modules
+            }
+        };
+        fetchAllowedModules();
+    }, [user?.id, impersonatedUserId]);
+
+    const isModuleAllowed = (key: string) => allowedModules === null || allowedModules.includes(key);
+
 
     const loadStats = useCallback(async () => {
         if (!householdId) return;
@@ -274,31 +297,37 @@ export default function FamilyScreen() {
                 </View>
 
                 {/* Planung & Organisation */}
-                <View style={styles.sectionHeader}>
-                    <View style={[styles.sectionDot, { backgroundColor: colors.accent }]} />
-                    <Text style={[styles.sectionTitle, { color: colors.text }]}>Planung</Text>
-                </View>
-                <View style={styles.gridContainer}>
-                    {MAIN_MODULES.map(renderModuleCard)}
-                </View>
+                {MAIN_MODULES.some(m => isModuleAllowed(m.key)) && (<>
+                    <View style={styles.sectionHeader}>
+                        <View style={[styles.sectionDot, { backgroundColor: colors.accent }]} />
+                        <Text style={[styles.sectionTitle, { color: colors.text }]}>Planung</Text>
+                    </View>
+                    <View style={styles.gridContainer}>
+                        {MAIN_MODULES.filter(m => isModuleAllowed(m.key)).map(renderModuleCard)}
+                    </View>
+                </>)}
 
                 {/* Familie & Motivation */}
-                <View style={styles.sectionHeader}>
-                    <View style={[styles.sectionDot, { backgroundColor: colors.accent }]} />
-                    <Text style={[styles.sectionTitle, { color: colors.text }]}>Familie</Text>
-                </View>
-                <View style={styles.gridContainer}>
-                    {FAMILY_MODULES.map(renderModuleCard)}
-                </View>
+                {FAMILY_MODULES.some(m => isModuleAllowed(m.key)) && (<>
+                    <View style={styles.sectionHeader}>
+                        <View style={[styles.sectionDot, { backgroundColor: colors.accent }]} />
+                        <Text style={[styles.sectionTitle, { color: colors.text }]}>Familie</Text>
+                    </View>
+                    <View style={styles.gridContainer}>
+                        {FAMILY_MODULES.filter(m => isModuleAllowed(m.key)).map(renderModuleCard)}
+                    </View>
+                </>)}
 
                 {/* Tools & Extras */}
-                <View style={styles.sectionHeader}>
-                    <View style={[styles.sectionDot, { backgroundColor: colors.accent }]} />
-                    <Text style={[styles.sectionTitle, { color: colors.text }]}>Extras</Text>
-                </View>
-                <View style={styles.gridContainer}>
-                    {UTILITY_MODULES.map(renderModuleCard)}
-                </View>
+                {UTILITY_MODULES.some(m => isModuleAllowed(m.key)) && (<>
+                    <View style={styles.sectionHeader}>
+                        <View style={[styles.sectionDot, { backgroundColor: colors.accent }]} />
+                        <Text style={[styles.sectionTitle, { color: colors.text }]}>Extras</Text>
+                    </View>
+                    <View style={styles.gridContainer}>
+                        {UTILITY_MODULES.filter(m => isModuleAllowed(m.key)).map(renderModuleCard)}
+                    </View>
+                </>)}
 
                 <View style={{ height: 20 }} />
             </Animated.ScrollView>

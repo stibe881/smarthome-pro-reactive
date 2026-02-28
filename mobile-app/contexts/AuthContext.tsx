@@ -72,18 +72,32 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const [impersonatedRole, setImpersonatedRole] = useState<'admin' | 'user' | 'guest' | null>(null);
     const [impersonatedName, setImpersonatedName] = useState<string | null>(null);
     const [impersonatedUserId, setImpersonatedUserId] = useState<string | null>(null);
+    const [impersonatedPlannerAccess, setImpersonatedPlannerAccess] = useState<boolean | null>(null);
     const effectiveRole = impersonatedRole || userRole;
+    const effectivePlannerAccess = impersonatedRole ? (impersonatedPlannerAccess ?? true) : hasPlannerAccess;
 
-    const startImpersonation = (role: string, name: string, userId?: string) => {
+    const startImpersonation = async (role: string, name: string, userId?: string) => {
         setImpersonatedRole(role as 'admin' | 'user' | 'guest');
         setImpersonatedName(name);
         setImpersonatedUserId(userId || null);
+        // Fetch planner_access for the impersonated user
+        if (userId) {
+            try {
+                const { data } = await supabase
+                    .from('family_members')
+                    .select('planner_access')
+                    .eq('user_id', userId)
+                    .single();
+                setImpersonatedPlannerAccess(data?.planner_access ?? true);
+            } catch { setImpersonatedPlannerAccess(true); }
+        }
     };
 
     const stopImpersonation = () => {
         setImpersonatedRole(null);
         setImpersonatedName(null);
         setImpersonatedUserId(null);
+        setImpersonatedPlannerAccess(null);
     };
 
     useEffect(() => {
@@ -566,7 +580,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             isLoading,
             userRole,
             effectiveRole,
-            hasPlannerAccess,
+            hasPlannerAccess: effectivePlannerAccess,
             impersonatedRole,
             impersonatedName,
             impersonatedUserId,

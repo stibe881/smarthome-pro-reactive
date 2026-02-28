@@ -1460,8 +1460,8 @@ export default function Settings() {
                             </View>
                         </View>
 
-                        {/* Automationen, Benachrichtigungen, Kindermodus – hidden for guests */}
-                        {!isEffectiveGuest && (<>
+                        {/* Automationen – admin only */}
+                        {effectiveRole === 'admin' && (
                             <View style={styles.section}>
                                 <Pressable
                                     onPress={() => setAutomationsModalVisible(true)}
@@ -1483,7 +1483,10 @@ export default function Settings() {
                                     <ChevronRight size={20} color={colors.subtext} />
                                 </Pressable>
                             </View>
+                        )}
 
+                        {/* Benachrichtigungen – hidden for guests */}
+                        {!isEffectiveGuest && (
                             <View style={styles.section}>
                                 <Pressable
                                     onPress={() => setNotificationModalVisible(true)}
@@ -1510,7 +1513,10 @@ export default function Settings() {
                                     <ChevronRight size={20} color={colors.subtext} />
                                 </Pressable>
                             </View>
+                        )}
 
+                        {/* Kindermodus – admin only */}
+                        {effectiveRole === 'admin' && (
                             <View style={styles.section}>
                                 <Pressable
                                     onPress={() => setKidsModalVisible(true)}
@@ -1532,7 +1538,7 @@ export default function Settings() {
                                     <ChevronRight size={20} color={colors.subtext} />
                                 </Pressable>
                             </View>
-                        </>)}
+                        )}
 
                         {/* THEME SELECTION */}
                         <View style={styles.section}>
@@ -1713,7 +1719,7 @@ export default function Settings() {
 
 
 
-                        {userRole === 'admin' && !isEffectiveGuest && (
+                        {effectiveRole === 'admin' && (
                             <SettingsSection title="Dashboard" colors={colors}>
                                 <SettingsRow
                                     icon={<SettingsIcon size={20} color={colors.accent} />}
@@ -1730,7 +1736,7 @@ export default function Settings() {
 
                         {!isEffectiveGuest && (
                             <SettingsSection title="Schnellaktionen" colors={colors}>
-                                {userRole === 'admin' && (
+                                {effectiveRole === 'admin' && (
                                     <SettingsRow
                                         icon={<Zap size={20} color="#F59E0B" />}
                                         iconColor="#F59E0B"
@@ -1756,33 +1762,34 @@ export default function Settings() {
 
 
 
-                        {/* Weitere App-Einstellungen */}
-                        <SettingsSection title="Weiteres" colors={colors}>
-                            <SettingsRow
-                                icon={<LayoutGrid size={20} color={colors.accent} />}
-                                iconColor={colors.accent}
-                                label="Widgets"
-                                showChevron
-                                onPress={() => setWidgetSettingsVisible(true)}
-                                colors={colors}
-                                isLast={isEffectiveGuest}
-                            />
-                            {userRole === 'admin' && (
+                        {/* Weitere App-Einstellungen – hidden for guests */}
+                        {!isEffectiveGuest && (
+                            <SettingsSection title="Weiteres" colors={colors}>
                                 <SettingsRow
-                                    icon={<Users size={20} color={colors.accent} />}
+                                    icon={<LayoutGrid size={20} color={colors.accent} />}
                                     iconColor={colors.accent}
-                                    label="Familienmitglieder"
-                                    value="Verwalten & Einladen"
+                                    label="Widgets"
                                     showChevron
-                                    onPress={() => setFamilyModalVisible(true)}
-                                    isLast
+                                    onPress={() => setWidgetSettingsVisible(true)}
                                     colors={colors}
                                 />
-                            )}
-                        </SettingsSection>
+                                {effectiveRole === 'admin' && (
+                                    <SettingsRow
+                                        icon={<Users size={20} color={colors.accent} />}
+                                        iconColor={colors.accent}
+                                        label="Familienmitglieder"
+                                        value="Verwalten & Einladen"
+                                        showChevron
+                                        onPress={() => setFamilyModalVisible(true)}
+                                        isLast
+                                        colors={colors}
+                                    />
+                                )}
+                            </SettingsSection>
+                        )}
 
                         {/* Entity Configuration - Admin Only */}
-                        {userRole === 'admin' && (
+                        {effectiveRole === 'admin' && (
                             <SettingsSection title="Entitäten (Admin)" colors={colors}>
                                 <SettingsRow
                                     icon={<Sun size={20} color="#F59E0B" />}
@@ -1915,10 +1922,12 @@ export default function Settings() {
                                     colors={colors}
                                 />
                             </SettingsSection>
+                        </>)}
 
 
 
-                            {/* HOME ASSISTANT - COLLAPSIBLE AT BOTTOM */}
+                        {/* HOME ASSISTANT - Admin only */}
+                        {effectiveRole === 'admin' && (
                             <View style={styles.section}>
                                 <Pressable
                                     onPress={() => setIsHAExpanded(!isHAExpanded)}
@@ -2023,7 +2032,7 @@ export default function Settings() {
                                     </View>
                                 )}
                             </View>
-                        </>)}
+                        )}
 
                         {/* Logout */}
                         <Pressable
