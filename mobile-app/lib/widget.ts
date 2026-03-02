@@ -30,7 +30,7 @@ try {
         userDefaults = new UserDefaults(APP_GROUP_ID);
     }
 } catch (e) {
-    console.warn('Widget native module not found. Using AsyncStorage fallback.');
+    // Widget native module not found - using AsyncStorage fallback
 }
 
 export const saveCookieToWidget = async (data: WidgetData) => {

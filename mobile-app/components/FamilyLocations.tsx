@@ -22,7 +22,7 @@ try {
     Marker = maps.Marker;
     mapsAvailable = true;
 } catch (e) {
-    console.log('[FamilyLocations] react-native-maps not available, showing fallback');
+    // react-native-maps not available in Expo Go
 }
 
 interface MemberLocation {

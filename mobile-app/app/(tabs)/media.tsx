@@ -658,7 +658,13 @@ export default function Media() {
                             onVolume={(v) => handleVolumeChange(activePlayer?.entity_id, v)}
                             onShuffle={() => handleShuffle(activePlayer?.entity_id)}
                             onRepeat={() => handleRepeat(activePlayer?.entity_id)}
-                            spotifyActive={!!spotifyToken}
+                            spotifyActive={(() => {
+                                const massId = getMassPlayerId(activePlayer?.entity_id);
+                                const me = massId ? entities.find(e => e.entity_id === massId) : undefined;
+                                const an = (activePlayer?.attributes?.app_name || me?.attributes?.app_name || '').toLowerCase();
+                                const ci = (activePlayer?.attributes?.media_content_id || me?.attributes?.media_content_id || '').toLowerCase();
+                                return an.includes('spotify') || ci.includes('spotify');
+                            })()}
                             getPlayerName={getPlayerName}
                         />
                     </View>

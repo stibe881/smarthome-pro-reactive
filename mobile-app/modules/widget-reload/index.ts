@@ -8,7 +8,7 @@ if (Platform.OS === 'ios') {
         WidgetReload = requireNativeModule('WidgetReload');
     } catch {
         // Native module not available (dev build without rebuild)
-        console.log('[WidgetReload] Native module not available, skipping');
+        // Native module not available in Expo Go
     }
 }
 
