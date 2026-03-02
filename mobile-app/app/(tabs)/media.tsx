@@ -7,7 +7,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import {
     Play, Pause, SkipBack, SkipForward, Volume2,
     Music, WifiOff, Disc, Power, Smartphone, Speaker,
-    ListMusic, Cast, Radio, Shuffle, Repeat, Repeat1, ChevronRight, ChevronLeft, ChevronDown, Tv, X
+    ListMusic, Cast, Radio, Shuffle, Repeat, Repeat1, ChevronRight, ChevronLeft, ChevronDown, Tv, X, Settings
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSpotifyAuth, saveSpotifyToken, getSpotifyToken, logoutSpotify, exchangeSpotifyCode } from '../../services/spotifyAuth';
@@ -666,27 +666,7 @@ export default function Media() {
                     {/* Player list removed — only HeroPlayer is shown */}
                     {/* Users switch players via the player picker (tap player name) */}
 
-                    {/* Manage Button */}
-                    {userRole === 'admin' && (
-                        <Pressable
-                            onPress={() => setShowSelectionModal(true)}
-                            style={{
-                                marginTop: 32,
-                                alignSelf: 'center',
-                                flexDirection: 'row',
-                                alignItems: 'center',
-                                backgroundColor: 'rgba(255,255,255,0.1)',
-                                paddingHorizontal: 16,
-                                paddingVertical: 10,
-                                borderRadius: 12,
-                                borderWidth: 1,
-                                borderColor: 'rgba(255,255,255,0.2)'
-                            }}
-                        >
-                            <ListMusic size={18} color="#94A3B8" style={{ marginRight: 8 }} />
-                            <Text style={{ color: '#94A3B8', fontWeight: '600' }}>Liste bearbeiten</Text>
-                        </Pressable>
-                    )}
+
                 </ScrollView>
             </SafeAreaView>
 
@@ -707,9 +687,16 @@ export default function Media() {
                             backgroundColor: '#3B82F6',
                         }}>
                             <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#FFF' }}>Lautsprecher wählen</Text>
-                            <Pressable onPress={() => setShowPlayerPicker(false)} style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.2)', alignItems: 'center', justifyContent: 'center' }}>
-                                <X size={24} color="#FFF" />
-                            </Pressable>
+                            <View style={{ flexDirection: 'row', gap: 8 }}>
+                                {userRole === 'admin' && (
+                                    <Pressable onPress={() => { setShowPlayerPicker(false); setShowSelectionModal(true); }} style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.2)', alignItems: 'center', justifyContent: 'center' }}>
+                                        <Settings size={20} color="#FFF" />
+                                    </Pressable>
+                                )}
+                                <Pressable onPress={() => setShowPlayerPicker(false)} style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.2)', alignItems: 'center', justifyContent: 'center' }}>
+                                    <X size={24} color="#FFF" />
+                                </Pressable>
+                            </View>
                         </View>
                         {/* Body */}
                         <ScrollView style={{ flex: 1, padding: 16 }}>
@@ -951,6 +938,14 @@ const HeroPlayer = ({ player, massPlayer, imageUrl, massImageUrl, onSelect, onSp
     const artist = player?.attributes?.media_artist || '';
     const volume = player?.attributes?.volume_level ?? 0.4;
 
+    // Detect radio playback — hide shuffle/repeat for radio
+    const contentType = player?.attributes?.media_content_type || massPlayer?.attributes?.media_content_type || '';
+    const appName = (player?.attributes?.app_name || massPlayer?.attributes?.app_name || '').toLowerCase();
+    const contentId = (player?.attributes?.media_content_id || massPlayer?.attributes?.media_content_id || '').toLowerCase();
+    const isRadio = contentType === 'channel' || contentType === 'podcast'
+        || appName.includes('tunein') || appName.includes('radio')
+        || contentId.includes('tunein') || contentId.includes('radio');
+
     // --- Progress Bar: Use MASS player attributes if available (Cast devices often lack these) ---
     const attrs = massPlayer?.attributes || player?.attributes || {};
     const mediaDuration = attrs.media_duration || 0;
@@ -1073,9 +1068,11 @@ const HeroPlayer = ({ player, massPlayer, imageUrl, massImageUrl, onSelect, onSp
 
                 {/* Controls */}
                 <View style={styles.heroControls}>
-                    <Pressable onPress={handleShufflePress} style={styles.controlBtnSmall}>
-                        <Shuffle size={22} color={optShuffle ? "#1DB954" : "#64748B"} />
-                    </Pressable>
+                    {!isRadio && (
+                        <Pressable onPress={handleShufflePress} style={styles.controlBtnSmall}>
+                            <Shuffle size={22} color={optShuffle ? "#1DB954" : "#64748B"} />
+                        </Pressable>
+                    )}
 
                     <Pressable onPress={onPrev}>
                         <SkipBack size={32} color="#FFF" />
@@ -1089,13 +1086,15 @@ const HeroPlayer = ({ player, massPlayer, imageUrl, massImageUrl, onSelect, onSp
                         <SkipForward size={32} color="#FFF" />
                     </Pressable>
 
-                    <Pressable onPress={handleRepeatPress} style={styles.controlBtnSmall}>
-                        {optRepeat === 'one' ? (
-                            <Repeat1 size={22} color="#1DB954" />
-                        ) : (
-                            <Repeat size={22} color={optRepeat === 'all' ? "#1DB954" : "#64748B"} />
-                        )}
-                    </Pressable>
+                    {!isRadio && (
+                        <Pressable onPress={handleRepeatPress} style={styles.controlBtnSmall}>
+                            {optRepeat === 'one' ? (
+                                <Repeat1 size={22} color="#1DB954" />
+                            ) : (
+                                <Repeat size={22} color={optRepeat === 'all' ? "#1DB954" : "#64748B"} />
+                            )}
+                        </Pressable>
+                    )}
                 </View>
 
                 {/* Secondary Controls: Spotify + Power */}
