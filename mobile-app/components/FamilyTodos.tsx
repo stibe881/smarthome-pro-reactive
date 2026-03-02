@@ -575,7 +575,7 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
                 {/* Header */}
                 <View style={styles.headerSection}>
                     <View style={styles.headerTop}>
-                        <View>
+                        <View style={{ flex: 1 }}>
                             <Text style={[styles.headerTitle, { color: colors.text }]}>
                                 {activeTab === 'tasks' ? 'Aufgaben' : 'Wiederkehrende Aufgaben'}
                             </Text>
@@ -583,6 +583,9 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
                                 {activeTab === 'tasks' ? `${openCount} offene Aufgaben` : `${recurringCount} aktiv`}
                             </Text>
                         </View>
+                        <Pressable onPress={onClose} style={{ padding: 4, borderRadius: 20, backgroundColor: colors.border }}>
+                            <X size={24} color={colors.subtext} />
+                        </Pressable>
                     </View>
 
                     {/* Segmented Tab Bar */}

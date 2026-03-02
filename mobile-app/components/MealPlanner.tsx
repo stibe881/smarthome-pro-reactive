@@ -242,9 +242,6 @@ export const MealPlanner: React.FC<MealPlannerProps> = ({ visible, onClose }) =>
             <View style={[styles.container, { backgroundColor: colors.background }]}>
                 {/* Header */}
                 <View style={styles.header}>
-                    <Pressable onPress={onClose} style={styles.backBtn}>
-                        <ChevronLeft size={24} color={colors.text} />
-                    </Pressable>
                     <View style={{ flex: 1 }}>
                         <Text style={[styles.headerTitle, { color: colors.text }]}>Mahlzeitenkalender</Text>
                         <Text style={[styles.headerSub, { color: colors.subtext }]}>{mealsToday} {mealsToday === 1 ? 'Mahlzeit' : 'Mahlzeiten'} {viewMode === 'day' ? dayLabel.toLowerCase() : ''}</Text>
@@ -258,6 +255,9 @@ export const MealPlanner: React.FC<MealPlannerProps> = ({ visible, onClose }) =>
                     </Pressable>
                     <Pressable onPress={() => openAddForSlot('lunch')} style={[styles.addHeaderBtn, { backgroundColor: colors.card, borderColor: colors.border }]}>
                         <Plus size={18} color={colors.text} />
+                    </Pressable>
+                    <Pressable onPress={onClose} style={{ padding: 4, borderRadius: 20, backgroundColor: colors.border }}>
+                        <X size={24} color={colors.subtext} />
                     </Pressable>
                 </View>
 

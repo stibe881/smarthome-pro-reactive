@@ -47,6 +47,9 @@ export default function FamilyScreen() {
     const [stats, setStats] = useState<ModuleStats>({ todayEvents: 0, openTodos: 0, recentPins: 0 });
     const [fadeAnim] = useState(new Animated.Value(0));
     const [allowedModules, setAllowedModules] = useState<string[] | null>(null);
+    const [overviewMode, setOverviewMode] = useState<'day' | 'week'>('day');
+    const [todayEvents, setTodayEvents] = useState<{ id: string; title: string; start_date: string; color?: string }[]>([]);
+    const [weekData, setWeekData] = useState<{ date: Date; count: number; events: { title: string; start_date: string }[] }[]>([]);
 
     // Responsive breakpoints
     const isDesktop = width >= 1024;
@@ -96,7 +99,17 @@ export default function FamilyScreen() {
             const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
             const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59).toISOString();
 
-            const [eventsRes, todosRes, pinsRes] = await Promise.all([
+            // Week range (Mon-Sun)
+            const dayOfWeek = today.getDay();
+            const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+            const weekStart = new Date(today);
+            weekStart.setDate(today.getDate() + mondayOffset);
+            weekStart.setHours(0, 0, 0, 0);
+            const weekEnd = new Date(weekStart);
+            weekEnd.setDate(weekStart.getDate() + 6);
+            weekEnd.setHours(23, 59, 59, 999);
+
+            const [eventsRes, todosRes, pinsRes, todayEventsRes, weekEventsRes] = await Promise.all([
                 supabase.from('planner_events')
                     .select('id', { count: 'exact', head: true })
                     .eq('household_id', householdId)
@@ -109,6 +122,19 @@ export default function FamilyScreen() {
                 supabase.from('family_pins')
                     .select('id', { count: 'exact', head: true })
                     .eq('household_id', householdId),
+                supabase.from('planner_events')
+                    .select('id, title, start_date, color')
+                    .eq('household_id', householdId)
+                    .gte('start_date', todayStart)
+                    .lte('start_date', todayEnd)
+                    .order('start_date', { ascending: true })
+                    .limit(5),
+                supabase.from('planner_events')
+                    .select('id, title, start_date')
+                    .eq('household_id', householdId)
+                    .gte('start_date', weekStart.toISOString())
+                    .lte('start_date', weekEnd.toISOString())
+                    .order('start_date', { ascending: true }),
             ]);
 
             setStats({
@@ -116,12 +142,46 @@ export default function FamilyScreen() {
                 openTodos: todosRes.count || 0,
                 recentPins: pinsRes.count || 0,
             });
+
+            setTodayEvents(todayEventsRes.data || []);
+
+            // Build week data
+            const days: typeof weekData = [];
+            for (let i = 0; i < 7; i++) {
+                const d = new Date(weekStart);
+                d.setDate(weekStart.getDate() + i);
+                const dayStr = d.toISOString().slice(0, 10);
+                const dayEvents = (weekEventsRes.data || []).filter(e => e.start_date?.slice(0, 10) === dayStr);
+                days.push({ date: d, count: dayEvents.length, events: dayEvents });
+            }
+            setWeekData(days);
+
+            // Load user preference
+            const userId = impersonatedUserId || user?.id;
+            if (userId) {
+                const { data: memberData } = await supabase
+                    .from('family_members')
+                    .select('overview_mode')
+                    .eq('user_id', userId)
+                    .single();
+                if (memberData?.overview_mode) {
+                    setOverviewMode(memberData.overview_mode);
+                }
+            }
         } catch (e) {
             console.warn('Error loading family stats:', e);
         }
-    }, [householdId]);
+    }, [householdId, user?.id, impersonatedUserId]);
 
     useEffect(() => { loadStats(); }, [loadStats]);
+
+    const toggleOverviewMode = async (mode: 'day' | 'week') => {
+        setOverviewMode(mode);
+        const userId = impersonatedUserId || user?.id;
+        if (userId) {
+            await supabase.from('family_members').update({ overview_mode: mode }).eq('user_id', userId);
+        }
+    };
 
     const handleCloseModule = () => {
         setActiveModule(null);
@@ -147,7 +207,7 @@ export default function FamilyScreen() {
     const EXTRAS_GRADIENT: [string, string] = ['#8B5CF6', '#7C3AED'];
     const EXTRAS_ICON = '#C4B5FD';
 
-    const MAIN_MODULES: { key: ModuleKey; title: string; subtitle: string; icon: any; gradient: [string, string]; iconColor: string }[] = [
+    const MAIN_MODULES: { key: ModuleKey; title: string; subtitle: string; icon: any; gradient: [string, string]; iconColor: string; badge?: string }[] = [
         {
             key: 'calendar', title: 'Kalender',
             subtitle: stats.todayEvents > 0 ? `${stats.todayEvents} Termine heute` : 'Keine Termine',
@@ -170,7 +230,7 @@ export default function FamilyScreen() {
         },
     ];
 
-    const FAMILY_MODULES: { key: ModuleKey; title: string; subtitle: string; icon: any; gradient: [string, string]; iconColor: string }[] = [
+    const FAMILY_MODULES: { key: ModuleKey; title: string; subtitle: string; icon: any; gradient: [string, string]; iconColor: string; badge?: string }[] = [
         {
             key: 'pinboard', title: 'Pinnwand',
             subtitle: stats.recentPins > 0 ? `${stats.recentPins} Einträge` : 'Noch keine',
@@ -195,6 +255,7 @@ export default function FamilyScreen() {
             key: 'locations', title: 'Standort',
             subtitle: 'Familie finden',
             icon: MapPin, gradient: FAMILY_GRADIENT, iconColor: FAMILY_ICON,
+            badge: 'Beta',
         },
         {
             key: 'celebrations', title: 'Geburtstage',
@@ -203,7 +264,7 @@ export default function FamilyScreen() {
         },
     ];
 
-    const UTILITY_MODULES: { key: ModuleKey; title: string; subtitle: string; icon: any; gradient: [string, string]; iconColor: string }[] = [
+    const UTILITY_MODULES: { key: ModuleKey; title: string; subtitle: string; icon: any; gradient: [string, string]; iconColor: string; badge?: string }[] = [
         {
             key: 'packing', title: 'Packlisten',
             subtitle: 'Für Ferien & Ausflüge',
@@ -214,11 +275,7 @@ export default function FamilyScreen() {
             subtitle: 'Tage zählen',
             icon: Target, gradient: EXTRAS_GRADIENT, iconColor: EXTRAS_ICON,
         },
-        {
-            key: 'weekly', title: 'Wochenübersicht',
-            subtitle: 'Alles auf einen Blick',
-            icon: LayoutList, gradient: EXTRAS_GRADIENT, iconColor: EXTRAS_ICON,
-        },
+
         {
             key: 'recipes', title: 'Rezeptbuch',
             subtitle: 'Familienrezepte',
@@ -262,7 +319,14 @@ export default function FamilyScreen() {
 
                     {/* Content */}
                     <View style={styles.moduleInfo}>
-                        <Text style={styles.moduleTitle}>{mod.title}</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <Text style={styles.moduleTitle}>{mod.title}</Text>
+                            {mod.badge && (
+                                <View style={{ backgroundColor: 'rgba(255,255,255,0.25)', paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4 }}>
+                                    <Text style={{ color: '#fff', fontSize: 8, fontWeight: '800', letterSpacing: 0.5 }}>{mod.badge}</Text>
+                                </View>
+                            )}
+                        </View>
                         <Text style={styles.moduleSubtitle} numberOfLines={1}>{mod.subtitle}</Text>
                     </View>
 
@@ -297,22 +361,91 @@ export default function FamilyScreen() {
                         </View>
                     </View>
 
-                    {/* Quick Summary */}
-                    <View style={[styles.summaryCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                        <View style={styles.summaryItem}>
-                            <Text style={[styles.summaryNumber, { color: colors.accent }]}>{stats.todayEvents}</Text>
-                            <Text style={[styles.summaryLabel, { color: colors.subtext }]}>Termine{'\n'}heute</Text>
+                    {/* Day / Week Overview */}
+                    <View style={[styles.overviewCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                        {/* Toggle */}
+                        <View style={[styles.overviewToggle, { backgroundColor: colors.border }]}>
+                            <Pressable style={[styles.toggleBtn, overviewMode === 'day' && { backgroundColor: colors.accent }]} onPress={() => toggleOverviewMode('day')}>
+                                <Text style={[styles.toggleText, { color: overviewMode === 'day' ? '#fff' : colors.subtext }]}>Heute</Text>
+                            </Pressable>
+                            <Pressable style={[styles.toggleBtn, overviewMode === 'week' && { backgroundColor: colors.accent }]} onPress={() => toggleOverviewMode('week')}>
+                                <Text style={[styles.toggleText, { color: overviewMode === 'week' ? '#fff' : colors.subtext }]}>Woche</Text>
+                            </Pressable>
                         </View>
-                        <View style={[styles.summaryDivider, { backgroundColor: colors.border }]} />
-                        <View style={styles.summaryItem}>
-                            <Text style={[styles.summaryNumber, { color: colors.accent }]}>{stats.openTodos}</Text>
-                            <Text style={[styles.summaryLabel, { color: colors.subtext }]}>Offene{'\n'}Aufgaben</Text>
-                        </View>
-                        <View style={[styles.summaryDivider, { backgroundColor: colors.border }]} />
-                        <View style={styles.summaryItem}>
-                            <Text style={[styles.summaryNumber, { color: colors.accent }]}>{stats.recentPins}</Text>
-                            <Text style={[styles.summaryLabel, { color: colors.subtext }]}>Pinnwand{'\n'}Einträge</Text>
-                        </View>
+
+                        {overviewMode === 'day' ? (
+                            /* ---- DAY VIEW ---- */
+                            <View>
+                                {/* Stats row */}
+                                <View style={styles.dayStatsRow}>
+                                    <Pressable style={styles.dayStat} onPress={() => handleModulePress('calendar')}>
+                                        <CalendarDays size={14} color={colors.accent} />
+                                        <Text style={[styles.dayStatNum, { color: colors.accent }]}>{stats.todayEvents}</Text>
+                                        <Text style={[styles.dayStatLabel, { color: colors.subtext }]}>Termine</Text>
+                                    </Pressable>
+                                    <View style={[styles.dayStatDivider, { backgroundColor: colors.border }]} />
+                                    <Pressable style={styles.dayStat} onPress={() => handleModulePress('todos')}>
+                                        <CheckSquare size={14} color={colors.accent} />
+                                        <Text style={[styles.dayStatNum, { color: colors.accent }]}>{stats.openTodos}</Text>
+                                        <Text style={[styles.dayStatLabel, { color: colors.subtext }]}>Offen</Text>
+                                    </Pressable>
+                                    <View style={[styles.dayStatDivider, { backgroundColor: colors.border }]} />
+                                    <Pressable style={styles.dayStat} onPress={() => handleModulePress('pinboard')}>
+                                        <MessageSquare size={14} color={colors.accent} />
+                                        <Text style={[styles.dayStatNum, { color: colors.accent }]}>{stats.recentPins}</Text>
+                                        <Text style={[styles.dayStatLabel, { color: colors.subtext }]}>Pins</Text>
+                                    </Pressable>
+                                </View>
+                                {/* Today's events list */}
+                                {todayEvents.length > 0 ? (
+                                    <View style={{ marginTop: 10 }}>
+                                        {todayEvents.map(ev => {
+                                            const time = new Date(ev.start_date);
+                                            const timeStr = `${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}`;
+                                            return (
+                                                <View key={ev.id} style={[styles.eventRow, { borderColor: colors.border }]}>
+                                                    <View style={[styles.eventDot, { backgroundColor: ev.color || colors.accent }]} />
+                                                    <Text style={[styles.eventTime, { color: colors.subtext }]}>{timeStr}</Text>
+                                                    <Text style={[styles.eventTitle, { color: colors.text }]} numberOfLines={1}>{ev.title}</Text>
+                                                </View>
+                                            );
+                                        })}
+                                    </View>
+                                ) : (
+                                    <Text style={{ color: colors.subtext, fontSize: 12, fontStyle: 'italic', textAlign: 'center', marginTop: 10 }}>Keine Termine heute 🎉</Text>
+                                )}
+                            </View>
+                        ) : (
+                            /* ---- WEEK VIEW ---- */
+                            <View>
+                                <View style={styles.weekStrip}>
+                                    {weekData.map((day, idx) => {
+                                        const isToday = day.date.toDateString() === new Date().toDateString();
+                                        const dayNames = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+                                        return (
+                                            <View key={idx} style={[styles.weekDay, isToday && { backgroundColor: colors.accent + '15', borderRadius: 12 }]}>
+                                                <Text style={[styles.weekDayName, { color: isToday ? colors.accent : colors.subtext }]}>{dayNames[idx]}</Text>
+                                                <Text style={[styles.weekDayNum, { color: isToday ? colors.accent : colors.text }]}>{day.date.getDate()}</Text>
+                                                {day.count > 0 ? (
+                                                    <View style={[styles.weekDot, { backgroundColor: isToday ? colors.accent : colors.subtext }]}>
+                                                        <Text style={styles.weekDotText}>{day.count}</Text>
+                                                    </View>
+                                                ) : (
+                                                    <View style={{ width: 18, height: 18 }} />
+                                                )}
+                                            </View>
+                                        );
+                                    })}
+                                </View>
+                                {/* Week summary */}
+                                <Pressable style={[styles.weekSummaryRow, { borderTopColor: colors.border }]} onPress={() => handleModulePress('weekly')}>
+                                    <Text style={[styles.weekSummaryText, { color: colors.subtext }]}>
+                                        {weekData.reduce((s, d) => s + d.count, 0)} Termine diese Woche · {stats.openTodos} offene Aufgaben
+                                    </Text>
+                                    <ChevronRight size={14} color={colors.subtext} style={{ marginLeft: 4 }} />
+                                </Pressable>
+                            </View>
+                        )}
                     </View>
 
                     {/* Planung & Organisation */}
@@ -386,14 +519,51 @@ const styles = StyleSheet.create({
     greeting: { fontSize: 14, fontWeight: '500', marginBottom: 2, letterSpacing: 0.2 },
     title: { fontSize: 32, fontWeight: '800', letterSpacing: -0.8 },
 
-    // Summary card
-    summaryCard: {
-        flexDirection: 'row', borderRadius: 18, padding: 18, borderWidth: 1, marginBottom: 28,
+    // Overview card
+    overviewCard: {
+        borderRadius: 18, padding: 16, borderWidth: 1, marginBottom: 28,
     },
-    summaryItem: { flex: 1, alignItems: 'center' },
-    summaryNumber: { fontSize: 26, fontWeight: '800', letterSpacing: -0.5 },
-    summaryLabel: { fontSize: 11, textAlign: 'center', marginTop: 4, lineHeight: 14, fontWeight: '500' },
-    summaryDivider: { width: 1, marginVertical: 4 },
+    overviewToggle: {
+        flexDirection: 'row', borderRadius: 10, padding: 3, marginBottom: 12,
+    },
+    toggleBtn: {
+        flex: 1, paddingVertical: 6, borderRadius: 8, alignItems: 'center',
+    },
+    toggleText: { fontSize: 13, fontWeight: '700' },
+    dayStatsRow: {
+        flexDirection: 'row', alignItems: 'center',
+    },
+    dayStat: {
+        flex: 1, alignItems: 'center', gap: 3,
+    },
+    dayStatNum: { fontSize: 22, fontWeight: '800', letterSpacing: -0.5 },
+    dayStatLabel: { fontSize: 10, fontWeight: '500' },
+    dayStatDivider: { width: 1, height: 32 },
+    eventRow: {
+        flexDirection: 'row', alignItems: 'center', gap: 8,
+        paddingVertical: 6, borderBottomWidth: 0.5,
+    },
+    eventDot: { width: 6, height: 6, borderRadius: 3 },
+    eventTime: { fontSize: 12, fontWeight: '600', width: 40 },
+    eventTitle: { fontSize: 13, fontWeight: '500', flex: 1 },
+    weekStrip: {
+        flexDirection: 'row', justifyContent: 'space-between',
+    },
+    weekDay: {
+        alignItems: 'center', paddingVertical: 6, paddingHorizontal: 4, flex: 1,
+    },
+    weekDayName: { fontSize: 10, fontWeight: '600', marginBottom: 2 },
+    weekDayNum: { fontSize: 16, fontWeight: '800' },
+    weekDot: {
+        width: 18, height: 18, borderRadius: 9,
+        justifyContent: 'center', alignItems: 'center', marginTop: 4,
+    },
+    weekDotText: { fontSize: 9, fontWeight: '800', color: '#fff' },
+    weekSummaryRow: {
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+        borderTopWidth: 1, marginTop: 10, paddingTop: 8,
+    },
+    weekSummaryText: { fontSize: 11, fontWeight: '500', textAlign: 'center' },
 
     // Section
     sectionHeader: {
