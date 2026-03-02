@@ -663,7 +663,9 @@ export default function Media() {
                                 const me = massId ? entities.find(e => e.entity_id === massId) : undefined;
                                 const an = (activePlayer?.attributes?.app_name || me?.attributes?.app_name || '').toLowerCase();
                                 const ci = (activePlayer?.attributes?.media_content_id || me?.attributes?.media_content_id || '').toLowerCase();
-                                return an.includes('spotify') || ci.includes('spotify');
+                                const ct = (activePlayer?.attributes?.media_content_type || me?.attributes?.media_content_type || '').toLowerCase();
+                                const spotifyPlaying = !!entities.find(e => e.entity_id.startsWith('media_player.spotify') && e.state === 'playing');
+                                return an.includes('spotify') || ci.includes('spotify') || ct.includes('spotify') || spotifyPlaying;
                             })()}
                             getPlayerName={getPlayerName}
                         />
@@ -961,7 +963,7 @@ const HeroPlayer = ({ player, massPlayer, imageUrl, massImageUrl, onSelect, onSp
     const isRadio = contentType === 'channel' || contentType === 'podcast'
         || appName.includes('tunein') || appName.includes('radio')
         || contentId.includes('tunein') || contentId.includes('radio')
-        || (isPlaying && mediaDuration === 0);
+        || (isPlaying && mediaDuration === 0 && !appName.includes('spotify') && !contentId.includes('spotify'));
     const mediaPosition = attrs.media_position || 0;
     const positionUpdatedAt = attrs.media_position_updated_at;
     const [currentPosition, setCurrentPosition] = useState(mediaPosition);

@@ -2308,11 +2308,13 @@ export default function Dashboard() {
                             const contentType = livePlayer.attributes?.media_content_type || massEntity?.attributes?.media_content_type || '';
                             const appName = (livePlayer.attributes?.app_name || massEntity?.attributes?.app_name || '').toLowerCase();
                             const contentId = (livePlayer.attributes?.media_content_id || massEntity?.attributes?.media_content_id || '').toLowerCase();
+                            const spotifyEntity = entities.find(e => e.entity_id.startsWith('media_player.spotify') && e.state === 'playing');
                             const isRadio = contentType === 'channel' || contentType === 'podcast'
                                 || appName.includes('tunein') || appName.includes('radio')
                                 || contentId.includes('tunein') || contentId.includes('radio')
-                                || (isPlaying && mediaDuration === 0);
-                            const isSpotify = appName.includes('spotify') || contentId.includes('spotify');
+                                || (isPlaying && mediaDuration === 0 && !appName.includes('spotify') && !contentId.includes('spotify'));
+                            const isSpotify = appName.includes('spotify') || contentId.includes('spotify')
+                                || contentType.includes('spotify') || !!spotifyEntity;
 
                             return (
                                 <View style={{ position: 'relative' }}>
