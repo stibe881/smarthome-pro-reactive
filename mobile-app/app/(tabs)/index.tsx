@@ -1,5 +1,5 @@
 import { useRouter, useFocusEffect } from 'expo-router';
-import React, { useMemo, useState, useCallback, memo, useEffect } from 'react';
+import React, { useMemo, useState, useCallback, memo, useEffect, useRef } from 'react';
 import { View, Text, ScrollView, Pressable, useWindowDimensions, Modal, StyleSheet, Image, ActivityIndicator, Alert, Animated, TextInput, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Notifications from 'expo-notifications';
@@ -565,11 +565,12 @@ export default function Dashboard() {
     const [tuneinBreadcrumb, setTuneinBreadcrumb] = useState<{ title: string, contentId?: string, contentType?: string }[]>([]);
     const [loadingTunein, setLoadingTunein] = useState(false);
 
-    // Progress bar smooth ticker — forces re-render every second while modal is open
+    // Progress bar smooth ticker — forces re-render for time labels
     const [progressTick, setProgressTick] = useState(0);
+    const progressAnim = useRef(new Animated.Value(0)).current;
     useEffect(() => {
         if (!mediaPlayerModalVisible) return;
-        const timer = setInterval(() => setProgressTick(t => t + 1), 1000);
+        const timer = setInterval(() => setProgressTick(t => t + 1), 500);
         return () => clearInterval(timer);
     }, [mediaPlayerModalVisible]);
 
@@ -2415,18 +2416,31 @@ export default function Dashboard() {
                                             </Pressable>
                                         </View>
                                     </View>
-                                    {/* Progress Bar - flush at bottom edge */}
-                                    {mediaDuration > 0 && (
-                                        <View style={{ width: '100%', paddingBottom: 12 }}>
-                                            <View style={{ height: 3, backgroundColor: colors.background, overflow: 'hidden' }}>
-                                                <View style={{ height: '100%', backgroundColor: '#F59E0B', width: `${Math.min(progressPct, 100)}%` }} />
+                                    {/* Progress Bar - flush at bottom edge, animated */}
+                                    {mediaDuration > 0 && (() => {
+                                        // Animate progress width smoothly
+                                        Animated.timing(progressAnim, {
+                                            toValue: Math.min(progressPct, 100),
+                                            duration: 800,
+                                            useNativeDriver: false,
+                                        }).start();
+                                        const animWidth = progressAnim.interpolate({
+                                            inputRange: [0, 100],
+                                            outputRange: ['0%', '100%'],
+                                            extrapolate: 'clamp',
+                                        });
+                                        return (
+                                            <View style={{ width: '100%', paddingBottom: 12 }}>
+                                                <View style={{ height: 3, backgroundColor: colors.background, overflow: 'hidden' }}>
+                                                    <Animated.View style={{ height: '100%', backgroundColor: '#F59E0B', width: animWidth }} />
+                                                </View>
+                                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4, paddingHorizontal: 16 }}>
+                                                    <Text style={{ color: '#F59E0B', fontSize: 11, fontWeight: '600' }}>{fmtTime(elapsed)}</Text>
+                                                    <Text style={{ color: colors.subtext, fontSize: 11, fontWeight: '500' }}>{fmtTime(mediaDuration)}</Text>
+                                                </View>
                                             </View>
-                                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4, paddingHorizontal: 16 }}>
-                                                <Text style={{ color: '#F59E0B', fontSize: 11, fontWeight: '600' }}>{fmtTime(elapsed)}</Text>
-                                                <Text style={{ color: colors.subtext, fontSize: 11, fontWeight: '500' }}>{fmtTime(mediaDuration)}</Text>
-                                            </View>
-                                        </View>
-                                    )}
+                                        );
+                                    })()}
                                 </View>
                             );
                         })()}
