@@ -2427,10 +2427,15 @@ export default function Dashboard() {
                                                 maximumValue={mediaDuration}
                                                 value={elapsed}
                                                 onSlidingStart={() => { isSeekingRef.current = true; }}
-                                                onSlidingComplete={(value: number) => {
-                                                    console.log(`⏩ Seek to ${value}s / ${mediaDuration}s`);
-                                                    callService('media_player', 'media_seek', resolveTarget(livePlayer.entity_id), { seek_position: value });
-                                                    // Resume ticker after a short delay to let HA update
+                                                onSlidingComplete={async (value: number) => {
+                                                    const seekTarget = livePlayer.entity_id; // use original entity, not MASS
+                                                    console.log(`⏩ Seek: target=${seekTarget}, position=${Math.round(value)}s / ${Math.round(mediaDuration)}s`);
+                                                    try {
+                                                        await callService('media_player', 'media_seek', seekTarget, { seek_position: Math.round(value) });
+                                                    } catch (e) {
+                                                        console.warn('⏩ Seek failed:', e);
+                                                    }
+                                                    // Resume ticker after delay to let HA update
                                                     setTimeout(() => { isSeekingRef.current = false; }, 2000);
                                                 }}
                                                 minimumTrackTintColor={'#F59E0B'}
