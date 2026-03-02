@@ -134,7 +134,6 @@ export function FamilyLocations({ visible, onClose }: FamilyLocationsProps) {
 
     const updateMyLocation = async () => {
         if (!householdId || !user?.id) return;
-        setIsUpdating(true);
         try {
             const { status } = await Location.requestForegroundPermissionsAsync();
             if (status !== 'granted') {
@@ -174,9 +173,23 @@ export function FamilyLocations({ visible, onClose }: FamilyLocationsProps) {
 
             if (error) throw error;
             setIsSharingEnabled(true);
-            loadLocations();
         } catch (e: any) {
             Alert.alert('Fehler', e.message);
+        }
+    };
+
+    const updateAllLocations = async () => {
+        if (!householdId) return;
+        setIsUpdating(true);
+        try {
+            // Update my own location first (if sharing is enabled)
+            if (isSharingEnabled && user?.id) {
+                await updateMyLocation();
+            }
+            // Then reload all family member locations from DB
+            await loadLocations();
+        } catch (e: any) {
+            console.error('Error updating locations:', e);
         } finally {
             setIsUpdating(false);
         }
@@ -315,22 +328,20 @@ export function FamilyLocations({ visible, onClose }: FamilyLocationsProps) {
                         </Pressable>
                     </View>
 
-                    {isSharingEnabled && (
-                        <Pressable
-                            style={[styles.updateBtn, { backgroundColor: colors.accent }]}
-                            onPress={updateMyLocation}
-                            disabled={isUpdating}
-                        >
-                            {isUpdating ? (
-                                <ActivityIndicator size="small" color="#fff" />
-                            ) : (
-                                <>
-                                    <RefreshCw size={16} color="#fff" />
-                                    <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Standort aktualisieren</Text>
-                                </>
-                            )}
-                        </Pressable>
-                    )}
+                    <Pressable
+                        style={[styles.updateBtn, { backgroundColor: colors.accent }]}
+                        onPress={updateAllLocations}
+                        disabled={isUpdating}
+                    >
+                        {isUpdating ? (
+                            <ActivityIndicator size="small" color="#fff" />
+                        ) : (
+                            <>
+                                <RefreshCw size={16} color="#fff" />
+                                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Alle Standorte aktualisieren</Text>
+                            </>
+                        )}
+                    </Pressable>
 
                     {/* Family Members Locations */}
                     <Text style={[styles.sectionTitle, { color: colors.text, marginTop: 16 }]}>👨‍👩‍👧‍👦 Familie</Text>

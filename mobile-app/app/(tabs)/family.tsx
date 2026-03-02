@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, Dimensions, Animated } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, useWindowDimensions, Animated, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -28,9 +28,6 @@ import { FamilyLocations } from '../../components/FamilyLocations';
 import { FamilyDocuments } from '../../components/FamilyDocuments';
 import { FamilyCelebrations } from '../../components/FamilyCelebrations';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_WIDTH = (SCREEN_WIDTH - 48) / 2;
-
 type ModuleKey = 'calendar' | 'todos' | 'shopping' | 'pinboard' | 'meals' | 'rewards' | 'contacts' | 'routines' | 'packing' | 'countdowns' | 'weekly' | 'recipes' | 'locations' | 'documents' | 'celebrations';
 
 interface ModuleStats {
@@ -44,11 +41,27 @@ export default function FamilyScreen() {
     const { user, effectiveRole, impersonatedUserId } = useAuth();
     const { householdId } = useHousehold();
     const { isProUser, presentPaywall } = useSubscription();
+    const { width } = useWindowDimensions();
 
     const [activeModule, setActiveModule] = useState<ModuleKey | null>(null);
     const [stats, setStats] = useState<ModuleStats>({ todayEvents: 0, openTodos: 0, recentPins: 0 });
     const [fadeAnim] = useState(new Animated.Value(0));
     const [allowedModules, setAllowedModules] = useState<string[] | null>(null);
+
+    // Responsive breakpoints
+    const isDesktop = width >= 1024;
+    const isTablet = width >= 768;
+    const contentMaxWidth = 900;
+    const contentWidth = isDesktop ? Math.min(width, contentMaxWidth) : width;
+
+    // Dynamic card width: 2 columns on phone, 3 on tablet, 4 on desktop
+    const numColumns = isDesktop ? 4 : isTablet ? 3 : 2;
+    const horizontalPadding = 16;
+    const gap = 12;
+    const totalGaps = (numColumns - 1) * gap;
+    const totalPadding = horizontalPadding * 2;
+    const availableWidth = contentWidth - totalPadding - totalGaps;
+    const CARD_WIDTH = availableWidth / numColumns;
 
     useEffect(() => {
         Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start();
@@ -127,7 +140,6 @@ export default function FamilyScreen() {
     };
 
     // Friendly colors — one color per category
-    // Planung: warm blue | Familie: soft coral | Extras: gentle violet
     const PLAN_GRADIENT: [string, string] = ['#3B82F6', '#2563EB'];
     const PLAN_ICON = '#93C5FD';
     const FAMILY_GRADIENT: [string, string] = ['#F472B6', '#EC4899'];
@@ -232,7 +244,7 @@ export default function FamilyScreen() {
             <Pressable
                 key={mod.key}
                 style={({ pressed }) => [
-                    styles.moduleCard,
+                    { width: CARD_WIDTH, borderRadius: 20, overflow: 'hidden' as const },
                     { transform: [{ scale: pressed ? 0.96 : 1 }] }
                 ]}
                 onPress={() => handleModulePress(mod.key)}
@@ -267,69 +279,77 @@ export default function FamilyScreen() {
         <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
             <Animated.ScrollView
                 style={{ opacity: fadeAnim }}
-                contentContainerStyle={styles.scrollContent}
+                contentContainerStyle={[
+                    styles.scrollContent,
+                    isDesktop && { alignItems: 'center' as const },
+                ]}
                 showsVerticalScrollIndicator={false}
             >
-                {/* Header */}
-                <View style={styles.header}>
-                    <View>
-                        <Text style={[styles.greeting, { color: colors.subtext }]}>{getGreeting()} 👋</Text>
-                        <Text style={[styles.title, { color: colors.text }]}>Family Hub</Text>
+                <View style={[
+                    { width: '100%' },
+                    isDesktop && { maxWidth: contentMaxWidth },
+                ]}>
+                    {/* Header */}
+                    <View style={styles.header}>
+                        <View>
+                            <Text style={[styles.greeting, { color: colors.subtext }]}>{getGreeting()} 👋</Text>
+                            <Text style={[styles.title, { color: colors.text }]}>Family Hub</Text>
+                        </View>
                     </View>
+
+                    {/* Quick Summary */}
+                    <View style={[styles.summaryCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                        <View style={styles.summaryItem}>
+                            <Text style={[styles.summaryNumber, { color: colors.accent }]}>{stats.todayEvents}</Text>
+                            <Text style={[styles.summaryLabel, { color: colors.subtext }]}>Termine{'\n'}heute</Text>
+                        </View>
+                        <View style={[styles.summaryDivider, { backgroundColor: colors.border }]} />
+                        <View style={styles.summaryItem}>
+                            <Text style={[styles.summaryNumber, { color: colors.accent }]}>{stats.openTodos}</Text>
+                            <Text style={[styles.summaryLabel, { color: colors.subtext }]}>Offene{'\n'}Aufgaben</Text>
+                        </View>
+                        <View style={[styles.summaryDivider, { backgroundColor: colors.border }]} />
+                        <View style={styles.summaryItem}>
+                            <Text style={[styles.summaryNumber, { color: colors.accent }]}>{stats.recentPins}</Text>
+                            <Text style={[styles.summaryLabel, { color: colors.subtext }]}>Pinnwand{'\n'}Einträge</Text>
+                        </View>
+                    </View>
+
+                    {/* Planung & Organisation */}
+                    {MAIN_MODULES.some(m => isModuleAllowed(m.key)) && (<>
+                        <View style={styles.sectionHeader}>
+                            <View style={[styles.sectionDot, { backgroundColor: colors.accent }]} />
+                            <Text style={[styles.sectionTitle, { color: colors.text }]}>Planung</Text>
+                        </View>
+                        <View style={[styles.gridContainer, { gap }]}>
+                            {MAIN_MODULES.filter(m => isModuleAllowed(m.key)).map(renderModuleCard)}
+                        </View>
+                    </>)}
+
+                    {/* Familie & Motivation */}
+                    {FAMILY_MODULES.some(m => isModuleAllowed(m.key)) && (<>
+                        <View style={styles.sectionHeader}>
+                            <View style={[styles.sectionDot, { backgroundColor: colors.accent }]} />
+                            <Text style={[styles.sectionTitle, { color: colors.text }]}>Familie</Text>
+                        </View>
+                        <View style={[styles.gridContainer, { gap }]}>
+                            {FAMILY_MODULES.filter(m => isModuleAllowed(m.key)).map(renderModuleCard)}
+                        </View>
+                    </>)}
+
+                    {/* Tools & Extras */}
+                    {UTILITY_MODULES.some(m => isModuleAllowed(m.key)) && (<>
+                        <View style={styles.sectionHeader}>
+                            <View style={[styles.sectionDot, { backgroundColor: colors.accent }]} />
+                            <Text style={[styles.sectionTitle, { color: colors.text }]}>Extras</Text>
+                        </View>
+                        <View style={[styles.gridContainer, { gap }]}>
+                            {UTILITY_MODULES.filter(m => isModuleAllowed(m.key)).map(renderModuleCard)}
+                        </View>
+                    </>)}
+
+                    <View style={{ height: 20 }} />
                 </View>
-
-                {/* Quick Summary */}
-                <View style={[styles.summaryCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                    <View style={styles.summaryItem}>
-                        <Text style={[styles.summaryNumber, { color: colors.accent }]}>{stats.todayEvents}</Text>
-                        <Text style={[styles.summaryLabel, { color: colors.subtext }]}>Termine{'\n'}heute</Text>
-                    </View>
-                    <View style={[styles.summaryDivider, { backgroundColor: colors.border }]} />
-                    <View style={styles.summaryItem}>
-                        <Text style={[styles.summaryNumber, { color: colors.accent }]}>{stats.openTodos}</Text>
-                        <Text style={[styles.summaryLabel, { color: colors.subtext }]}>Offene{'\n'}Aufgaben</Text>
-                    </View>
-                    <View style={[styles.summaryDivider, { backgroundColor: colors.border }]} />
-                    <View style={styles.summaryItem}>
-                        <Text style={[styles.summaryNumber, { color: colors.accent }]}>{stats.recentPins}</Text>
-                        <Text style={[styles.summaryLabel, { color: colors.subtext }]}>Pinnwand{'\n'}Einträge</Text>
-                    </View>
-                </View>
-
-                {/* Planung & Organisation */}
-                {MAIN_MODULES.some(m => isModuleAllowed(m.key)) && (<>
-                    <View style={styles.sectionHeader}>
-                        <View style={[styles.sectionDot, { backgroundColor: colors.accent }]} />
-                        <Text style={[styles.sectionTitle, { color: colors.text }]}>Planung</Text>
-                    </View>
-                    <View style={styles.gridContainer}>
-                        {MAIN_MODULES.filter(m => isModuleAllowed(m.key)).map(renderModuleCard)}
-                    </View>
-                </>)}
-
-                {/* Familie & Motivation */}
-                {FAMILY_MODULES.some(m => isModuleAllowed(m.key)) && (<>
-                    <View style={styles.sectionHeader}>
-                        <View style={[styles.sectionDot, { backgroundColor: colors.accent }]} />
-                        <Text style={[styles.sectionTitle, { color: colors.text }]}>Familie</Text>
-                    </View>
-                    <View style={styles.gridContainer}>
-                        {FAMILY_MODULES.filter(m => isModuleAllowed(m.key)).map(renderModuleCard)}
-                    </View>
-                </>)}
-
-                {/* Tools & Extras */}
-                {UTILITY_MODULES.some(m => isModuleAllowed(m.key)) && (<>
-                    <View style={styles.sectionHeader}>
-                        <View style={[styles.sectionDot, { backgroundColor: colors.accent }]} />
-                        <Text style={[styles.sectionTitle, { color: colors.text }]}>Extras</Text>
-                    </View>
-                    <View style={styles.gridContainer}>
-                        {UTILITY_MODULES.filter(m => isModuleAllowed(m.key)).map(renderModuleCard)}
-                    </View>
-                </>)}
-
-                <View style={{ height: 20 }} />
             </Animated.ScrollView>
 
             {/* Module Modals */}
@@ -365,10 +385,6 @@ const styles = StyleSheet.create({
     },
     greeting: { fontSize: 14, fontWeight: '500', marginBottom: 2, letterSpacing: 0.2 },
     title: { fontSize: 32, fontWeight: '800', letterSpacing: -0.8 },
-    avatarCircle: {
-        width: 46, height: 46, borderRadius: 23,
-        justifyContent: 'center', alignItems: 'center',
-    },
 
     // Summary card
     summaryCard: {
@@ -398,16 +414,10 @@ const styles = StyleSheet.create({
     gridContainer: {
         flexDirection: 'row',
         flexWrap: 'wrap',
-        gap: 12,
         marginBottom: 12,
     },
 
-    // Module card
-    moduleCard: {
-        width: CARD_WIDTH,
-        borderRadius: 20,
-        overflow: 'hidden',
-    },
+    // Module card gradient
     moduleGradient: {
         padding: 16,
         height: 120,

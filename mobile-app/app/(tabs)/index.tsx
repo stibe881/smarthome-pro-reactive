@@ -1345,7 +1345,7 @@ export default function Dashboard() {
 
             <ScrollView
                 style={[styles.scrollView, { backgroundColor: 'transparent' }]}
-                contentContainerStyle={[styles.scrollContent, { paddingHorizontal: isTablet ? 24 : 16 }]}
+                contentContainerStyle={[styles.scrollContent, { paddingHorizontal: isTablet ? 24 : 16, maxWidth: width >= 1024 ? 1100 : undefined, alignSelf: width >= 1024 ? 'center' as const : undefined, width: width >= 1024 ? '100%' as any : undefined }]}
                 showsVerticalScrollIndicator={false}
             >
                 {/* 1. Homescreen Countdowns and Media Player (TOP) */}

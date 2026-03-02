@@ -11,6 +11,33 @@ import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { GuestPermissionsModal } from './GuestPermissionsModal';
 
+// Platform-aware alert helpers (Alert.alert doesn't work on web)
+const platformAlert = (title: string, msg: string) => {
+    Platform.OS === 'web' ? window.alert(`${title}\n${msg}`) : Alert.alert(title, msg);
+};
+
+const platformConfirm = (title: string, msg: string, onOk: () => void) => {
+    if (Platform.OS === 'web') {
+        if (window.confirm(`${title}\n${msg}`)) onOk();
+    } else {
+        Alert.alert(title, msg, [
+            { text: 'Abbrechen', style: 'cancel' },
+            { text: 'OK', onPress: onOk },
+        ]);
+    }
+};
+
+const platformConfirmDestructive = (title: string, msg: string, actionLabel: string, onOk: () => void) => {
+    if (Platform.OS === 'web') {
+        if (window.confirm(`${title}\n${msg}`)) onOk();
+    } else {
+        Alert.alert(title, msg, [
+            { text: 'Abbrechen', style: 'cancel' },
+            { text: actionLabel, style: 'destructive', onPress: onOk },
+        ]);
+    }
+};
+
 interface FamilyMember {
     id: string;
     user_id: string;
@@ -84,6 +111,7 @@ export const FamilyManagement = ({ colors, onClose }: FamilyManagementProps) => 
     const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
     const [showGuestPermissions, setShowGuestPermissions] = useState(false);
     const [dismissingForImpersonate, setDismissingForImpersonate] = useState(false);
+    const [editDisplayName, setEditDisplayName] = useState('');
 
     useEffect(() => {
         loadFamilyData();
@@ -129,7 +157,7 @@ export const FamilyManagement = ({ colors, onClose }: FamilyManagementProps) => 
 
     const handleAddChild = async () => {
         if (!childName.trim()) {
-            Alert.alert('Fehler', 'Bitte einen Namen eingeben.');
+            platformAlert('Fehler', 'Bitte einen Namen eingeben.');
             return;
         }
         setIsAddingChild(true);
@@ -142,7 +170,7 @@ export const FamilyManagement = ({ colors, onClose }: FamilyManagementProps) => 
                 .single();
 
             if (!myMember?.household_id) {
-                Alert.alert('Fehler', 'Kein Haushalt gefunden.');
+                platformAlert('Fehler', 'Kein Haushalt gefunden.');
                 return;
             }
 
@@ -159,16 +187,16 @@ export const FamilyManagement = ({ colors, onClose }: FamilyManagementProps) => 
 
             if (error) {
                 console.error('Error adding child:', error);
-                Alert.alert('Fehler', error.message);
+                platformAlert('Fehler', error.message);
                 return;
             }
 
-            Alert.alert('Erfolgreich', `${childName.trim()} wurde hinzugefügt.`);
+            platformAlert('Erfolgreich', `${childName.trim()} wurde hinzugefügt.`);
             setChildName('');
             setShowAddChildModal(false);
             loadFamilyData();
         } catch (e: any) {
-            Alert.alert('Fehler', e?.message || 'Unbekannter Fehler');
+            platformAlert('Fehler', e?.message || 'Unbekannter Fehler');
         } finally {
             setIsAddingChild(false);
         }
@@ -176,7 +204,7 @@ export const FamilyManagement = ({ colors, onClose }: FamilyManagementProps) => 
 
     const handleInvite = async () => {
         if (!inviteEmail.trim() || invitePassword.length < 6) {
-            Alert.alert('Fehler', 'Ungültige Eingaben');
+            platformAlert('Fehler', 'Ungültige Eingaben');
             return;
         }
 
@@ -184,7 +212,7 @@ export const FamilyManagement = ({ colors, onClose }: FamilyManagementProps) => 
         try {
             console.log('[FamilyManagement] Invoking create-family-member...');
             const { data, error } = await supabase.functions.invoke('create-family-member', {
-                body: { email: inviteEmail.trim(), password: invitePassword, role: inviteRole, planner_access: invitePlannerAccess },
+                body: { email: inviteEmail.trim(), password: invitePassword, role: inviteRole, planner_access: invitePlannerAccess, display_name: inviteName.trim() || undefined },
             });
 
             console.log('[FamilyManagement] Response data:', JSON.stringify(data));
@@ -192,7 +220,6 @@ export const FamilyManagement = ({ colors, onClose }: FamilyManagementProps) => 
 
             if (error) {
                 const errorDetail = error?.message || 'Unbekannter Fehler';
-                // Try to read the response body for more details
                 let responseBody = '';
                 try {
                     if ((error as any)?.context?.body) {
@@ -202,25 +229,33 @@ export const FamilyManagement = ({ colors, onClose }: FamilyManagementProps) => 
                     }
                 } catch (e) { /* ignore */ }
                 console.log('[FamilyManagement] Error detail:', errorDetail, 'Body:', responseBody);
-                Alert.alert('Fehler', responseBody || errorDetail);
+                platformAlert('Fehler', responseBody || errorDetail);
                 return;
             }
 
             if (data && data.error) {
-                Alert.alert('Fehler', data.error);
+                platformAlert('Fehler', data.error);
                 return;
             }
 
-            Alert.alert('Erfolgreich', `${inviteEmail} wurde hinzugefügt.`);
+            platformAlert('Erfolgreich', `${inviteName.trim() || inviteEmail} wurde hinzugefügt.`);
+            // Save display_name if provided
+            if (inviteName.trim() && data?.user_id && householdId) {
+                await supabase.from('family_members')
+                    .update({ display_name: inviteName.trim() })
+                    .eq('household_id', householdId)
+                    .eq('user_id', data.user_id);
+            }
             setShowInviteModal(false);
             setInviteEmail('');
             setInvitePassword('');
+            setInviteName('');
             setInviteRole('member');
             setInvitePlannerAccess(true);
             loadFamilyData();
         } catch (error: any) {
             console.error('[FamilyManagement] Catch error:', error);
-            Alert.alert('Fehler', error?.message || 'Verbindungsfehler');
+            platformAlert('Fehler', error?.message || 'Verbindungsfehler');
         } finally {
             setIsInviting(false);
         }
@@ -228,16 +263,16 @@ export const FamilyManagement = ({ colors, onClose }: FamilyManagementProps) => 
 
     const handleResetPassword = async () => {
         if (!selectedMember || newMemberPassword.length < 6) {
-            Alert.alert('Fehler', 'Passwort muss mind. 6 Zeichen haben.');
+            platformAlert('Fehler', 'Passwort muss mind. 6 Zeichen haben.');
             return;
         }
         setIsAdminActionLoading(true);
         try {
             await resetMemberPassword(selectedMember.user_id || selectedMember.id, newMemberPassword);
-            Alert.alert('Erfolg', 'Passwort wurde zurückgesetzt. Der User muss es beim nächsten Login ändern.');
+            platformAlert('Erfolg', 'Passwort wurde zurückgesetzt. Der User muss es beim nächsten Login ändern.');
             setNewMemberPassword('');
         } catch (e: any) {
-            Alert.alert('Fehler', e.message);
+            platformAlert('Fehler', e.message);
         } finally {
             setIsAdminActionLoading(false);
         }
@@ -246,55 +281,49 @@ export const FamilyManagement = ({ colors, onClose }: FamilyManagementProps) => 
     const handleRemoveMember = async () => {
         if (!selectedMember) return;
         const memberLabel = selectedMember.display_name || selectedMember.email || 'Mitglied';
-        Alert.alert(
+        platformConfirmDestructive(
             'Mitglied endgültig entfernen',
             `"${memberLabel}" wird aus der Familie entfernt und alle zugehörigen Daten (Aufgaben, Punkte, Verlauf) werden gelöscht. Fortfahren?`,
-            [
-                { text: 'Abbrechen', style: 'cancel' },
-                {
-                    text: 'Endgültig entfernen',
-                    style: 'destructive',
-                    onPress: async () => {
-                        setIsAdminActionLoading(true);
-                        try {
-                            const memberId = selectedMember.id;
-                            const memberName = selectedMember.display_name || selectedMember.email?.split('@')[0] || '';
+            'Endgültig entfernen',
+            async () => {
+                setIsAdminActionLoading(true);
+                try {
+                    const memberId = selectedMember.id;
+                    const memberName = selectedMember.display_name || selectedMember.email?.split('@')[0] || '';
 
-                            // 1. Clean up todos assigned to this member
-                            await supabase.from('family_todos')
-                                .update({ assigned_to: null })
-                                .eq('assigned_to', memberId);
+                    // 1. Clean up todos assigned to this member
+                    await supabase.from('family_todos')
+                        .update({ assigned_to: null })
+                        .eq('assigned_to', memberId);
 
-                            // 2. Clean up reward_points
-                            if (householdId && memberName) {
-                                await supabase.from('reward_points')
-                                    .delete()
-                                    .eq('household_id', householdId)
-                                    .eq('member_name', memberName);
+                    // 2. Clean up reward_points
+                    if (householdId && memberName) {
+                        await supabase.from('reward_points')
+                            .delete()
+                            .eq('household_id', householdId)
+                            .eq('member_name', memberName);
 
-                                // 3. Clean up reward_history
-                                await supabase.from('reward_history')
-                                    .delete()
-                                    .eq('household_id', householdId)
-                                    .eq('member_name', memberName);
-                            }
-
-                            // 4. Delete the family member itself
-                            const { error } = await supabase.from('family_members')
-                                .delete()
-                                .eq('id', memberId);
-                            if (error) throw error;
-
-                            loadFamilyData();
-                            setShowAdminModal(false);
-                        } catch (e: any) {
-                            Alert.alert('Fehler', e.message);
-                        } finally {
-                            setIsAdminActionLoading(false);
-                        }
+                        // 3. Clean up reward_history
+                        await supabase.from('reward_history')
+                            .delete()
+                            .eq('household_id', householdId)
+                            .eq('member_name', memberName);
                     }
+
+                    // 4. Delete the family member itself
+                    const { error } = await supabase.from('family_members')
+                        .delete()
+                        .eq('id', memberId);
+                    if (error) throw error;
+
+                    loadFamilyData();
+                    setShowAdminModal(false);
+                } catch (e: any) {
+                    platformAlert('Fehler', e.message);
+                } finally {
+                    setIsAdminActionLoading(false);
                 }
-            ]
+            }
         );
     };
 
@@ -304,10 +333,9 @@ export const FamilyManagement = ({ colors, onClose }: FamilyManagementProps) => 
         try {
             await toggleMemberAccess(selectedMember.user_id || selectedMember.id, active);
             loadFamilyData();
-            // Update local state for immediate feedback in the modal
             setSelectedMember({ ...selectedMember, is_active: active });
         } catch (e: any) {
-            Alert.alert('Fehler', e.message);
+            platformAlert('Fehler', e.message);
         } finally {
             setIsAdminActionLoading(false);
         }
@@ -315,21 +343,95 @@ export const FamilyManagement = ({ colors, onClose }: FamilyManagementProps) => 
 
     const handleTogglePlannerAccess = async (enabled: boolean) => {
         if (!selectedMember) return;
-        try {
-            await supabase
-                .from('family_members')
-                .update({ planner_access: enabled })
-                .eq('user_id', selectedMember.user_id);
-            setSelectedMember({ ...selectedMember, planner_access: enabled });
-            loadFamilyData();
-        } catch (e: any) {
-            Alert.alert('Fehler', e.message);
+        const memberName = selectedMember.display_name || selectedMember.email?.split('@')[0] || '';
+
+        if (!enabled) {
+            // Show warning before deactivating
+            platformConfirmDestructive(
+                'Familienplaner deaktivieren',
+                `Wenn du den Familienplaner für "${memberName}" deaktivierst, werden auch alle Belohnungspunkte und der Verlauf dieses Mitglieds gelöscht. Fortfahren?`,
+                'Deaktivieren',
+                async () => {
+                    try {
+                        // 1. Remove reward data
+                        if (householdId && memberName) {
+                            await supabase.from('reward_points')
+                                .delete()
+                                .eq('household_id', householdId)
+                                .eq('member_name', memberName);
+                            await supabase.from('reward_history')
+                                .delete()
+                                .eq('household_id', householdId)
+                                .eq('member_name', memberName);
+                        }
+                        // 2. Disable planner access
+                        await supabase
+                            .from('family_members')
+                            .update({ planner_access: false })
+                            .eq('user_id', selectedMember.user_id);
+                        setSelectedMember({ ...selectedMember, planner_access: false });
+                        loadFamilyData();
+                    } catch (e: any) {
+                        platformAlert('Fehler', e.message);
+                    }
+                }
+            );
+        } else {
+            // Enabling — no warning needed
+            try {
+                await supabase
+                    .from('family_members')
+                    .update({ planner_access: true })
+                    .eq('user_id', selectedMember.user_id);
+                setSelectedMember({ ...selectedMember, planner_access: true });
+                loadFamilyData();
+            } catch (e: any) {
+                platformAlert('Fehler', e.message);
+            }
         }
     };
 
     const handleToggleModule = async (moduleKey: string, enabled: boolean) => {
         if (!selectedMember) return;
         const currentModules = selectedMember.allowed_modules || ALL_FAMILY_MODULES.map(m => m.key);
+        const memberName = selectedMember.display_name || selectedMember.email?.split('@')[0] || '';
+
+        // Special handling: warn when disabling 'rewards'
+        if (moduleKey === 'rewards' && !enabled) {
+            platformConfirmDestructive(
+                'Belohnungen deaktivieren',
+                `Alle Punkte und der Verlauf von "${memberName}" werden gelöscht. Fortfahren?`,
+                'Deaktivieren',
+                async () => {
+                    try {
+                        // 1. Remove reward data
+                        if (householdId && memberName) {
+                            await supabase.from('reward_points')
+                                .delete()
+                                .eq('household_id', householdId)
+                                .eq('member_name', memberName);
+                            await supabase.from('reward_history')
+                                .delete()
+                                .eq('household_id', householdId)
+                                .eq('member_name', memberName);
+                        }
+                        // 2. Update modules
+                        const newModules = currentModules.filter(m => m !== moduleKey);
+                        await supabase
+                            .from('family_members')
+                            .update({ allowed_modules: newModules })
+                            .eq('user_id', selectedMember.user_id);
+                        setSelectedMember({ ...selectedMember, allowed_modules: newModules });
+                        loadFamilyData();
+                    } catch (e: any) {
+                        platformAlert('Fehler', e.message);
+                    }
+                }
+            );
+            return;
+        }
+
+        // Normal toggle for other modules
         const newModules = enabled
             ? [...currentModules, moduleKey]
             : currentModules.filter(m => m !== moduleKey);
@@ -341,7 +443,7 @@ export const FamilyManagement = ({ colors, onClose }: FamilyManagementProps) => 
             setSelectedMember({ ...selectedMember, allowed_modules: newModules });
             loadFamilyData();
         } catch (e: any) {
-            Alert.alert('Fehler', e.message);
+            platformAlert('Fehler', e.message);
         }
     };
 
@@ -402,12 +504,12 @@ export const FamilyManagement = ({ colors, onClose }: FamilyManagementProps) => 
 
             if (dbError) throw dbError;
 
-            Alert.alert('Erfolg', 'Profilbild aktualisiert.');
+            platformAlert('Erfolg', 'Profilbild aktualisiert.');
             setSelectedMember({ ...selectedMember, avatar_url: fileName });
             loadFamilyData();
         } catch (e: any) {
             console.error('Avatar upload error:', e);
-            Alert.alert('Fehler', e.message || 'Upload fehlgeschlagen.');
+            platformAlert('Fehler', e.message || 'Upload fehlgeschlagen.');
         } finally {
             setIsUploadingAvatar(false);
         }
@@ -425,8 +527,9 @@ export const FamilyManagement = ({ colors, onClose }: FamilyManagementProps) => 
                         key={member.id}
                         style={[styles.memberCard, { backgroundColor: colors.card, opacity: member.is_active === false ? 0.6 : 1 }]}
                         onPress={() => {
-                            if (userRole === 'admin' && member.email !== user?.email) {
+                            if (userRole === 'admin') {
                                 setSelectedMember(member);
+                                setEditDisplayName(member.display_name || '');
                                 setShowAdminModal(true);
                             }
                         }}
@@ -502,8 +605,46 @@ export const FamilyManagement = ({ colors, onClose }: FamilyManagementProps) => 
                                         {isUploadingAvatar ? <ActivityIndicator size="small" color="#fff" /> : <Camera size={14} color="#fff" />}
                                     </View>
                                 </Pressable>
-                                <Text style={[styles.selectedEmail, { color: colors.text }]}>{selectedMember.email}</Text>
+                                <Text style={[styles.selectedEmail, { color: colors.text }]}>{selectedMember.display_name || selectedMember.email}</Text>
                                 <Text style={[styles.memberRole, { color: colors.subtext }]}>{selectedMember.role === 'admin' ? 'Administrator' : selectedMember.role === 'guest' ? 'Gast' : 'Familienmitglied'}</Text>
+                            </View>
+
+                            {/* Display Name Editor */}
+                            <View style={[styles.adminSection, { borderTopColor: colors.border }]}>
+                                <Text style={[styles.label, { color: colors.subtext }]}>Anzeigename</Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
+                                    <TextInput
+                                        style={[styles.input, { flex: 1, color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
+                                        value={editDisplayName}
+                                        onChangeText={setEditDisplayName}
+                                        placeholder="Anzeigename eingeben"
+                                        placeholderTextColor={colors.subtext}
+                                    />
+                                    <Pressable
+                                        onPress={async () => {
+                                            if (!editDisplayName.trim()) {
+                                                platformAlert('Fehler', 'Bitte einen Namen eingeben.');
+                                                return;
+                                            }
+                                            try {
+                                                const updateFilter = selectedMember.user_id
+                                                    ? { user_id: selectedMember.user_id }
+                                                    : { id: selectedMember.id };
+                                                await supabase.from('family_members')
+                                                    .update({ display_name: editDisplayName.trim() })
+                                                    .match(updateFilter);
+                                                setSelectedMember({ ...selectedMember, display_name: editDisplayName.trim() });
+                                                loadFamilyData();
+                                                platformAlert('Gespeichert', 'Anzeigename wurde aktualisiert.');
+                                            } catch (e: any) {
+                                                platformAlert('Fehler', e.message);
+                                            }
+                                        }}
+                                        style={[styles.actionBtn, { backgroundColor: colors.accent, paddingHorizontal: 16 }]}
+                                    >
+                                        <Text style={styles.actionBtnText}>Speichern</Text>
+                                    </Pressable>
+                                </View>
                             </View>
 
                             <View style={[styles.adminSection, { borderTopColor: colors.border }]}>

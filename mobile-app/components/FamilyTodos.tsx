@@ -29,6 +29,8 @@ interface Todo {
     recurrence: string | null;
     category?: string | null;
     description?: string | null;
+    reminder_enabled?: boolean;
+    reminder_interval?: string | null;
     created_at: string;
 }
 
@@ -218,6 +220,9 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
     const [editReminderWeekday, setEditReminderWeekday] = useState(1);
     const [editReminderDay, setEditReminderDay] = useState(1);
     const [showEditTimePicker, setShowEditTimePicker] = useState(false);
+    const [editEnableReminder, setEditEnableReminder] = useState(false);
+    const [editReminderInterval, setEditReminderInterval] = useState('1h');
+    const [showEditReminderPicker, setShowEditReminderPicker] = useState(false);
 
     const loadTodos = useCallback(async () => {
         if (!householdId) return;
@@ -280,7 +285,7 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
     };
 
     const handleReminderToggle = (val: boolean) => {
-        if (val && !checkNotificationPermission()) {
+        if (val && (Platform.OS as string) !== 'web' && !checkNotificationPermission()) {
             Alert.alert(
                 'Benachrichtigungen deaktiviert',
                 'Du hast Aufgaben-Erinnerungen in den Einstellungen deaktiviert. Bitte aktiviere sie unter Einstellungen > Benachrichtigungen > Familienplaner.',
@@ -377,6 +382,8 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
                 priority: newPriority,
                 recurrence: null,
                 due_date: newDueDate,
+                reminder_enabled: enableReminder,
+                reminder_interval: enableReminder ? reminderInterval : null,
             });
             if (error) throw error;
             if (enableReminder) await scheduleTaskReminder(newTitle.trim());
@@ -387,7 +394,7 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
             setShowAddModal(false);
             loadTodos();
         } catch (e: any) {
-            Alert.alert('Fehler', e.message);
+            Platform.OS === 'web' ? window.alert(e.message) : Alert.alert('Fehler', e.message);
         } finally {
             setIsAdding(false);
         }
@@ -414,7 +421,7 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
             setShowRecurringAdd(false); setRecurringStep('quick');
             loadTodos();
         } catch (e: any) {
-            Alert.alert('Fehler', e.message);
+            Platform.OS === 'web' ? window.alert(e.message) : Alert.alert('Fehler', e.message);
         } finally {
             setIsAddingRecurring(false);
         }
@@ -448,14 +455,20 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
                 });
                 loadTodos();
             }
-        } catch (e: any) { Alert.alert('Fehler', e.message); }
+        } catch (e: any) { Platform.OS === 'web' ? window.alert(e.message) : Alert.alert('Fehler', e.message); }
     };
 
     const handleDelete = (todo: Todo) => {
-        Alert.alert('Löschen', `"${todo.title}" wirklich löschen?`, [
-            { text: 'Abbrechen', style: 'cancel' },
-            { text: 'Löschen', style: 'destructive', onPress: async () => { await supabase.from('family_todos').delete().eq('id', todo.id); loadTodos(); } }
-        ]);
+        if (Platform.OS === 'web') {
+            if (window.confirm(`"${todo.title}" wirklich löschen?`)) {
+                supabase.from('family_todos').delete().eq('id', todo.id).then(() => loadTodos());
+            }
+        } else {
+            Alert.alert('Löschen', `"${todo.title}" wirklich löschen?`, [
+                { text: 'Abbrechen', style: 'cancel' },
+                { text: 'Löschen', style: 'destructive', onPress: async () => { await supabase.from('family_todos').delete().eq('id', todo.id); loadTodos(); } }
+            ]);
+        }
     };
 
     const openEdit = (todo: Todo) => {
@@ -467,6 +480,9 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
         setEditReminder(false); setEditReminderHour(8); setEditReminderMinute(0);
         setEditReminderWeekday(new Date().getDay() === 0 ? 7 : new Date().getDay());
         setEditReminderDay(new Date().getDate()); setShowEditTimePicker(false);
+        setShowEditReminderPicker(false);
+        setEditEnableReminder(todo.reminder_enabled || false);
+        setEditReminderInterval(todo.reminder_interval || '1h');
     };
 
     const handleSaveEdit = async () => {
@@ -483,6 +499,8 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
                     due_date: editDueDate,
                     category: editCategory,
                     description: editDescription.trim() || null,
+                    reminder_enabled: editEnableReminder,
+                    reminder_interval: editEnableReminder ? editReminderInterval : null,
                 })
                 .eq('id', editTodo.id);
             if (error) throw error;
@@ -508,8 +526,23 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
                     }
                 } catch (e) { console.warn('Failed to schedule edit reminder:', e); }
             }
+            // Schedule regular task reminder if enabled during edit
+            if (editEnableReminder && editDueDate && (!editRecurrence || editRecurrence === 'none')) {
+                try {
+                    const interval = REMINDER_INTERVALS.find(r => r.key === editReminderInterval);
+                    if (interval) {
+                        const reminderTime = new Date(new Date(editDueDate).getTime() - interval.ms);
+                        if (reminderTime > new Date()) {
+                            await Notifications.scheduleNotificationAsync({
+                                content: { title: '📋 Aufgabe fällig', body: `"${editTitle.trim()}" ist bald fällig!`, sound: 'default' },
+                                trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: reminderTime },
+                            });
+                        }
+                    }
+                } catch (e) { console.warn('Failed to schedule edit task reminder:', e); }
+            }
             setEditTodo(null); loadTodos();
-        } catch (e: any) { Alert.alert('Fehler', e.message); } finally { setIsSavingEdit(false); }
+        } catch (e: any) { Platform.OS === 'web' ? window.alert(e.message) : Alert.alert('Fehler', e.message); } finally { setIsSavingEdit(false); }
     };
 
     const getMemberName = (memberId: string | null) => {
@@ -550,10 +583,6 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
                                 {activeTab === 'tasks' ? `${openCount} offene Aufgaben` : `${recurringCount} aktiv`}
                             </Text>
                         </View>
-                        <Pressable onPress={onClose} style={[styles.calendarBtn, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                            <Calendar size={18} color={colors.subtext} />
-                            <Text style={{ color: colors.subtext, fontSize: 10, marginLeft: 2 }}>▾</Text>
-                        </Pressable>
                     </View>
 
                     {/* Segmented Tab Bar */}
@@ -722,66 +751,98 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
                                     <Text style={{ color: colors.subtext, fontSize: 12, fontWeight: '600', marginTop: 8, marginBottom: 4 }}>
                                         {showDatePicker === 'date' ? 'Datum wählen' : 'Uhrzeit wählen'}
                                     </Text>
-                                    <DateTimePicker
-                                        value={newDueDate ? new Date(newDueDate) : new Date()}
-                                        mode={showDatePicker === 'date' ? 'date' : 'time'}
-                                        display={Platform.OS === 'ios' ? 'inline' : 'default'}
-                                        minimumDate={showDatePicker === 'date' ? new Date() : undefined}
-                                        is24Hour={true}
-                                        onChange={(event: any, date?: Date) => {
-                                            if (Platform.OS === 'android') {
-                                                if (event.type === 'dismissed') { setShowDatePicker(false); return; }
-                                                if (date) {
-                                                    if (showDatePicker === 'date') {
-                                                        const d = new Date(date);
-                                                        const now = new Date();
-                                                        d.setHours(now.getHours(), now.getMinutes(), 0, 0);
-                                                        setNewDueDate(d.toISOString());
-                                                        setShowDatePicker('time');
-                                                    } else {
-                                                        const prev = newDueDate ? new Date(newDueDate) : new Date();
-                                                        prev.setHours(date.getHours(), date.getMinutes(), 0, 0);
-                                                        setNewDueDate(prev.toISOString());
-                                                        setShowDatePicker(false);
-                                                    }
-                                                }
-                                            } else {
-                                                if (date) {
-                                                    if (showDatePicker === 'date') {
-                                                        const d = new Date(date);
-                                                        const now = new Date();
-                                                        d.setHours(now.getHours(), now.getMinutes(), 0, 0);
-                                                        setNewDueDate(d.toISOString());
-                                                    } else {
-                                                        const prev = newDueDate ? new Date(newDueDate) : new Date();
-                                                        prev.setHours(date.getHours(), date.getMinutes(), 0, 0);
-                                                        setNewDueDate(prev.toISOString());
-                                                    }
-                                                }
-                                            }
-                                        }}
-                                        accentColor={colors.accent}
-                                        themeVariant="dark"
-                                    />
-                                    {Platform.OS === 'ios' && (
-                                        <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 16, paddingVertical: 4 }}>
-                                            {showDatePicker === 'time' && (
-                                                <Pressable onPress={() => setShowDatePicker('date')}>
-                                                    <Text style={{ color: colors.subtext, fontWeight: '600', fontSize: 14 }}>Zurück</Text>
-                                                </Pressable>
-                                            )}
-                                            <Pressable onPress={() => {
-                                                if (showDatePicker === 'date') {
-                                                    setShowDatePicker('time');
-                                                } else {
-                                                    setShowDatePicker(false);
-                                                }
-                                            }}>
-                                                <Text style={{ color: colors.accent, fontWeight: '600', fontSize: 14 }}>
-                                                    {showDatePicker === 'date' ? 'Weiter zur Uhrzeit' : 'Fertig'}
-                                                </Text>
+                                    {Platform.OS === 'web' ? (
+                                        <View style={{ gap: 10, paddingVertical: 8 }}>
+                                            <input
+                                                type="date"
+                                                value={newDueDate ? new Date(newDueDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]}
+                                                onChange={(e: any) => {
+                                                    const d = new Date(e.target.value);
+                                                    const prev = newDueDate ? new Date(newDueDate) : new Date();
+                                                    d.setHours(prev.getHours(), prev.getMinutes(), 0, 0);
+                                                    setNewDueDate(d.toISOString());
+                                                }}
+                                                style={{ padding: 12, borderRadius: 10, border: `1px solid ${colors.border}`, backgroundColor: colors.card, color: colors.text, fontSize: 15, width: '100%' } as any}
+                                            />
+                                            <input
+                                                type="time"
+                                                value={newDueDate ? `${new Date(newDueDate).getHours().toString().padStart(2, '0')}:${new Date(newDueDate).getMinutes().toString().padStart(2, '0')}` : '08:00'}
+                                                onChange={(e: any) => {
+                                                    const [h, m] = e.target.value.split(':').map(Number);
+                                                    const prev = newDueDate ? new Date(newDueDate) : new Date();
+                                                    prev.setHours(h, m, 0, 0);
+                                                    setNewDueDate(prev.toISOString());
+                                                }}
+                                                style={{ padding: 12, borderRadius: 10, border: `1px solid ${colors.border}`, backgroundColor: colors.card, color: colors.text, fontSize: 15, width: '100%' } as any}
+                                            />
+                                            <Pressable onPress={() => setShowDatePicker(false)}>
+                                                <Text style={{ color: colors.accent, fontWeight: '600', fontSize: 14, textAlign: 'right' }}>Fertig</Text>
                                             </Pressable>
                                         </View>
+                                    ) : (
+                                        <>
+                                            <DateTimePicker
+                                                value={newDueDate ? new Date(newDueDate) : new Date()}
+                                                mode={showDatePicker === 'date' ? 'date' : 'time'}
+                                                display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                                                minimumDate={showDatePicker === 'date' ? new Date() : undefined}
+                                                is24Hour={true}
+                                                onChange={(event: any, date?: Date) => {
+                                                    if (Platform.OS === 'android') {
+                                                        if (event.type === 'dismissed') { setShowDatePicker(false); return; }
+                                                        if (date) {
+                                                            if (showDatePicker === 'date') {
+                                                                const d = new Date(date);
+                                                                const now = new Date();
+                                                                d.setHours(now.getHours(), now.getMinutes(), 0, 0);
+                                                                setNewDueDate(d.toISOString());
+                                                                setShowDatePicker('time');
+                                                            } else {
+                                                                const prev = newDueDate ? new Date(newDueDate) : new Date();
+                                                                prev.setHours(date.getHours(), date.getMinutes(), 0, 0);
+                                                                setNewDueDate(prev.toISOString());
+                                                                setShowDatePicker(false);
+                                                            }
+                                                        }
+                                                    } else {
+                                                        if (date) {
+                                                            if (showDatePicker === 'date') {
+                                                                const d = new Date(date);
+                                                                const now = new Date();
+                                                                d.setHours(now.getHours(), now.getMinutes(), 0, 0);
+                                                                setNewDueDate(d.toISOString());
+                                                            } else {
+                                                                const prev = newDueDate ? new Date(newDueDate) : new Date();
+                                                                prev.setHours(date.getHours(), date.getMinutes(), 0, 0);
+                                                                setNewDueDate(prev.toISOString());
+                                                            }
+                                                        }
+                                                    }
+                                                }}
+                                                accentColor={colors.accent}
+                                                themeVariant="dark"
+                                            />
+                                            {Platform.OS === 'ios' && (
+                                                <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 16, paddingVertical: 4 }}>
+                                                    {showDatePicker === 'time' && (
+                                                        <Pressable onPress={() => setShowDatePicker('date')}>
+                                                            <Text style={{ color: colors.subtext, fontWeight: '600', fontSize: 14 }}>Zurück</Text>
+                                                        </Pressable>
+                                                    )}
+                                                    <Pressable onPress={() => {
+                                                        if (showDatePicker === 'date') {
+                                                            setShowDatePicker('time');
+                                                        } else {
+                                                            setShowDatePicker(false);
+                                                        }
+                                                    }}>
+                                                        <Text style={{ color: colors.accent, fontWeight: '600', fontSize: 14 }}>
+                                                            {showDatePicker === 'date' ? 'Weiter zur Uhrzeit' : 'Fertig'}
+                                                        </Text>
+                                                    </Pressable>
+                                                </View>
+                                            )}
+                                        </>
                                     )}
                                 </>
                             )}
@@ -1039,7 +1100,7 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
                                         <Switch
                                             value={recurringReminder}
                                             onValueChange={(val) => {
-                                                if (val && !checkNotificationPermission()) {
+                                                if (val && (Platform.OS as string) !== 'web' && !checkNotificationPermission()) {
                                                     Alert.alert('Benachrichtigungen deaktiviert', 'Bitte aktiviere Aufgaben-Erinnerungen in den Einstellungen.', [
                                                         { text: 'OK', style: 'cancel' },
                                                         { text: 'Trotzdem aktivieren', onPress: () => setRecurringReminder(true) },
@@ -1088,21 +1149,36 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
                                                 <ChevronRight size={16} color={colors.subtext} />
                                             </Pressable>
                                             {showRecurringTimePicker && (
-                                                <DateTimePicker
-                                                    value={(() => { const d = new Date(); d.setHours(recurringReminderHour, recurringReminderMinute, 0, 0); return d; })()}
-                                                    mode="time"
-                                                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                                                    is24Hour={true}
-                                                    onChange={(event: any, date?: Date) => {
-                                                        if (Platform.OS === 'android') setShowRecurringTimePicker(false);
-                                                        if (date) {
-                                                            setRecurringReminderHour(date.getHours());
-                                                            setRecurringReminderMinute(date.getMinutes());
-                                                        }
-                                                    }}
-                                                    accentColor={colors.accent}
-                                                    themeVariant="dark"
-                                                />
+                                                (Platform.OS as string) === 'web' ? (
+                                                    <View style={{ paddingLeft: 30, paddingVertical: 8 }}>
+                                                        <input
+                                                            type="time"
+                                                            value={`${String(recurringReminderHour).padStart(2, '0')}:${String(recurringReminderMinute).padStart(2, '0')}`}
+                                                            onChange={(e: any) => {
+                                                                const [h, m] = e.target.value.split(':').map(Number);
+                                                                setRecurringReminderHour(h);
+                                                                setRecurringReminderMinute(m);
+                                                            }}
+                                                            style={{ padding: 12, borderRadius: 10, border: `1px solid ${colors.border}`, backgroundColor: colors.card, color: colors.text, fontSize: 15, width: '100%' } as any}
+                                                        />
+                                                    </View>
+                                                ) : (
+                                                    <DateTimePicker
+                                                        value={(() => { const d = new Date(); d.setHours(recurringReminderHour, recurringReminderMinute, 0, 0); return d; })()}
+                                                        mode="time"
+                                                        display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                                                        is24Hour={true}
+                                                        onChange={(event: any, date?: Date) => {
+                                                            if (Platform.OS === 'android') setShowRecurringTimePicker(false);
+                                                            if (date) {
+                                                                setRecurringReminderHour(date.getHours());
+                                                                setRecurringReminderMinute(date.getMinutes());
+                                                            }
+                                                        }}
+                                                        accentColor={colors.accent}
+                                                        themeVariant="dark"
+                                                    />
+                                                )
                                             )}
                                             <View style={[styles.warningBanner, { backgroundColor: colors.accent + '10' }]}>
                                                 <Text style={{ color: colors.accent, fontSize: 12, fontWeight: '600' }}>
@@ -1247,67 +1323,117 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
                                             <Text style={{ color: colors.subtext, fontSize: 12, fontWeight: '600', marginTop: 8, marginBottom: 4 }}>
                                                 {showEditDatePicker === 'date' ? 'Datum wählen' : 'Uhrzeit wählen'}
                                             </Text>
-                                            <DateTimePicker
-                                                value={editDueDate ? new Date(editDueDate) : new Date()}
-                                                mode={showEditDatePicker === 'date' ? 'date' : 'time'}
-                                                display={Platform.OS === 'ios' ? 'inline' : 'default'}
-                                                minimumDate={showEditDatePicker === 'date' ? new Date() : undefined}
-                                                is24Hour={true}
-                                                onChange={(event: any, date?: Date) => {
-                                                    if (Platform.OS === 'android') {
-                                                        if (event.type === 'dismissed') { setShowEditDatePicker(false); return; }
-                                                        if (date) {
-                                                            if (showEditDatePicker === 'date') {
-                                                                const d = new Date(date);
-                                                                const now = new Date();
-                                                                d.setHours(now.getHours(), now.getMinutes(), 0, 0);
-                                                                setEditDueDate(d.toISOString());
-                                                                setShowEditDatePicker('time');
-                                                            } else {
-                                                                const prev = editDueDate ? new Date(editDueDate) : new Date();
-                                                                prev.setHours(date.getHours(), date.getMinutes(), 0, 0);
-                                                                setEditDueDate(prev.toISOString());
-                                                                setShowEditDatePicker(false);
-                                                            }
-                                                        }
-                                                    } else {
-                                                        if (date) {
-                                                            if (showEditDatePicker === 'date') {
-                                                                const d = new Date(date);
-                                                                const now = new Date();
-                                                                d.setHours(now.getHours(), now.getMinutes(), 0, 0);
-                                                                setEditDueDate(d.toISOString());
-                                                            } else {
-                                                                const prev = editDueDate ? new Date(editDueDate) : new Date();
-                                                                prev.setHours(date.getHours(), date.getMinutes(), 0, 0);
-                                                                setEditDueDate(prev.toISOString());
-                                                            }
-                                                        }
-                                                    }
-                                                }}
-                                                accentColor={colors.accent}
-                                                themeVariant="dark"
-                                            />
-                                            {Platform.OS === 'ios' && (
-                                                <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 16, paddingVertical: 4 }}>
-                                                    {showEditDatePicker === 'time' && (
-                                                        <Pressable onPress={() => setShowEditDatePicker('date')}>
-                                                            <Text style={{ color: colors.subtext, fontWeight: '600', fontSize: 14 }}>Zurück</Text>
-                                                        </Pressable>
-                                                    )}
-                                                    <Pressable onPress={() => {
-                                                        if (showEditDatePicker === 'date') setShowEditDatePicker('time');
-                                                        else setShowEditDatePicker(false);
-                                                    }}>
-                                                        <Text style={{ color: colors.accent, fontWeight: '600', fontSize: 14 }}>
-                                                            {showEditDatePicker === 'date' ? 'Weiter zur Uhrzeit' : 'Fertig'}
-                                                        </Text>
+                                            {Platform.OS === 'web' ? (
+                                                <View style={{ gap: 10, paddingVertical: 8 }}>
+                                                    <input
+                                                        type="date"
+                                                        value={editDueDate ? new Date(editDueDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]}
+                                                        onChange={(e: any) => {
+                                                            const d = new Date(e.target.value);
+                                                            const prev = editDueDate ? new Date(editDueDate) : new Date();
+                                                            d.setHours(prev.getHours(), prev.getMinutes(), 0, 0);
+                                                            setEditDueDate(d.toISOString());
+                                                        }}
+                                                        style={{ padding: 12, borderRadius: 10, border: `1px solid ${colors.border}`, backgroundColor: colors.card, color: colors.text, fontSize: 15, width: '100%' } as any}
+                                                    />
+                                                    <input
+                                                        type="time"
+                                                        value={editDueDate ? `${new Date(editDueDate).getHours().toString().padStart(2, '0')}:${new Date(editDueDate).getMinutes().toString().padStart(2, '0')}` : '08:00'}
+                                                        onChange={(e: any) => {
+                                                            const [h, m] = e.target.value.split(':').map(Number);
+                                                            const prev = editDueDate ? new Date(editDueDate) : new Date();
+                                                            prev.setHours(h, m, 0, 0);
+                                                            setEditDueDate(prev.toISOString());
+                                                        }}
+                                                        style={{ padding: 12, borderRadius: 10, border: `1px solid ${colors.border}`, backgroundColor: colors.card, color: colors.text, fontSize: 15, width: '100%' } as any}
+                                                    />
+                                                    <Pressable onPress={() => setShowEditDatePicker(false)}>
+                                                        <Text style={{ color: colors.accent, fontWeight: '600', fontSize: 14, textAlign: 'right' }}>Fertig</Text>
                                                     </Pressable>
                                                 </View>
+                                            ) : (
+                                                <>
+                                                    <DateTimePicker
+                                                        value={editDueDate ? new Date(editDueDate) : new Date()}
+                                                        mode={showEditDatePicker === 'date' ? 'date' : 'time'}
+                                                        display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                                                        minimumDate={showEditDatePicker === 'date' ? new Date() : undefined}
+                                                        is24Hour={true}
+                                                        onChange={(event: any, date?: Date) => {
+                                                            if (Platform.OS === 'android') {
+                                                                if (event.type === 'dismissed') { setShowEditDatePicker(false); return; }
+                                                                if (date) {
+                                                                    if (showEditDatePicker === 'date') {
+                                                                        const d = new Date(date);
+                                                                        const now = new Date();
+                                                                        d.setHours(now.getHours(), now.getMinutes(), 0, 0);
+                                                                        setEditDueDate(d.toISOString());
+                                                                        setShowEditDatePicker('time');
+                                                                    } else {
+                                                                        const prev = editDueDate ? new Date(editDueDate) : new Date();
+                                                                        prev.setHours(date.getHours(), date.getMinutes(), 0, 0);
+                                                                        setEditDueDate(prev.toISOString());
+                                                                        setShowEditDatePicker(false);
+                                                                    }
+                                                                }
+                                                            } else {
+                                                                if (date) {
+                                                                    if (showEditDatePicker === 'date') {
+                                                                        const d = new Date(date);
+                                                                        const now = new Date();
+                                                                        d.setHours(now.getHours(), now.getMinutes(), 0, 0);
+                                                                        setEditDueDate(d.toISOString());
+                                                                    } else {
+                                                                        const prev = editDueDate ? new Date(editDueDate) : new Date();
+                                                                        prev.setHours(date.getHours(), date.getMinutes(), 0, 0);
+                                                                        setEditDueDate(prev.toISOString());
+                                                                    }
+                                                                }
+                                                            }
+                                                        }}
+                                                        accentColor={colors.accent}
+                                                        themeVariant="dark"
+                                                    />
+                                                    {Platform.OS === 'ios' && (
+                                                        <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 16, paddingVertical: 4 }}>
+                                                            {showEditDatePicker === 'time' && (
+                                                                <Pressable onPress={() => setShowEditDatePicker('date')}>
+                                                                    <Text style={{ color: colors.subtext, fontWeight: '600', fontSize: 14 }}>Zurück</Text>
+                                                                </Pressable>
+                                                            )}
+                                                            <Pressable onPress={() => {
+                                                                if (showEditDatePicker === 'date') setShowEditDatePicker('time');
+                                                                else setShowEditDatePicker(false);
+                                                            }}>
+                                                                <Text style={{ color: colors.accent, fontWeight: '600', fontSize: 14 }}>
+                                                                    {showEditDatePicker === 'date' ? 'Weiter zur Uhrzeit' : 'Fertig'}
+                                                                </Text>
+                                                            </Pressable>
+                                                        </View>
+                                                    )}
+                                                </>
                                             )}
                                         </>
                                     )}
                                 </>
+                            )}
+
+                            {/* Recurrence type — only for recurring tasks */}
+                            {editTodo?.recurrence && editTodo.recurrence !== 'none' && (
+                                <View style={[styles.fieldRow, { borderBottomColor: colors.border, flexDirection: 'column', alignItems: 'stretch' }]}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                                        <RefreshCw size={18} color={colors.accent} />
+                                        <Text style={[styles.fieldLabel, { color: colors.text }]}>Wiederholung</Text>
+                                    </View>
+                                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                                        {RECURRENCE_OPTIONS.filter(r => r.key !== 'none').map(r => (
+                                            <Pressable key={r.key} onPress={() => setEditRecurrence(r.key)} style={[styles.chipBtn, { backgroundColor: editRecurrence === r.key ? colors.accent + '18' : 'transparent', borderColor: editRecurrence === r.key ? colors.accent : colors.border }]}>
+                                                <Text style={{ fontSize: 14 }}>{r.icon}</Text>
+                                                <Text style={{ color: editRecurrence === r.key ? colors.accent : colors.subtext, fontWeight: '600', fontSize: 13 }}>{r.label}</Text>
+                                            </Pressable>
+                                        ))}
+                                    </View>
+                                </View>
                             )}
 
                             {/* Category */}
@@ -1378,6 +1504,38 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
                                 />
                             )}
 
+                            {/* Reminder — for non-recurring tasks */}
+                            {(!editTodo?.recurrence || editTodo.recurrence === 'none') && (
+                                <>
+                                    <View style={[styles.fieldRow, { borderBottomColor: colors.border, marginTop: 8 }]}>
+                                        <Bell size={18} color={colors.accent} />
+                                        <Text style={[styles.fieldLabel, { color: colors.text }]}>Erinnerung</Text>
+                                        <Switch
+                                            value={editEnableReminder}
+                                            onValueChange={(val) => {
+                                                if (val && (Platform.OS as string) !== 'web' && !checkNotificationPermission()) {
+                                                    Alert.alert('Benachrichtigungen deaktiviert', 'Bitte aktiviere Aufgaben-Erinnerungen in den Einstellungen.', [
+                                                        { text: 'OK', style: 'cancel' },
+                                                        { text: 'Trotzdem', onPress: () => setEditEnableReminder(true) },
+                                                    ]);
+                                                    return;
+                                                }
+                                                setEditEnableReminder(val);
+                                            }}
+                                            trackColor={{ false: colors.border, true: colors.accent }}
+                                            thumbColor={'#fff'}
+                                        />
+                                    </View>
+                                    {editEnableReminder && (
+                                        <Pressable onPress={() => setShowEditReminderPicker(true)} style={[styles.fieldRow, { borderBottomColor: colors.border, paddingLeft: 30 }]}>
+                                            <Text style={[styles.fieldLabel, { color: colors.text }]}>Erinnerung</Text>
+                                            <Text style={[styles.fieldValue, { color: colors.accent }]}>{REMINDER_INTERVALS.find(r => r.key === editReminderInterval)?.label || '1 Stunde vorher'}</Text>
+                                            <ChevronRight size={16} color={colors.subtext} />
+                                        </Pressable>
+                                    )}
+                                </>
+                            )}
+
                             {/* Recurring Reminder — only for recurring tasks */}
                             {editTodo?.recurrence && editTodo.recurrence !== 'none' && (
                                 <>
@@ -1388,7 +1546,7 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
                                             <Switch
                                                 value={editReminder}
                                                 onValueChange={(val) => {
-                                                    if (val && !checkNotificationPermission()) {
+                                                    if (val && (Platform.OS as string) !== 'web' && !checkNotificationPermission()) {
                                                         Alert.alert('Benachrichtigungen deaktiviert', 'Bitte aktiviere Aufgaben-Erinnerungen in den Einstellungen.', [
                                                             { text: 'OK', style: 'cancel' },
                                                             { text: 'Trotzdem', onPress: () => setEditReminder(true) },
@@ -1434,21 +1592,36 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
                                                 <ChevronRight size={16} color={colors.subtext} />
                                             </Pressable>
                                             {showEditTimePicker && (
-                                                <DateTimePicker
-                                                    value={(() => { const d = new Date(); d.setHours(editReminderHour, editReminderMinute, 0, 0); return d; })()}
-                                                    mode="time"
-                                                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                                                    is24Hour={true}
-                                                    onChange={(event: any, date?: Date) => {
-                                                        if (Platform.OS === 'android') setShowEditTimePicker(false);
-                                                        if (date) {
-                                                            setEditReminderHour(date.getHours());
-                                                            setEditReminderMinute(date.getMinutes());
-                                                        }
-                                                    }}
-                                                    accentColor={colors.accent}
-                                                    themeVariant="dark"
-                                                />
+                                                (Platform.OS as string) === 'web' ? (
+                                                    <View style={{ paddingLeft: 30, paddingVertical: 8 }}>
+                                                        <input
+                                                            type="time"
+                                                            value={`${String(editReminderHour).padStart(2, '0')}:${String(editReminderMinute).padStart(2, '0')}`}
+                                                            onChange={(e: any) => {
+                                                                const [h, m] = e.target.value.split(':').map(Number);
+                                                                setEditReminderHour(h);
+                                                                setEditReminderMinute(m);
+                                                            }}
+                                                            style={{ padding: 12, borderRadius: 10, border: `1px solid ${colors.border}`, backgroundColor: colors.card, color: colors.text, fontSize: 15, width: '100%' } as any}
+                                                        />
+                                                    </View>
+                                                ) : (
+                                                    <DateTimePicker
+                                                        value={(() => { const d = new Date(); d.setHours(editReminderHour, editReminderMinute, 0, 0); return d; })()}
+                                                        mode="time"
+                                                        display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                                                        is24Hour={true}
+                                                        onChange={(event: any, date?: Date) => {
+                                                            if (Platform.OS === 'android') setShowEditTimePicker(false);
+                                                            if (date) {
+                                                                setEditReminderHour(date.getHours());
+                                                                setEditReminderMinute(date.getMinutes());
+                                                            }
+                                                        }}
+                                                        accentColor={colors.accent}
+                                                        themeVariant="dark"
+                                                    />
+                                                )
                                             )}
                                             <View style={[styles.warningBanner, { backgroundColor: colors.accent + '10' }]}>
                                                 <Text style={{ color: colors.accent, fontSize: 12, fontWeight: '600' }}>
@@ -1505,6 +1678,21 @@ export const FamilyTodos: React.FC<FamilyTodosProps> = ({ visible, onClose }) =>
                                     </View>
                                     <Text style={{ color: colors.text, fontSize: 15, flex: 1 }}>{m.display_name || m.email.split('@')[0]}</Text>
                                     {editAssignee === m.id && <Check size={18} color={colors.accent} />}
+                                </Pressable>
+                            ))}
+                        </View>
+                    </Pressable>
+                </Modal>
+
+                {/* Edit Reminder Interval Picker */}
+                <Modal visible={showEditReminderPicker} transparent animationType="fade" onRequestClose={() => setShowEditReminderPicker(false)}>
+                    <Pressable style={styles.pickerOverlay} onPress={() => setShowEditReminderPicker(false)}>
+                        <View style={[styles.pickerCard, { backgroundColor: colors.card }]}>
+                            <Text style={[styles.pickerTitle, { color: colors.text }]}>Erinnerung</Text>
+                            {REMINDER_INTERVALS.map(r => (
+                                <Pressable key={r.key} onPress={() => { setEditReminderInterval(r.key); setShowEditReminderPicker(false); }} style={[styles.pickerRow, { borderBottomColor: colors.border }]}>
+                                    <Text style={{ color: colors.text, fontSize: 15, flex: 1 }}>{r.label}</Text>
+                                    {editReminderInterval === r.key && <Check size={18} color={colors.accent} />}
                                 </Pressable>
                             ))}
                         </View>

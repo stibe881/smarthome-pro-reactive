@@ -15,6 +15,8 @@ import { useHomeAssistant } from '../contexts/HomeAssistantContext';
 import { useHousehold } from '../hooks/useHousehold';
 import { supabase } from '../lib/supabase';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import * as ExpoCalendar from 'expo-calendar';
+import { Platform } from 'react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const IS_TABLET = SCREEN_WIDTH > 600;
@@ -105,6 +107,21 @@ export const FamilyPlanner: React.FC<FamilyPlannerProps> = ({ visible, onClose }
     const [addingCalLabel, setAddingCalLabel] = useState('termine');
     const [addingIsBirthdayCal, setAddingIsBirthdayCal] = useState(false);
 
+    // Device Calendar integration
+    const [deviceCalendars, setDeviceCalendars] = useState<ExpoCalendar.Calendar[]>([]);
+    const [enabledDeviceCals, setEnabledDeviceCals] = useState<Set<string>>(new Set());
+    const [deviceEvents, setDeviceEvents] = useState<PlannerEvent[]>([]);
+    const [deviceCalPermission, setDeviceCalPermission] = useState(false);
+
+    // ICS URL Calendar integration
+    interface IcsCalSource { id: string; url: string; label: string; color: string; enabled: boolean; }
+    const [icsSources, setIcsSources] = useState<IcsCalSource[]>([]);
+    const [icsEvents, setIcsEvents] = useState<PlannerEvent[]>([]);
+    const [addingIcsUrl, setAddingIcsUrl] = useState('');
+    const [addingIcsLabel, setAddingIcsLabel] = useState('');
+    const [addingIcsColor, setAddingIcsColor] = useState('#3B82F6');
+    const [icsLoading, setIcsLoading] = useState(false);
+
     const fadeAnim = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
@@ -192,6 +209,156 @@ export const FamilyPlanner: React.FC<FamilyPlannerProps> = ({ visible, onClose }
     useEffect(() => { loadCalendarSources(); }, [loadCalendarSources]);
     useEffect(() => { loadHaEvents(); }, [loadHaEvents]);
 
+    // Load device calendars
+    const loadDeviceCalendars = useCallback(async () => {
+        try {
+            const { status } = await ExpoCalendar.requestCalendarPermissionsAsync();
+            if (status !== 'granted') {
+                setDeviceCalPermission(false);
+                return;
+            }
+            setDeviceCalPermission(true);
+            const cals = await ExpoCalendar.getCalendarsAsync(ExpoCalendar.EntityTypes.EVENT);
+            setDeviceCalendars(cals);
+        } catch (e) {
+            console.warn('Error loading device calendars:', e);
+        }
+    }, []);
+
+    const loadDeviceEvents = useCallback(async () => {
+        if (enabledDeviceCals.size === 0) { setDeviceEvents([]); return; }
+        const monthStart = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
+        const monthEnd = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0, 23, 59, 59);
+        const allDevEvents: PlannerEvent[] = [];
+        for (const calId of enabledDeviceCals) {
+            try {
+                const cal = deviceCalendars.find(c => c.id === calId);
+                const evts = await ExpoCalendar.getEventsAsync([calId], monthStart, monthEnd);
+                evts.forEach((evt, idx) => {
+                    allDevEvents.push({
+                        id: `dev-${calId}-${idx}`,
+                        household_id: '',
+                        created_by: null,
+                        title: evt.title || 'Ohne Titel',
+                        description: evt.notes || null,
+                        start_date: String(evt.startDate),
+                        end_date: evt.endDate ? String(evt.endDate) : null,
+                        all_day: evt.allDay || false,
+                        color: cal?.color || '#64748B',
+                        category: 'event',
+                        created_at: '',
+                    });
+                });
+            } catch (e) {
+                console.warn(`Error loading device calendar ${calId}:`, e);
+            }
+        }
+        setDeviceEvents(allDevEvents);
+    }, [enabledDeviceCals, currentMonth, deviceCalendars]);
+
+    useEffect(() => { loadDeviceEvents(); }, [loadDeviceEvents]);
+
+    const toggleDeviceCal = (calId: string) => {
+        setEnabledDeviceCals(prev => {
+            const next = new Set(prev);
+            if (next.has(calId)) next.delete(calId); else next.add(calId);
+            return next;
+        });
+    };
+
+    // ICS URL calendar functions
+    const parseIcs = (icsText: string): { title: string; start: string; end: string; allDay: boolean; description: string | null; location: string | null }[] => {
+        const events: any[] = [];
+        const vevents = icsText.split('BEGIN:VEVENT');
+        for (let i = 1; i < vevents.length; i++) {
+            const block = vevents[i].split('END:VEVENT')[0];
+            const get = (key: string) => {
+                const match = block.match(new RegExp(`(?:^|\\n)${key}[^:]*:(.+)`, 'm'));
+                return match ? match[1].trim().replace(/\\r/g, '') : '';
+            };
+            const dtstart = get('DTSTART');
+            const dtend = get('DTEND');
+            const summary = get('SUMMARY');
+            const desc = get('DESCRIPTION') || null;
+            const loc = get('LOCATION') || null;
+            // Parse ICS date formats: YYYYMMDD or YYYYMMDDTHHmmssZ
+            const parseIcsDate = (d: string) => {
+                if (!d) return '';
+                if (d.length === 8) return `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`;
+                if (d.length >= 15) {
+                    const iso = `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}T${d.slice(9, 11)}:${d.slice(11, 13)}:${d.slice(13, 15)}`;
+                    return d.endsWith('Z') ? iso + 'Z' : iso;
+                }
+                return d;
+            };
+            const isAllDay = dtstart.length === 8;
+            events.push({ title: summary || 'Ohne Titel', start: parseIcsDate(dtstart), end: parseIcsDate(dtend), allDay: isAllDay, description: desc, location: loc });
+        }
+        return events;
+    };
+
+    const loadIcsEvents = useCallback(async () => {
+        const enabledSources = icsSources.filter(s => s.enabled);
+        if (enabledSources.length === 0) { setIcsEvents([]); return; }
+        const monthStart = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
+        const monthEnd = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0, 23, 59, 59);
+        const allIcsEvents: PlannerEvent[] = [];
+        for (const src of enabledSources) {
+            try {
+                const res = await fetch(src.url);
+                if (!res.ok) continue;
+                const text = await res.text();
+                const parsed = parseIcs(text);
+                parsed.forEach((evt, idx) => {
+                    const startDate = new Date(evt.start);
+                    if (startDate >= monthStart && startDate <= monthEnd) {
+                        allIcsEvents.push({
+                            id: `ics-${src.id}-${idx}`,
+                            household_id: '',
+                            created_by: null,
+                            title: evt.title,
+                            description: evt.description,
+                            start_date: evt.start,
+                            end_date: evt.end || null,
+                            all_day: evt.allDay,
+                            color: src.color,
+                            category: 'event',
+                            created_at: '',
+                        });
+                    }
+                });
+            } catch (e) {
+                console.warn(`Error loading ICS calendar ${src.url}:`, e);
+            }
+        }
+        setIcsEvents(allIcsEvents);
+    }, [icsSources, currentMonth]);
+
+    useEffect(() => { loadIcsEvents(); }, [loadIcsEvents]);
+
+    const addIcsSource = () => {
+        if (!addingIcsUrl.trim()) return;
+        const newSrc: IcsCalSource = {
+            id: Date.now().toString(),
+            url: addingIcsUrl.trim(),
+            label: addingIcsLabel.trim() || 'Kalender',
+            color: addingIcsColor,
+            enabled: true,
+        };
+        setIcsSources(prev => [...prev, newSrc]);
+        setAddingIcsUrl('');
+        setAddingIcsLabel('');
+        setAddingIcsColor('#3B82F6');
+    };
+
+    const removeIcsSource = (id: string) => {
+        setIcsSources(prev => prev.filter(s => s.id !== id));
+    };
+
+    const toggleIcsSource = (id: string) => {
+        setIcsSources(prev => prev.map(s => s.id === id ? { ...s, enabled: !s.enabled } : s));
+    };
+
     // Available HA calendar entities
     const availableCalEntities = Object.values(entities)
         .filter((e: any) => e.entity_id?.startsWith('calendar.'))
@@ -252,7 +419,7 @@ export const FamilyPlanner: React.FC<FamilyPlannerProps> = ({ visible, onClose }
         });
     });
 
-    const allEvents = [...events, ...dedupedHaEvents];
+    const allEvents = [...events, ...dedupedHaEvents, ...deviceEvents, ...icsEvents];
 
     const getEventsForDay = (date: Date) =>
         allEvents.filter(e => {
@@ -379,17 +546,23 @@ export const FamilyPlanner: React.FC<FamilyPlannerProps> = ({ visible, onClose }
     };
 
     const handleDelete = (event: PlannerEvent) => {
-        Alert.alert('Löschen', `"${event.title}" wirklich löschen?`, [
-            { text: 'Abbrechen', style: 'cancel' },
-            {
-                text: 'Löschen', style: 'destructive', onPress: async () => {
-                    try {
-                        await supabase.from('planner_events').delete().eq('id', event.id);
-                        loadEvents();
-                    } catch (e: any) { Alert.alert('Fehler', e.message); }
-                }
+        if (Platform.OS === 'web') {
+            if (window.confirm(`"${event.title}" wirklich löschen?`)) {
+                supabase.from('planner_events').delete().eq('id', event.id).then(() => loadEvents());
             }
-        ]);
+        } else {
+            Alert.alert('Löschen', `"${event.title}" wirklich löschen?`, [
+                { text: 'Abbrechen', style: 'cancel' },
+                {
+                    text: 'Löschen', style: 'destructive', onPress: async () => {
+                        try {
+                            await supabase.from('planner_events').delete().eq('id', event.id);
+                            loadEvents();
+                        } catch (e: any) { if (Platform.OS === 'web') window.alert(e.message); else Alert.alert('Fehler', e.message); }
+                    }
+                }
+            ]);
+        }
     };
 
     // Format helpers
@@ -775,7 +948,7 @@ export const FamilyPlanner: React.FC<FamilyPlannerProps> = ({ visible, onClose }
                     <View style={[styles.container, { backgroundColor: colors.background }]}>
                         <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
                             <Pressable onPress={() => setShowCalSettings(false)}><X size={24} color={colors.subtext} /></Pressable>
-                            <Text style={[styles.modalTitle, { color: colors.text }]}>HA-Kalender</Text>
+                            <Text style={[styles.modalTitle, { color: colors.text }]}>Kalender-Quellen</Text>
                             <View style={{ width: 24 }} />
                         </View>
                         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
@@ -803,10 +976,16 @@ export const FamilyPlanner: React.FC<FamilyPlannerProps> = ({ visible, onClose }
                                                 )}
                                             </View>
                                             <Pressable
-                                                onPress={() => Alert.alert('Entfernen', `"${labelInfo.label}" Kalender entfernen?`, [
-                                                    { text: 'Abbrechen', style: 'cancel' },
-                                                    { text: 'Entfernen', style: 'destructive', onPress: () => removeCalendarSource(src.id) },
-                                                ])}
+                                                onPress={() => {
+                                                    if (Platform.OS === 'web') {
+                                                        if (window.confirm(`"${labelInfo.label}" Kalender entfernen?`)) removeCalendarSource(src.id);
+                                                    } else {
+                                                        Alert.alert('Entfernen', `"${labelInfo.label}" Kalender entfernen?`, [
+                                                            { text: 'Abbrechen', style: 'cancel' },
+                                                            { text: 'Entfernen', style: 'destructive', onPress: () => removeCalendarSource(src.id) },
+                                                        ]);
+                                                    }
+                                                }}
                                                 hitSlop={12}
                                             >
                                                 <Trash2 size={18} color="#EF4444" />
@@ -895,6 +1074,106 @@ export const FamilyPlanner: React.FC<FamilyPlannerProps> = ({ visible, onClose }
                                         </Pressable>
                                     </>
                                 ) : null}
+                            </View>
+
+                            {/* Device Calendars Section */}
+                            <View style={{ marginTop: 24, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 20 }}>
+                                <Text style={[styles.formLabel, { color: colors.subtext, marginBottom: 4 }]}>📱 Geräte-Kalender</Text>
+                                <Text style={{ color: colors.subtext, fontSize: 12, marginBottom: 14 }}>Google, Outlook, iCloud und andere auf diesem Gerät synchronisierte Kalender.</Text>
+                                {!deviceCalPermission ? (
+                                    <Pressable
+                                        style={[styles.fullBtn, { backgroundColor: colors.accent }]}
+                                        onPress={loadDeviceCalendars}
+                                    >
+                                        <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>📅 Kalender-Zugriff erlauben</Text>
+                                    </Pressable>
+                                ) : deviceCalendars.length === 0 ? (
+                                    <Text style={{ color: colors.subtext, fontStyle: 'italic', fontSize: 13 }}>Keine Kalender auf diesem Gerät gefunden.</Text>
+                                ) : (
+                                    deviceCalendars.map(cal => {
+                                        const isEnabled = enabledDeviceCals.has(cal.id);
+                                        const calColor = cal.color || '#64748B';
+                                        return (
+                                            <Pressable
+                                                key={cal.id}
+                                                onPress={() => toggleDeviceCal(cal.id)}
+                                                style={[styles.eventCard, { backgroundColor: colors.card, borderLeftColor: calColor, borderColor: isEnabled ? calColor : colors.border, marginBottom: 8, opacity: isEnabled ? 1 : 0.6 }]}
+                                            >
+                                                <View style={{ flex: 1 }}>
+                                                    <Text style={[styles.eventTitle, { color: colors.text }]} numberOfLines={1}>{cal.title}</Text>
+                                                    <Text style={{ color: colors.subtext, fontSize: 11, marginTop: 2 }} numberOfLines={1}>
+                                                        {cal.source?.name || (cal as any).ownerAccount || 'Lokal'}
+                                                    </Text>
+                                                </View>
+                                                <View style={[styles.checkbox, isEnabled && { backgroundColor: calColor, borderColor: calColor }]}>
+                                                    {isEnabled && <Check size={14} color="#fff" />}
+                                                </View>
+                                            </Pressable>
+                                        );
+                                    })
+                                )}
+                            </View>
+
+                            {/* ICS URL Calendars Section */}
+                            <View style={{ marginTop: 24, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 20 }}>
+                                <Text style={[styles.formLabel, { color: colors.subtext, marginBottom: 4 }]}>🔗 Kalender-URL (ICS)</Text>
+                                <Text style={{ color: colors.subtext, fontSize: 12, marginBottom: 14 }}>Füge einen Kalender per URL hinzu (Google Calendar, Outlook, iCal-Link etc.).</Text>
+
+                                {/* Existing ICS sources */}
+                                {icsSources.map(src => (
+                                    <Pressable
+                                        key={src.id}
+                                        onPress={() => toggleIcsSource(src.id)}
+                                        style={[styles.eventCard, { backgroundColor: colors.card, borderLeftColor: src.color, borderColor: src.enabled ? src.color : colors.border, marginBottom: 8, opacity: src.enabled ? 1 : 0.6 }]}
+                                    >
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={[styles.eventTitle, { color: colors.text }]} numberOfLines={1}>{src.label}</Text>
+                                            <Text style={{ color: colors.subtext, fontSize: 11, marginTop: 2 }} numberOfLines={1}>{src.url}</Text>
+                                        </View>
+                                        <Pressable onPress={() => removeIcsSource(src.id)} hitSlop={12} style={{ padding: 4 }}>
+                                            <Trash2 size={16} color="#EF4444" />
+                                        </Pressable>
+                                        <View style={[styles.checkbox, src.enabled && { backgroundColor: src.color, borderColor: src.color }]}>
+                                            {src.enabled && <Check size={14} color="#fff" />}
+                                        </View>
+                                    </Pressable>
+                                ))}
+
+                                {/* Add ICS URL form */}
+                                <TextInput
+                                    style={[styles.formInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card, marginBottom: 8, fontSize: 13 }]}
+                                    value={addingIcsUrl}
+                                    onChangeText={setAddingIcsUrl}
+                                    placeholder="https://calendar.google.com/...ical"
+                                    placeholderTextColor={colors.subtext}
+                                    autoCapitalize="none"
+                                    autoCorrect={false}
+                                    keyboardType="url"
+                                />
+                                <TextInput
+                                    style={[styles.formInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card, marginBottom: 8, fontSize: 13 }]}
+                                    value={addingIcsLabel}
+                                    onChangeText={setAddingIcsLabel}
+                                    placeholder="Name (z.B. Arbeit, Familie...)"
+                                    placeholderTextColor={colors.subtext}
+                                />
+                                <View style={{ flexDirection: 'row', gap: 6, marginBottom: 10 }}>
+                                    {COLOR_OPTIONS.map(c => (
+                                        <Pressable
+                                            key={c}
+                                            style={[styles.colorDot, { backgroundColor: c, borderWidth: addingIcsColor === c ? 3 : 0, borderColor: '#fff' }]}
+                                            onPress={() => setAddingIcsColor(c)}
+                                        />
+                                    ))}
+                                </View>
+                                <Pressable
+                                    style={[styles.fullBtn, { backgroundColor: addingIcsUrl.trim() ? colors.accent : colors.border }]}
+                                    onPress={addIcsSource}
+                                    disabled={!addingIcsUrl.trim()}
+                                >
+                                    <Link2 size={18} color="#fff" />
+                                    <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>Kalender hinzufügen</Text>
+                                </Pressable>
                             </View>
                         </ScrollView>
                     </View>
