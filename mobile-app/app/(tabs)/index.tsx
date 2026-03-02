@@ -2245,19 +2245,6 @@ export default function Dashboard() {
                             const currentVolume = livePlayer.attributes.volume_level ?? 0.5;
                             const isMuted = livePlayer.attributes.is_volume_muted === true;
 
-                            // Media position / duration for progress bar
-                            const mediaDuration = livePlayer.attributes.media_duration || 0;
-                            const mediaPosition = livePlayer.attributes.media_position || 0;
-                            const positionUpdatedAt = livePlayer.attributes.media_position_updated_at;
-                            const elapsed = (() => {
-                                if (!positionUpdatedAt || !isPlaying) return mediaPosition;
-                                const updatedAt = new Date(positionUpdatedAt).getTime();
-                                const now = Date.now();
-                                return Math.min(mediaPosition + (now - updatedAt) / 1000, mediaDuration);
-                            })();
-                            const progressPct = mediaDuration > 0 ? (elapsed / mediaDuration) * 100 : 0;
-                            const fmtTime = (s: number) => { const m = Math.floor(s / 60); const sec = Math.floor(s % 60); return `${m}:${sec.toString().padStart(2, '0')}`; };
-
                             // MASS player resolution (same logic as media page)
                             const getMassPlayerId = (id: string): string | null => {
                                 if (!id) return null;
@@ -2275,6 +2262,22 @@ export default function Dashboard() {
 
                             const resolveTarget = (entityId: string): string => getMassPlayerId(entityId) || entityId;
 
+                            // Media position / duration for progress bar
+                            // Check both the original player and the MASS player for media attributes
+                            const massPlayerId = getMassPlayerId(livePlayer.entity_id);
+                            const massEntity = massPlayerId ? entities.find(e => e.entity_id === massPlayerId) : null;
+                            const mediaDuration = livePlayer.attributes.media_duration || massEntity?.attributes?.media_duration || 0;
+                            const mediaPosition = livePlayer.attributes.media_position || massEntity?.attributes?.media_position || 0;
+                            const positionUpdatedAt = livePlayer.attributes.media_position_updated_at || massEntity?.attributes?.media_position_updated_at;
+                            const elapsed = (() => {
+                                if (!positionUpdatedAt || !isPlaying) return mediaPosition;
+                                const updatedAt = new Date(positionUpdatedAt).getTime();
+                                const now = Date.now();
+                                return Math.min(mediaPosition + (now - updatedAt) / 1000, mediaDuration);
+                            })();
+                            const progressPct = mediaDuration > 0 ? (elapsed / mediaDuration) * 100 : 0;
+                            const fmtTime = (s: number) => { const m = Math.floor(s / 60); const sec = Math.floor(s % 60); return `${m}:${sec.toString().padStart(2, '0')}`; };
+
                             const handlePlayPause = () => {
                                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                                 callService('media_player', isPlaying ? 'media_pause' : 'media_play', resolveTarget(livePlayer.entity_id));
@@ -2291,17 +2294,21 @@ export default function Dashboard() {
                             };
                             const handleShuffle = () => {
                                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                const currentShuffle = livePlayer.attributes?.shuffle || false;
-                                callService('media_player', 'shuffle_set', livePlayer.entity_id, { shuffle: !currentShuffle });
+                                const target = resolveTarget(livePlayer.entity_id);
+                                const currentShuffle = livePlayer.attributes?.shuffle || massEntity?.attributes?.shuffle || false;
+                                console.log(`🔀 Shuffle: target=${target}, current=${currentShuffle}, new=${!currentShuffle}`);
+                                callService('media_player', 'shuffle_set', target, { shuffle: !currentShuffle });
                             };
                             const handleRepeat = () => {
                                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                const current = livePlayer.attributes?.repeat || 'off';
+                                const target = resolveTarget(livePlayer.entity_id);
+                                const current = livePlayer.attributes?.repeat || massEntity?.attributes?.repeat || 'off';
                                 const next = current === 'off' ? 'all' : current === 'all' ? 'one' : 'off';
-                                callService('media_player', 'repeat_set', livePlayer.entity_id, { repeat: next });
+                                console.log(`🔁 Repeat: target=${target}, current=${current}, next=${next}`);
+                                callService('media_player', 'repeat_set', target, { repeat: next });
                             };
-                            const shuffleOn = livePlayer.attributes?.shuffle === true;
-                            const repeatMode = livePlayer.attributes?.repeat || 'off';
+                            const shuffleOn = livePlayer.attributes?.shuffle === true || massEntity?.attributes?.shuffle === true;
+                            const repeatMode = livePlayer.attributes?.repeat || massEntity?.attributes?.repeat || 'off';
 
                             return (
                                 <View style={{ position: 'relative' }}>
