@@ -2431,9 +2431,8 @@ export default function Dashboard() {
                                                     const seekTarget = livePlayer.entity_id; // use original entity, not MASS
                                                     console.log(`⏩ Seek: target=${seekTarget}, position=${Math.round(value)}s / ${Math.round(mediaDuration)}s`);
                                                     try {
-                                                        await callService('media_player', 'media_seek', seekTarget, { seek_position: Math.round(value) });
-                                                        // Wait a moment, then resume playback (some players pause on seek)
-                                                        await new Promise(r => setTimeout(r, 500));
+                                                        // Fire seek and play simultaneously - don't await seek
+                                                        callService('media_player', 'media_seek', seekTarget, { seek_position: Math.round(value) });
                                                         callService('media_player', 'media_play', seekTarget);
                                                         callService('media_player', 'media_play', resolveTarget(livePlayer.entity_id));
                                                     } catch (e) {
