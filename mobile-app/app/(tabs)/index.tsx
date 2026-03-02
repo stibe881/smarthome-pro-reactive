@@ -2614,7 +2614,12 @@ export default function Dashboard() {
                         ) : (
                             loadingPopupPlaylists ? <ActivityIndicator color="#1DB954" size="large" /> : (
                                 <FlatList
-                                    data={popupPlaylists}
+                                    data={(() => {
+                                        const allowed = dashboardConfig?.mediaPlayerConfig?.allowedPlaylists;
+                                        return allowed && allowed.length > 0
+                                            ? popupPlaylists.filter((p: any) => allowed.includes(p.media_content_id))
+                                            : popupPlaylists;
+                                    })()}
                                     keyExtractor={i => i.media_content_id}
                                     style={{ maxHeight: 400 }}
                                     renderItem={({ item }) => (
