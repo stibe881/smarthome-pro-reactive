@@ -1466,6 +1466,39 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
         };
     }, []);
 
+    // Real-time sync for dashboardConfig changes from other devices
+    useEffect(() => {
+        let channel: any = null;
+        (async () => {
+            try {
+                const { data: { user: currentUser } } = await supabase.auth.getUser();
+                if (!currentUser) return;
+                const { data: memberData } = await supabase
+                    .from('family_members')
+                    .select('household_id')
+                    .eq('user_id', currentUser.id)
+                    .single();
+                if (!memberData?.household_id) return;
+
+                channel = supabase
+                    .channel('dashboard-config-sync')
+                    .on('postgres_changes', {
+                        event: 'UPDATE',
+                        schema: 'public',
+                        table: 'households',
+                        filter: `id=eq.${memberData.household_id}`,
+                    }, (payload: any) => {
+                        if (payload.new?.dashboard_config) {
+                            setDashboardConfig(payload.new.dashboard_config);
+                        }
+                    })
+                    .subscribe();
+            } catch { }
+        })();
+
+        return () => { if (channel) supabase.removeChannel(channel); };
+    }, []);
+
 
     const disconnect = () => {
         serviceRef.current?.disconnect();
