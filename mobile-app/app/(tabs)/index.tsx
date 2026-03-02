@@ -2302,6 +2302,11 @@ export default function Dashboard() {
                             const shuffleOn = livePlayer.attributes?.shuffle === true || massEntity?.attributes?.shuffle === true;
                             const repeatMode = livePlayer.attributes?.repeat || massEntity?.attributes?.repeat || 'off';
 
+                            // Detect radio playback — hide shuffle/repeat/progress for radio
+                            const contentType = livePlayer.attributes?.media_content_type || massEntity?.attributes?.media_content_type || '';
+                            const appName = (livePlayer.attributes?.app_name || massEntity?.attributes?.app_name || '').toLowerCase();
+                            const isRadio = contentType === 'channel' || appName.includes('tunein') || appName.includes('radio');
+
                             return (
                                 <View style={{ position: 'relative' }}>
                                     {/* Blurred Background - wrapped in View with pointerEvents none */}
@@ -2341,9 +2346,11 @@ export default function Dashboard() {
 
                                         {/* Controls */}
                                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 20, marginTop: 28 }}>
-                                            <Pressable onPress={handleShuffle} hitSlop={12} style={{ padding: 8, backgroundColor: shuffleOn ? '#1DB954' + '20' : 'transparent', borderRadius: 16 }}>
-                                                <Shuffle size={20} color={shuffleOn ? '#1DB954' : colors.subtext} />
-                                            </Pressable>
+                                            {!isRadio && (
+                                                <Pressable onPress={handleShuffle} hitSlop={12} style={{ padding: 8, backgroundColor: shuffleOn ? '#1DB954' + '20' : 'transparent', borderRadius: 16 }}>
+                                                    <Shuffle size={20} color={shuffleOn ? '#1DB954' : colors.subtext} />
+                                                </Pressable>
+                                            )}
 
                                             <Pressable onPress={handlePrev} hitSlop={12} style={{ padding: 10 }}>
                                                 <SkipBack size={28} color={colors.text} />
@@ -2357,13 +2364,15 @@ export default function Dashboard() {
                                                 <SkipForward size={28} color={colors.text} />
                                             </Pressable>
 
-                                            <Pressable onPress={handleRepeat} hitSlop={12} style={{ padding: 8, backgroundColor: repeatMode !== 'off' ? '#1DB954' + '20' : 'transparent', borderRadius: 16 }}>
-                                                {repeatMode === 'one' ? (
-                                                    <Repeat1 size={20} color="#1DB954" />
-                                                ) : (
-                                                    <Repeat size={20} color={repeatMode === 'all' ? '#1DB954' : colors.subtext} />
-                                                )}
-                                            </Pressable>
+                                            {!isRadio && (
+                                                <Pressable onPress={handleRepeat} hitSlop={12} style={{ padding: 8, backgroundColor: repeatMode !== 'off' ? '#1DB954' + '20' : 'transparent', borderRadius: 16 }}>
+                                                    {repeatMode === 'one' ? (
+                                                        <Repeat1 size={20} color="#1DB954" />
+                                                    ) : (
+                                                        <Repeat size={20} color={repeatMode === 'all' ? '#1DB954' : colors.subtext} />
+                                                    )}
+                                                </Pressable>
+                                            )}
                                         </View>
 
                                         {/* Volume Slider */}
