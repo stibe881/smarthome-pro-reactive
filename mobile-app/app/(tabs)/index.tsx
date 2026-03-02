@@ -567,10 +567,12 @@ export default function Dashboard() {
 
     // Progress bar smooth ticker — forces re-render for time labels
     const [progressTick, setProgressTick] = useState(0);
-    const [seekValue, setSeekValue] = useState<number | null>(null);
+    const isSeekingRef = useRef(false);
     useEffect(() => {
         if (!mediaPlayerModalVisible) return;
-        const timer = setInterval(() => setProgressTick(t => t + 1), 500);
+        const timer = setInterval(() => {
+            if (!isSeekingRef.current) setProgressTick(t => t + 1);
+        }, 500);
         return () => clearInterval(timer);
     }, [mediaPlayerModalVisible]);
 
@@ -2423,12 +2425,13 @@ export default function Dashboard() {
                                                 style={{ width: '100%', height: 24 }}
                                                 minimumValue={0}
                                                 maximumValue={mediaDuration}
-                                                value={seekValue !== null ? seekValue : elapsed}
-                                                onSlidingStart={() => { setSeekValue(elapsed); }}
-                                                onValueChange={(value: number) => { setSeekValue(value); }}
+                                                value={elapsed}
+                                                onSlidingStart={() => { isSeekingRef.current = true; }}
                                                 onSlidingComplete={(value: number) => {
-                                                    setSeekValue(null);
+                                                    console.log(`⏩ Seek to ${value}s / ${mediaDuration}s`);
                                                     callService('media_player', 'media_seek', resolveTarget(livePlayer.entity_id), { seek_position: value });
+                                                    // Resume ticker after a short delay to let HA update
+                                                    setTimeout(() => { isSeekingRef.current = false; }, 2000);
                                                 }}
                                                 minimumTrackTintColor={'#F59E0B'}
                                                 maximumTrackTintColor={colors.background}
