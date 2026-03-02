@@ -38,6 +38,12 @@ export default function Media() {
     // Player Picker State for Hero
     const [showPlayerPicker, setShowPlayerPicker] = useState(false);
 
+    // TuneIn Radio State
+    const [tuneinVisible, setTuneinVisible] = useState(false);
+    const [tuneinItems, setTuneinItems] = useState<any[]>([]);
+    const [tuneinBreadcrumb, setTuneinBreadcrumb] = useState<{ title: string, contentId?: string, contentType?: string }[]>([]);
+    const [loadingTunein, setLoadingTunein] = useState(false);
+
     // Playlist Track Browsing State
     const [playlistTracks, setPlaylistTracks] = useState<any[]>([]);
     const [loadingTracks, setLoadingTracks] = useState(false);
@@ -598,6 +604,32 @@ export default function Media() {
         }
     };
 
+    // TuneIn Radio Handler
+    const handleTuneIn = () => {
+        if (!activePlayer) return;
+        setTuneinVisible(true);
+        setLoadingTunein(true);
+        setTuneinBreadcrumb([{ title: 'Radio' }]);
+        const massId = getMassPlayerId(activePlayer.entity_id);
+        const target = massId || activePlayer.entity_id;
+        browseMedia(target)
+            .then((root: any) => {
+                if (!root?.children) { setTuneinItems([]); return; }
+                const tuneinFolder = root.children.find((c: any) =>
+                    c.title?.toLowerCase().includes('tunein') ||
+                    c.title?.toLowerCase().includes('radio') ||
+                    c.media_content_id?.toLowerCase().includes('tunein')
+                );
+                if (tuneinFolder) {
+                    return browseMedia(target, tuneinFolder.media_content_id, tuneinFolder.media_content_type)
+                        .then((content: any) => setTuneinItems(content?.children || []));
+                }
+                setTuneinItems(root.children);
+            })
+            .catch(() => Alert.alert('Fehler', 'Radio konnte nicht geladen werden.'))
+            .finally(() => setLoadingTunein(false));
+    };
+
     // --- RENDER HELPERS ---
     const getPlayerName = (entityId: string) => {
         if (customNames[entityId]) return customNames[entityId];
@@ -667,6 +699,7 @@ export default function Media() {
                                 const spotifyPlaying = !!entities.find(e => e.entity_id.startsWith('media_player.spotify') && e.state === 'playing');
                                 return an.includes('spotify') || ci.includes('spotify') || ct.includes('spotify') || spotifyPlaying;
                             })()}
+                            onTuneIn={handleTuneIn}
                             getPlayerName={getPlayerName}
                         />
                     </View>
@@ -873,6 +906,96 @@ export default function Media() {
                 visible={showSelectionModal}
                 onClose={() => setShowSelectionModal(false)}
             />
+
+            {/* TuneIn Radio Browser Modal */}
+            <Modal visible={tuneinVisible} animationType="slide" transparent={true} onRequestClose={() => { setTuneinVisible(false); setTuneinItems([]); setTuneinBreadcrumb([]); }}>
+                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
+                    <Pressable style={{ flex: 1 }} onPress={() => { setTuneinVisible(false); setTuneinItems([]); setTuneinBreadcrumb([]); }} />
+                    <View style={{ backgroundColor: colors.card, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '80%', padding: 20 }}>
+                        <View style={{ alignItems: 'center', marginBottom: 12 }}>
+                            <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: colors.subtext + '40' }} />
+                        </View>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+                            {tuneinBreadcrumb.length > 1 && (
+                                <Pressable onPress={async () => {
+                                    const newBc = [...tuneinBreadcrumb];
+                                    newBc.pop();
+                                    setTuneinBreadcrumb(newBc);
+                                    const prev = newBc[newBc.length - 1];
+                                    if (prev.contentId && activePlayer) {
+                                        setLoadingTunein(true);
+                                        const massId = getMassPlayerId(activePlayer.entity_id);
+                                        const target = massId || activePlayer.entity_id;
+                                        try {
+                                            const content = await browseMedia(target, prev.contentId, prev.contentType);
+                                            setTuneinItems(content?.children || []);
+                                        } catch { } finally { setLoadingTunein(false); }
+                                    }
+                                }} style={{ marginRight: 12, padding: 4 }}>
+                                    <ChevronLeft size={24} color={colors.subtext} />
+                                </Pressable>
+                            )}
+                            <Radio size={22} color="#FF6B00" style={{ marginRight: 8 }} />
+                            <Text style={{ color: colors.text, fontSize: 18, fontWeight: '700', flex: 1 }}>
+                                {tuneinBreadcrumb[tuneinBreadcrumb.length - 1]?.title || 'Radio'}
+                            </Text>
+                        </View>
+
+                        {loadingTunein ? <ActivityIndicator color="#FF6B00" size="large" /> : (
+                            <FlatList
+                                data={tuneinItems}
+                                keyExtractor={(i, idx) => (i.media_content_id || '') + idx}
+                                style={{ maxHeight: 400 }}
+                                renderItem={({ item }) => {
+                                    const canBrowse = item.can_expand || (item.children && item.children.length > 0);
+                                    const isStation = !canBrowse && item.can_play;
+                                    return (
+                                        <Pressable
+                                            style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 }}
+                                            onPress={async () => {
+                                                if (!activePlayer) return;
+                                                const massId = getMassPlayerId(activePlayer.entity_id);
+                                                const target = massId || activePlayer.entity_id;
+                                                if (canBrowse) {
+                                                    setLoadingTunein(true);
+                                                    try {
+                                                        const content = await browseMedia(target, item.media_content_id, item.media_content_type);
+                                                        setTuneinItems(content?.children || []);
+                                                        setTuneinBreadcrumb(b => [...b, { title: item.title, contentId: item.media_content_id, contentType: item.media_content_type }]);
+                                                    } catch { Alert.alert('Fehler', 'Navigation fehlgeschlagen'); }
+                                                    finally { setLoadingTunein(false); }
+                                                } else if (isStation) {
+                                                    setTuneinVisible(false);
+                                                    setTuneinItems([]);
+                                                    setTuneinBreadcrumb([]);
+                                                    try {
+                                                        await callService('media_player', 'play_media', target, {
+                                                            media_content_id: item.media_content_id,
+                                                            media_content_type: item.media_content_type || 'music'
+                                                        });
+                                                    } catch (e) { console.warn('TuneIn play failed', e); }
+                                                }
+                                            }}
+                                        >
+                                            {item.thumbnail ? (
+                                                <Image source={{ uri: getEntityPictureUrl(item.thumbnail) }} style={{ width: 48, height: 48, borderRadius: canBrowse ? 6 : 24 }} />
+                                            ) : (
+                                                <View style={{ width: 48, height: 48, borderRadius: canBrowse ? 6 : 24, backgroundColor: '#FF6B00' + '15', alignItems: 'center', justifyContent: 'center' }}>
+                                                    {canBrowse ? <ChevronRight size={20} color="#FF6B00" /> : <Radio size={20} color="#FF6B00" />}
+                                                </View>
+                                            )}
+                                            <View style={{ flex: 1 }}>
+                                                <Text style={{ color: colors.text, fontSize: 15, fontWeight: '600' }} numberOfLines={1}>{item.title}</Text>
+                                            </View>
+                                            {canBrowse && <ChevronRight size={18} color={colors.subtext} />}
+                                        </Pressable>
+                                    );
+                                }}
+                            />
+                        )}
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
