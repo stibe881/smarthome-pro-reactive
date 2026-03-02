@@ -2201,6 +2201,19 @@ export default function Dashboard() {
                             const currentVolume = livePlayer.attributes.volume_level ?? 0.5;
                             const isMuted = livePlayer.attributes.is_volume_muted === true;
 
+                            // Media position / duration for progress bar
+                            const mediaDuration = livePlayer.attributes.media_duration || 0;
+                            const mediaPosition = livePlayer.attributes.media_position || 0;
+                            const positionUpdatedAt = livePlayer.attributes.media_position_updated_at;
+                            const elapsed = (() => {
+                                if (!positionUpdatedAt || !isPlaying) return mediaPosition;
+                                const updatedAt = new Date(positionUpdatedAt).getTime();
+                                const now = Date.now();
+                                return Math.min(mediaPosition + (now - updatedAt) / 1000, mediaDuration);
+                            })();
+                            const progressPct = mediaDuration > 0 ? (elapsed / mediaDuration) * 100 : 0;
+                            const fmtTime = (s: number) => { const m = Math.floor(s / 60); const sec = Math.floor(s % 60); return `${m}:${sec.toString().padStart(2, '0')}`; };
+
                             // MASS player resolution (same logic as media page)
                             const getMassPlayerId = (id: string): string | null => {
                                 if (!id) return null;
@@ -2234,13 +2247,14 @@ export default function Dashboard() {
                             };
                             const handleShuffle = () => {
                                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                callService('media_player', 'shuffle_set', resolveTarget(livePlayer.entity_id), { shuffle: !livePlayer.attributes?.shuffle });
+                                const currentShuffle = livePlayer.attributes?.shuffle || false;
+                                callService('media_player', 'shuffle_set', livePlayer.entity_id, { shuffle: !currentShuffle });
                             };
                             const handleRepeat = () => {
                                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                                 const current = livePlayer.attributes?.repeat || 'off';
                                 const next = current === 'off' ? 'all' : current === 'all' ? 'one' : 'off';
-                                callService('media_player', 'repeat_set', resolveTarget(livePlayer.entity_id), { repeat: next });
+                                callService('media_player', 'repeat_set', livePlayer.entity_id, { repeat: next });
                             };
                             const shuffleOn = livePlayer.attributes?.shuffle === true;
                             const repeatMode = livePlayer.attributes?.repeat || 'off';
@@ -2281,6 +2295,19 @@ export default function Dashboard() {
                                         {/* Metadata */}
                                         <Text style={{ fontSize: 20, fontWeight: '700', color: colors.text, textAlign: 'center', marginBottom: 4 }} numberOfLines={1}>{mediaTitle}</Text>
                                         {artist ? <Text style={{ fontSize: 15, color: colors.subtext, textAlign: 'center' }} numberOfLines={1}>{artist}</Text> : null}
+
+                                        {/* Progress Bar */}
+                                        {mediaDuration > 0 && (
+                                            <View style={{ width: '100%', marginTop: 16 }}>
+                                                <View style={{ height: 4, borderRadius: 2, backgroundColor: colors.background, overflow: 'hidden' }}>
+                                                    <View style={{ height: '100%', borderRadius: 2, backgroundColor: colors.accent, width: `${Math.min(progressPct, 100)}%` }} />
+                                                </View>
+                                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 6 }}>
+                                                    <Text style={{ color: colors.subtext, fontSize: 11, fontWeight: '500' }}>{fmtTime(elapsed)}</Text>
+                                                    <Text style={{ color: colors.subtext, fontSize: 11, fontWeight: '500' }}>{fmtTime(mediaDuration)}</Text>
+                                                </View>
+                                            </View>
+                                        )}
 
                                         {/* Controls */}
                                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 20, marginTop: 28 }}>
