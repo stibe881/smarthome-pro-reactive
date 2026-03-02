@@ -565,6 +565,14 @@ export default function Dashboard() {
     const [tuneinBreadcrumb, setTuneinBreadcrumb] = useState<{ title: string, contentId?: string, contentType?: string }[]>([]);
     const [loadingTunein, setLoadingTunein] = useState(false);
 
+    // Progress bar smooth ticker — forces re-render every second while modal is open
+    const [progressTick, setProgressTick] = useState(0);
+    useEffect(() => {
+        if (!mediaPlayerModalVisible) return;
+        const timer = setInterval(() => setProgressTick(t => t + 1), 1000);
+        return () => clearInterval(timer);
+    }, [mediaPlayerModalVisible]);
+
     // When main modal closes and a pending modal is set, open it
     useEffect(() => {
         if (!mediaPlayerModalVisible && pendingModal) {
@@ -2256,6 +2264,7 @@ export default function Dashboard() {
                                 return Math.min(mediaPosition + (now - updatedAt) / 1000, mediaDuration);
                             })();
                             const progressPct = mediaDuration > 0 ? (elapsed / mediaDuration) * 100 : 0;
+                            void progressTick; // triggers re-render every second for smooth progress
                             const fmtTime = (s: number) => { const m = Math.floor(s / 60); const sec = Math.floor(s % 60); return `${m}:${sec.toString().padStart(2, '0')}`; };
 
                             const handlePlayPause = () => {
@@ -2405,20 +2414,19 @@ export default function Dashboard() {
                                                 <Radio size={20} color="#FF6B00" />
                                             </Pressable>
                                         </View>
-
-                                        {/* Progress Bar - at bottom, distinct color */}
-                                        {mediaDuration > 0 && (
-                                            <View style={{ width: '100%', marginTop: 20 }}>
-                                                <View style={{ height: 3, borderRadius: 2, backgroundColor: colors.background, overflow: 'hidden' }}>
-                                                    <View style={{ height: '100%', borderRadius: 2, backgroundColor: '#F59E0B', width: `${Math.min(progressPct, 100)}%` }} />
-                                                </View>
-                                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
-                                                    <Text style={{ color: '#F59E0B', fontSize: 11, fontWeight: '600' }}>{fmtTime(elapsed)}</Text>
-                                                    <Text style={{ color: colors.subtext, fontSize: 11, fontWeight: '500' }}>{fmtTime(mediaDuration)}</Text>
-                                                </View>
-                                            </View>
-                                        )}
                                     </View>
+                                    {/* Progress Bar - flush at bottom edge */}
+                                    {mediaDuration > 0 && (
+                                        <View style={{ width: '100%', paddingBottom: 12 }}>
+                                            <View style={{ height: 3, backgroundColor: colors.background, overflow: 'hidden' }}>
+                                                <View style={{ height: '100%', backgroundColor: '#F59E0B', width: `${Math.min(progressPct, 100)}%` }} />
+                                            </View>
+                                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4, paddingHorizontal: 16 }}>
+                                                <Text style={{ color: '#F59E0B', fontSize: 11, fontWeight: '600' }}>{fmtTime(elapsed)}</Text>
+                                                <Text style={{ color: colors.subtext, fontSize: 11, fontWeight: '500' }}>{fmtTime(mediaDuration)}</Text>
+                                            </View>
+                                        </View>
+                                    )}
                                 </View>
                             );
                         })()}
