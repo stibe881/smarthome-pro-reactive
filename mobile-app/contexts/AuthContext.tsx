@@ -32,7 +32,7 @@ interface AuthContextType {
     logout: () => Promise<void>;
     deleteAccount: (deleteHousehold?: boolean) => Promise<void>;
     changePassword: (newPassword: string) => Promise<void>;
-    resetMemberPassword: (id: string, pass: string) => Promise<void>;
+    resetMemberPassword: (id: string, pass: string, mustChange?: boolean) => Promise<void>;
     removeMember: (id: string) => Promise<void>;
     toggleMemberAccess: (id: string, active: boolean) => Promise<void>;
     mustChangePassword: boolean;
@@ -535,10 +535,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setMustChangePassword(false);
     };
 
-    const resetMemberPassword = async (memberId: string, newPassword: string) => {
+    const resetMemberPassword = async (memberId: string, newPassword: string, mustChange: boolean = true) => {
         const { error } = await supabase.rpc('reset_member_password', {
             p_user_id: memberId,
-            p_new_password: newPassword
+            p_new_password: newPassword,
+            p_must_change: mustChange
         });
         if (error) throw error;
     };

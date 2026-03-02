@@ -685,6 +685,8 @@ export default function Media() {
                                             onPlayPause={(playing) => handlePlayPause(p.entity_id, playing)}
                                             onPower={(on) => handlePower(p.entity_id, on)}
                                             onVolume={(v) => handleVolumeChange(p.entity_id, v)}
+                                            onShuffle={() => handleShuffle(p.entity_id)}
+                                            onRepeat={() => handleRepeat(p.entity_id)}
                                             spotifyActive={!!spotifyToken}
                                             getPlayerName={getPlayerName}
                                         />
@@ -1161,7 +1163,7 @@ const HeroPlayer = ({ player, massPlayer, imageUrl, massImageUrl, onSelect, onSp
     );
 };
 
-const ExpandedPlayerRow = ({ player, isSelected, imageUrl, onSelect, onSpotify, onPlayPause, onPower, onVolume, spotifyActive, getPlayerName }: {
+const ExpandedPlayerRow = ({ player, isSelected, imageUrl, onSelect, onSpotify, onPlayPause, onPower, onVolume, onShuffle, onRepeat, spotifyActive, getPlayerName }: {
     player: any,
     isSelected: boolean,
     imageUrl?: string,
@@ -1170,7 +1172,8 @@ const ExpandedPlayerRow = ({ player, isSelected, imageUrl, onSelect, onSpotify, 
     onPlayPause: (playing: boolean) => void,
     onPower: (on: boolean) => void,
     onVolume: (v: number) => void,
-
+    onShuffle: () => void,
+    onRepeat: () => void,
     spotifyActive: boolean,
     getPlayerName: (entityId: string) => string
 }) => {
@@ -1179,6 +1182,14 @@ const ExpandedPlayerRow = ({ player, isSelected, imageUrl, onSelect, onSpotify, 
     const isPlaying = player.state === 'playing';
     const name = getPlayerName(player.entity_id);
     const volume = player.attributes.volume_level || 0;
+
+    // Optimistic shuffle/repeat state
+    const [optShuffle, setOptShuffle] = useState(player?.attributes?.shuffle || false);
+    const [optRepeat, setOptRepeat] = useState(player?.attributes?.repeat || 'off');
+    useEffect(() => {
+        setOptShuffle(player?.attributes?.shuffle || false);
+        setOptRepeat(player?.attributes?.repeat || 'off');
+    }, [player?.attributes?.shuffle, player?.attributes?.repeat]);
 
     return (
         <Pressable
@@ -1204,8 +1215,12 @@ const ExpandedPlayerRow = ({ player, isSelected, imageUrl, onSelect, onSpotify, 
                 </Pressable>
             </View>
 
-            {/* Controls Row (Volume + Spotify + Play) */}
+            {/* Controls Row (Shuffle + Spotify + Volume + Play + Repeat) */}
             <View style={styles.expandedControls}>
+                <Pressable onPress={() => { setOptShuffle(!optShuffle); onShuffle(); }} style={styles.iconBtn} disabled={isOff}>
+                    <Shuffle size={18} color={optShuffle ? "#1DB954" : "#64748B"} />
+                </Pressable>
+
                 <Pressable onPress={onSpotify} style={styles.iconBtn}>
                     <Disc size={20} color={spotifyActive ? "#1DB954" : "#64748B"} />
                 </Pressable>
@@ -1223,6 +1238,14 @@ const ExpandedPlayerRow = ({ player, isSelected, imageUrl, onSelect, onSpotify, 
 
                 <Pressable onPress={() => onPlayPause(isPlaying)} style={styles.iconBtn} disabled={isOff}>
                     {isPlaying ? <Pause size={24} color="#FFF" /> : <Play size={24} color={isOff ? "#64748B" : "#FFF"} />}
+                </Pressable>
+
+                <Pressable onPress={() => { const next = optRepeat === 'off' ? 'all' : optRepeat === 'all' ? 'one' : 'off'; setOptRepeat(next); onRepeat(); }} style={styles.iconBtn} disabled={isOff}>
+                    {optRepeat === 'one' ? (
+                        <Repeat1 size={18} color="#1DB954" />
+                    ) : (
+                        <Repeat size={18} color={optRepeat === 'all' ? "#1DB954" : "#64748B"} />
+                    )}
                 </Pressable>
             </View>
         </Pressable>

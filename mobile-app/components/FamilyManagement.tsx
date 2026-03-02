@@ -107,6 +107,7 @@ export const FamilyManagement = ({ colors, onClose }: FamilyManagementProps) => 
     const [selectedMember, setSelectedMember] = useState<FamilyMember | null>(null);
     const [showAdminModal, setShowAdminModal] = useState(false);
     const [newMemberPassword, setNewMemberPassword] = useState('');
+    const [forcePasswordChange, setForcePasswordChange] = useState(true);
     const [isAdminActionLoading, setIsAdminActionLoading] = useState(false);
     const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
     const [showGuestPermissions, setShowGuestPermissions] = useState(false);
@@ -269,8 +270,8 @@ export const FamilyManagement = ({ colors, onClose }: FamilyManagementProps) => 
         }
         setIsAdminActionLoading(true);
         try {
-            await resetMemberPassword(selectedMember.user_id || selectedMember.id, newMemberPassword);
-            platformAlert('Erfolg', 'Passwort wurde zurückgesetzt. Der User muss es beim nächsten Login ändern.');
+            await resetMemberPassword(selectedMember.user_id || selectedMember.id, newMemberPassword, forcePasswordChange);
+            platformAlert('Erfolg', forcePasswordChange ? 'Passwort wurde zurückgesetzt. Der User muss es beim nächsten Login ändern.' : 'Passwort wurde zurückgesetzt.');
             setNewMemberPassword('');
         } catch (e: any) {
             platformAlert('Fehler', e.message);
@@ -714,6 +715,14 @@ export const FamilyManagement = ({ colors, onClose }: FamilyManagementProps) => 
                                         placeholderTextColor={colors.subtext}
                                     />
                                     <Pressable onPress={() => setShowPassword(!showPassword)}>{showPassword ? <EyeOff size={18} color={colors.subtext} /> : <Eye size={18} color={colors.subtext} />}</Pressable>
+                                </View>
+                                <View style={[styles.adminRow, { marginTop: 12 }]}>
+                                    <Text style={[styles.label, { color: colors.text, marginBottom: 0, fontSize: 14 }]}>Passwortänderung erzwingen</Text>
+                                    <Switch
+                                        value={forcePasswordChange}
+                                        onValueChange={setForcePasswordChange}
+                                        trackColor={{ false: '#334155', true: colors.accent }}
+                                    />
                                 </View>
                                 <Pressable onPress={handleResetPassword} disabled={isAdminActionLoading} style={[styles.actionBtn, { backgroundColor: colors.accent, marginTop: 12 }]}>
                                     <Key size={18} color="#fff" />
