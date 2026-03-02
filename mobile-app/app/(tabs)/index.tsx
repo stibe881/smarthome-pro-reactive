@@ -567,6 +567,7 @@ export default function Dashboard() {
 
     // Progress bar smooth ticker — forces re-render for time labels
     const [progressTick, setProgressTick] = useState(0);
+    const isSeekingRef = useRef(false);
     useEffect(() => {
         if (!mediaPlayerModalVisible) return;
         const timer = setInterval(() => setProgressTick(t => t + 1), 500);
@@ -2422,8 +2423,10 @@ export default function Dashboard() {
                                                 style={{ width: '100%', height: 24 }}
                                                 minimumValue={0}
                                                 maximumValue={mediaDuration}
-                                                value={elapsed}
+                                                value={isSeekingRef.current ? undefined : elapsed}
+                                                onSlidingStart={() => { isSeekingRef.current = true; }}
                                                 onSlidingComplete={(value: number) => {
+                                                    isSeekingRef.current = false;
                                                     callService('media_player', 'media_seek', resolveTarget(livePlayer.entity_id), { seek_position: value });
                                                 }}
                                                 minimumTrackTintColor={'#F59E0B'}
