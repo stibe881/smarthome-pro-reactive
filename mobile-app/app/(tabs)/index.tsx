@@ -774,7 +774,6 @@ export default function Dashboard() {
 
     const [showWizard, setShowWizard] = useState(false);
 
-    // Configurable Entity IDs (from Settings)
     const [cfgWeatherMain, setCfgWeatherMain] = useState('weather.zell_lu');
     const [cfgWeatherForecast, setCfgWeatherForecast] = useState('weather.familie_gross');
     const [cfgWeatherAlarm, setCfgWeatherAlarm] = useState('weather.meteo');
@@ -783,26 +782,7 @@ export default function Dashboard() {
     const [cfgDoorApart, setCfgDoorApart] = useState('');
     const [cfgDoorApartSensor, setCfgDoorApartSensor] = useState('');
 
-    useEffect(() => {
-        (async () => {
-            const main = await AsyncStorage.getItem('@weather_main_entity');
-            const forecast = await AsyncStorage.getItem('@weather_forecast_entity');
-            const alarm = await AsyncStorage.getItem('@weather_alarm_entity');
-            const shopping = await AsyncStorage.getItem('@shopping_list_entity');
-            if (main) setCfgWeatherMain(main);
-            if (forecast) setCfgWeatherForecast(forecast);
-            if (alarm) setCfgWeatherAlarm(alarm);
-            if (shopping) setCfgShoppingList(shopping);
-            const doorF = await AsyncStorage.getItem('@door_front_entity');
-            const doorA = await AsyncStorage.getItem('@door_apartment_entity');
-            const doorAS = await AsyncStorage.getItem('@door_apartment_sensor_entity');
-            if (doorF) setCfgDoorFront(doorF);
-            if (doorA) setCfgDoorApart(doorA);
-            if (doorAS) setCfgDoorApartSensor(doorAS);
-        })();
-    }, []);
-
-    // Sync entity configs from shared Supabase dashboardConfig (overrides local AsyncStorage)
+    // Sync entity configs from shared Supabase dashboardConfig (household-level, shared across all devices)
     useEffect(() => {
         const ec = dashboardConfig?.entityConfig;
         if (!ec) return;

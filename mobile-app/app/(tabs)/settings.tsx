@@ -1234,41 +1234,33 @@ export default function Settings() {
     const [entityPickerTarget, setEntityPickerTarget] = useState<'main' | 'forecast' | 'alarm' | 'shopping' | 'door_front' | 'door_apartment' | 'door_apartment_sensor'>('main');
     const [entityPickerSearch, setEntityPickerSearch] = useState('');
 
-    // Load entity settings
+    // Load entity settings from shared Supabase dashboardConfig (household-level)
     useEffect(() => {
-        (async () => {
-            const main = await AsyncStorage.getItem('@weather_main_entity');
-            const forecast = await AsyncStorage.getItem('@weather_forecast_entity');
-            const alarm = await AsyncStorage.getItem('@weather_alarm_entity');
-            const shopping = await AsyncStorage.getItem('@shopping_list_entity');
-            if (main) setWeatherMainEntity(main);
-            if (forecast) setWeatherForecastEntity(forecast);
-            if (alarm) setWeatherAlarmEntity(alarm);
-            if (shopping) setShoppingListEntity(shopping);
-            const doorF = await AsyncStorage.getItem('@door_front_entity');
-            const doorA = await AsyncStorage.getItem('@door_apartment_entity');
-            const doorAS = await AsyncStorage.getItem('@door_apartment_sensor_entity');
-            if (doorF) setDoorFrontEntity(doorF);
-            if (doorA) setDoorApartmentEntity(doorA);
-            if (doorAS) setDoorApartmentSensorEntity(doorAS);
-        })();
-    }, []);
+        const ec = dashboardConfig?.entityConfig;
+        if (!ec) return;
+        if (ec.main) setWeatherMainEntity(ec.main);
+        if (ec.forecast) setWeatherForecastEntity(ec.forecast);
+        if (ec.alarm) setWeatherAlarmEntity(ec.alarm);
+        if (ec.shopping) setShoppingListEntity(ec.shopping);
+        if (ec.door_front) setDoorFrontEntity(ec.door_front);
+        if (ec.door_apartment) setDoorApartmentEntity(ec.door_apartment);
+        if (ec.door_apartment_sensor) setDoorApartmentSensorEntity(ec.door_apartment_sensor);
+    }, [dashboardConfig]);
 
     const saveEntityConfig = async (target: 'main' | 'forecast' | 'alarm' | 'shopping' | 'door_front' | 'door_apartment' | 'door_apartment_sensor', entityId: string) => {
-        const mapping: Record<string, { setter: (v: string) => void, key: string }> = {
-            main: { setter: setWeatherMainEntity, key: '@weather_main_entity' },
-            forecast: { setter: setWeatherForecastEntity, key: '@weather_forecast_entity' },
-            alarm: { setter: setWeatherAlarmEntity, key: '@weather_alarm_entity' },
-            shopping: { setter: setShoppingListEntity, key: '@shopping_list_entity' },
-            door_front: { setter: setDoorFrontEntity, key: '@door_front_entity' },
-            door_apartment: { setter: setDoorApartmentEntity, key: '@door_apartment_entity' },
-            door_apartment_sensor: { setter: setDoorApartmentSensorEntity, key: '@door_apartment_sensor_entity' },
+        const setterMapping: Record<string, (v: string) => void> = {
+            main: setWeatherMainEntity,
+            forecast: setWeatherForecastEntity,
+            alarm: setWeatherAlarmEntity,
+            shopping: setShoppingListEntity,
+            door_front: setDoorFrontEntity,
+            door_apartment: setDoorApartmentEntity,
+            door_apartment_sensor: setDoorApartmentSensorEntity,
         };
-        mapping[target].setter(entityId);
-        await AsyncStorage.setItem(mapping[target].key, entityId);
+        setterMapping[target](entityId);
         setEntityPickerVisible(false);
 
-        // Sync ALL entity configs to Supabase (shared across household)
+        // Save to Supabase dashboardConfig (shared across household)
         const allConfigs = {
             ...(dashboardConfig || {}),
             entityConfig: {
