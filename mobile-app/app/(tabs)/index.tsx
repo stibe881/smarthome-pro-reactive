@@ -2311,7 +2311,8 @@ export default function Dashboard() {
                             const isRadio = contentType === 'channel' || contentType === 'podcast'
                                 || appName.includes('tunein') || appName.includes('radio')
                                 || contentId.includes('tunein') || contentId.includes('radio')
-                                || mediaDuration === 0;
+                                || (isPlaying && mediaDuration === 0);
+                            const isSpotify = appName.includes('spotify') || contentId.includes('spotify');
 
                             return (
                                 <View style={{ position: 'relative' }}>
@@ -2417,7 +2418,7 @@ export default function Dashboard() {
                                                     setMediaPlayerModalVisible(false);
                                                 }}
                                                 hitSlop={8}
-                                                style={{ padding: 10, backgroundColor: '#1DB954' + '20', borderRadius: 16 }}
+                                                style={{ padding: 10, backgroundColor: isSpotify ? '#1DB954' + '40' : '#1DB954' + '20', borderRadius: 16, borderWidth: isSpotify ? 1 : 0, borderColor: '#1DB954' }}
                                             >
                                                 <Disc size={20} color="#1DB954" />
                                             </Pressable>
@@ -2427,7 +2428,7 @@ export default function Dashboard() {
                                                     setMediaPlayerModalVisible(false);
                                                 }}
                                                 hitSlop={8}
-                                                style={{ padding: 10, backgroundColor: '#FF6B00' + '20', borderRadius: 16 }}
+                                                style={{ padding: 10, backgroundColor: isRadio ? '#FF6B00' + '40' : '#FF6B00' + '20', borderRadius: 16, borderWidth: isRadio ? 1 : 0, borderColor: '#FF6B00' }}
                                             >
                                                 <Radio size={20} color="#FF6B00" />
                                             </Pressable>

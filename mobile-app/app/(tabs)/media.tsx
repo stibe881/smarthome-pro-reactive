@@ -1100,7 +1100,7 @@ const HeroPlayer = ({ player, massPlayer, imageUrl, massImageUrl, onSelect, onSp
                         <Disc size={22} color={spotifyActive ? "#1DB954" : "#64748B"} />
                     </Pressable>
                     <Pressable onPress={() => onTuneIn?.()} style={{ padding: 8 }}>
-                        <Radio size={22} color="#FF6B00" />
+                        <Radio size={22} color={isRadio ? "#FF6B00" : "#64748B"} />
                     </Pressable>
                 </View>
 
