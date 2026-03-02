@@ -873,7 +873,7 @@ export default function Media() {
 
 // --- EXTRACTED COMPONENTS ---
 
-const HeroPlayer = ({ player, massPlayer, imageUrl, massImageUrl, onSelect, onSpotify, onPlayPause, onNext, onPrev, onPower, onVolume, onShuffle, onRepeat, spotifyActive, getPlayerName }: {
+const HeroPlayer = ({ player, massPlayer, imageUrl, massImageUrl, onSelect, onSpotify, onPlayPause, onNext, onPrev, onPower, onVolume, onShuffle, onRepeat, onTuneIn, spotifyActive, getPlayerName }: {
     player: any,
     massPlayer?: any,
     imageUrl?: string,
@@ -887,6 +887,7 @@ const HeroPlayer = ({ player, massPlayer, imageUrl, massImageUrl, onSelect, onSp
     onVolume: (v: number) => void,
     onShuffle: () => void,
     onRepeat: () => void,
+    onTuneIn?: () => void,
     spotifyActive: boolean,
     getPlayerName: (entityId: string) => string
 }) => {
@@ -1055,19 +1056,6 @@ const HeroPlayer = ({ player, massPlayer, imageUrl, massImageUrl, onSelect, onSp
                     <Text style={styles.heroArtist} numberOfLines={1}>{artist}</Text>
                 </View>
 
-                {/* Progress Bar */}
-                {mediaDuration > 0 && !isOff && (
-                    <View style={{ width: '100%', paddingHorizontal: 4, marginTop: 8 }}>
-                        <View style={{ height: 4, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 2, overflow: 'hidden' }}>
-                            <View style={{ height: '100%', width: `${progress * 100}%`, backgroundColor: '#FFF', borderRadius: 2 }} />
-                        </View>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
-                            <Text style={{ color: '#94A3B8', fontSize: 11 }}>{formatTime(currentPosition)}</Text>
-                            <Text style={{ color: '#94A3B8', fontSize: 11 }}>{formatTime(mediaDuration)}</Text>
-                        </View>
-                    </View>
-                )}
-
                 {/* Controls */}
                 <View style={styles.heroControls}>
                     {!isRadio && (
@@ -1099,11 +1087,16 @@ const HeroPlayer = ({ player, massPlayer, imageUrl, massImageUrl, onSelect, onSp
                     )}
                 </View>
 
-                {/* Secondary Controls: Spotify + Power */}
+                {/* Secondary Controls: Spotify + TuneIn + Power */}
                 <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 32, marginTop: 8 }}>
                     <Pressable onPress={onSpotify} style={{ padding: 8 }}>
                         <Disc size={22} color={spotifyActive ? "#1DB954" : "#64748B"} />
                     </Pressable>
+                    {onTuneIn && (
+                        <Pressable onPress={onTuneIn} style={{ padding: 8 }}>
+                            <Radio size={22} color="#FF6B00" />
+                        </Pressable>
+                    )}
                     <Pressable onPress={() => onPower(!isOff)} style={{ padding: 8 }}>
                         <Power size={22} color={!isOff ? "#EF4444" : "#64748B"} />
                     </Pressable>

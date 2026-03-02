@@ -2431,37 +2431,6 @@ export default function Dashboard() {
                                             </Pressable>
                                         </View>
                                     </View>
-                                    {/* Progress Slider - seekable, at bottom edge */}
-                                    {mediaDuration > 0 && (
-                                        <View style={{ width: '100%', paddingBottom: 12, paddingHorizontal: 0 }}>
-                                            <Slider
-                                                style={{ width: '100%', height: 24 }}
-                                                minimumValue={0}
-                                                maximumValue={mediaDuration}
-                                                value={elapsed}
-                                                onSlidingStart={() => { isSeekingRef.current = true; }}
-                                                onSlidingComplete={async (value: number) => {
-                                                    const seekTarget = livePlayer.entity_id; // use original entity, not MASS
-                                                    console.log(`⏩ Seek: target=${seekTarget}, position=${Math.round(value)}s / ${Math.round(mediaDuration)}s`);
-                                                    try {
-                                                        // Just seek — player resumes on its own after buffering
-                                                        callService('media_player', 'media_seek', seekTarget, { seek_position: Math.round(value) });
-                                                    } catch (e) {
-                                                        console.warn('⏩ Seek failed:', e);
-                                                    }
-                                                    // Resume ticker after delay to let HA update
-                                                    setTimeout(() => { isSeekingRef.current = false; }, 2000);
-                                                }}
-                                                minimumTrackTintColor={'#F59E0B'}
-                                                maximumTrackTintColor={colors.background}
-                                                thumbTintColor={'#F59E0B'}
-                                            />
-                                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, marginTop: -2 }}>
-                                                <Text style={{ color: '#F59E0B', fontSize: 11, fontWeight: '600' }}>{fmtTime(elapsed)}</Text>
-                                                <Text style={{ color: colors.subtext, fontSize: 11, fontWeight: '500' }}>{fmtTime(mediaDuration)}</Text>
-                                            </View>
-                                        </View>
-                                    )}
                                 </View>
                             );
                         })()}
