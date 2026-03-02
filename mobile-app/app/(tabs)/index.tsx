@@ -2228,13 +2228,6 @@ export default function Dashboard() {
                             const isOff = livePlayer.state === 'off';
                             const isPlaying = livePlayer.state === 'playing';
                             const imageUrl = getEntityPictureUrl(livePlayer.attributes?.entity_picture) || null;
-                            const mediaTitle = livePlayer.attributes.media_title || 'Unbekanntes Medium';
-                            const artist = livePlayer.attributes.media_artist || '';
-                            const playerName = livePlayer.attributes.friendly_name || livePlayer.entity_id;
-                            const features = livePlayer.attributes.supported_features || 0;
-                            const supportsVolume = (features & 4) !== 0;
-                            const currentVolume = livePlayer.attributes.volume_level ?? 0.5;
-                            const isMuted = livePlayer.attributes.is_volume_muted === true;
 
                             // MASS player resolution (same logic as media page)
                             const getMassPlayerId = (id: string): string | null => {
@@ -2253,10 +2246,19 @@ export default function Dashboard() {
 
                             const resolveTarget = (entityId: string): string => getMassPlayerId(entityId) || entityId;
 
-                            // Media position / duration for progress bar
-                            // Check both the original player and the MASS player for media attributes
+                            // MASS entity for attribute fallbacks
                             const massPlayerId = getMassPlayerId(livePlayer.entity_id);
                             const massEntity = massPlayerId ? entities.find(e => e.entity_id === massPlayerId) : null;
+
+                            const mediaTitle = livePlayer.attributes.media_title || massEntity?.attributes?.media_title || 'Unbekanntes Medium';
+                            const artist = livePlayer.attributes.media_artist || massEntity?.attributes?.media_artist || '';
+                            const playerName = livePlayer.attributes.friendly_name || livePlayer.entity_id;
+                            const features = livePlayer.attributes.supported_features || 0;
+                            const supportsVolume = (features & 4) !== 0;
+                            const currentVolume = livePlayer.attributes.volume_level ?? 0.5;
+                            const isMuted = livePlayer.attributes.is_volume_muted === true;
+
+                            // Media position / duration
                             const mediaDuration = livePlayer.attributes.media_duration || massEntity?.attributes?.media_duration || 0;
                             const mediaPosition = livePlayer.attributes.media_position || massEntity?.attributes?.media_position || 0;
                             const positionUpdatedAt = livePlayer.attributes.media_position_updated_at || massEntity?.attributes?.media_position_updated_at;

@@ -924,19 +924,23 @@ const HeroPlayer = ({ player, massPlayer, imageUrl, massImageUrl, onSelect, onSp
     const showFallbackIcon = !hasEverLoadedCover.current && !stableImage;
 
     // Optimistic state for shuffle/repeat (immediate visual feedback)
-    const [optShuffle, setOptShuffle] = useState(player?.attributes?.shuffle || false);
-    const [optRepeat, setOptRepeat] = useState(player?.attributes?.repeat || 'off');
+    const [optShuffle, setOptShuffle] = useState(player?.attributes?.shuffle || massPlayer?.attributes?.shuffle || false);
+    const [optRepeat, setOptRepeat] = useState(player?.attributes?.repeat || massPlayer?.attributes?.repeat || 'off');
     useEffect(() => {
-        if (player) {
-            setOptShuffle(player.attributes?.shuffle || false);
-            setOptRepeat(player.attributes?.repeat || 'off');
-        }
-    }, [player?.attributes?.shuffle, player?.attributes?.repeat]);
+        const sh = player?.attributes?.shuffle ?? massPlayer?.attributes?.shuffle ?? false;
+        const rp = player?.attributes?.repeat || massPlayer?.attributes?.repeat || 'off';
+        setOptShuffle(sh);
+        setOptRepeat(rp);
+    }, [player?.attributes?.shuffle, player?.attributes?.repeat, massPlayer?.attributes?.shuffle, massPlayer?.attributes?.repeat]);
 
     const isPlaying = player?.state === 'playing';
     const isOff = player?.state === 'off' || player?.state === 'unavailable';
-    const mediaTitle = player?.attributes?.media_title || (isOff ? 'Aus' : 'Bereit');
-    const artist = player?.attributes?.media_artist || '';
+    // Keep last known title during brief track transitions to avoid 'Aus' flash
+    const lastTitleRef = useRef(player?.attributes?.media_title || '');
+    const currentTitle = player?.attributes?.media_title || massPlayer?.attributes?.media_title || '';
+    if (currentTitle) lastTitleRef.current = currentTitle;
+    const mediaTitle = currentTitle || lastTitleRef.current || (isOff ? 'Aus' : 'Bereit');
+    const artist = player?.attributes?.media_artist || massPlayer?.attributes?.media_artist || '';
     const volume = player?.attributes?.volume_level ?? 0.4;
 
 
