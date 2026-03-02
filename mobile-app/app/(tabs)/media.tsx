@@ -909,7 +909,7 @@ export default function Media() {
                                         </Pressable>
                                     )}
                                     <FlatList
-                                        data={editingPlaylists ? playlists : (allowedPlaylists.length > 0 && !isAdmin
+                                        data={editingPlaylists ? playlists : (allowedPlaylists.length > 0
                                             ? playlists.filter(p => allowedPlaylists.includes(p.media_content_id))
                                             : playlists)}
                                         keyExtractor={i => i.media_content_id}
