@@ -2432,8 +2432,10 @@ export default function Dashboard() {
                                                     console.log(`⏩ Seek: target=${seekTarget}, position=${Math.round(value)}s / ${Math.round(mediaDuration)}s`);
                                                     try {
                                                         await callService('media_player', 'media_seek', seekTarget, { seek_position: Math.round(value) });
-                                                        // Resume playback after seek (some players pause on seek)
-                                                        await callService('media_player', 'media_play', resolveTarget(livePlayer.entity_id));
+                                                        // Wait a moment, then resume playback (some players pause on seek)
+                                                        await new Promise(r => setTimeout(r, 500));
+                                                        callService('media_player', 'media_play', seekTarget);
+                                                        callService('media_player', 'media_play', resolveTarget(livePlayer.entity_id));
                                                     } catch (e) {
                                                         console.warn('⏩ Seek failed:', e);
                                                     }
