@@ -355,6 +355,14 @@ export interface NotificationSettings {
     calendar: {
         birthday: boolean;
     };
+    planner?: {
+        taskReminders?: boolean;
+        recurringReminders?: boolean;
+    };
+    pinnwand?: {
+        newPosts?: boolean;
+        comments?: boolean;
+    };
 }
 
 export function HomeAssistantProvider({ children }: { children: React.ReactNode }) {
@@ -411,6 +419,10 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
         },
         calendar: {
             birthday: true
+        },
+        planner: {
+            taskReminders: true,
+            recurringReminders: true
         }
     });
     const [dashboardConfig, setDashboardConfig] = useState<any>({});
@@ -1612,14 +1624,38 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
         isGeofencingActive,
         fetchTodoItems: async (entityId: string) => {
             const items = await serviceRef.current?.fetchTodoItems(entityId) || [];
-            if (entityId === 'todo.google_keep_einkaufsliste') {
+            // Sync count for background geofencing task
+            const shoppingEntity = dashboardConfig?.entityConfig?.shopping || 'todo.google_keep_einkaufsliste';
+            if (entityId === shoppingEntity) {
                 const count = items.filter((i: any) => i.status === 'needs_action').length;
                 AsyncStorage.setItem(SHOPPING_COUNT_KEY, count.toString());
             }
             return items;
         },
-        updateTodoItem: async (entityId: string, item: string, status: any) => serviceRef.current?.updateTodoItem(entityId, item, status),
-        addTodoItem: async (entityId: string, item: string) => serviceRef.current?.addTodoItem(entityId, item),
+        updateTodoItem: async (entityId: string, item: string, status: any) => {
+            await serviceRef.current?.updateTodoItem(entityId, item, status);
+            // Re-sync shopping count after toggle
+            const shoppingEntity = dashboardConfig?.entityConfig?.shopping || 'todo.google_keep_einkaufsliste';
+            if (entityId === shoppingEntity) {
+                try {
+                    const items = await serviceRef.current?.fetchTodoItems(entityId) || [];
+                    const count = items.filter((i: any) => i.status === 'needs_action').length;
+                    await AsyncStorage.setItem(SHOPPING_COUNT_KEY, count.toString());
+                } catch { }
+            }
+        },
+        addTodoItem: async (entityId: string, item: string) => {
+            await serviceRef.current?.addTodoItem(entityId, item);
+            // Re-sync shopping count after add
+            const shoppingEntity = dashboardConfig?.entityConfig?.shopping || 'todo.google_keep_einkaufsliste';
+            if (entityId === shoppingEntity) {
+                try {
+                    const items = await serviceRef.current?.fetchTodoItems(entityId) || [];
+                    const count = items.filter((i: any) => i.status === 'needs_action').length;
+                    await AsyncStorage.setItem(SHOPPING_COUNT_KEY, count.toString());
+                } catch { }
+            }
+        },
         shoppingListVisible,
         setShoppingListVisible,
         startShoppingGeofencing,

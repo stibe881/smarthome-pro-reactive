@@ -135,9 +135,19 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
         }
     }, [user]);
 
+    // In-memory lock to prevent concurrent inserts for the same notification
+    const pendingInserts = React.useRef(new Set<string>());
+
     // Add new notification to Supabase (state update comes via Realtime subscription)
     const addNotification = useCallback(async (title: string, body: string, deliveredAt?: Date) => {
         if (!user) return;
+
+        // Create a dedup key for in-memory lock (prevents async race condition)
+        const dedupKey = `${title}|||${body}`;
+        if (pendingInserts.current.has(dedupKey)) {
+            return; // Another insert for the same notification is already in progress
+        }
+        pendingInserts.current.add(dedupKey);
 
         try {
             // Dedup: check Supabase for recent notification with same title+body (last 5 min)
@@ -173,6 +183,9 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
             // State will be updated by the Realtime INSERT listener
         } catch (e) {
             console.warn('Failed to add notification:', e);
+        } finally {
+            // Release lock after a short delay to handle near-simultaneous calls
+            setTimeout(() => pendingInserts.current.delete(dedupKey), 3000);
         }
     }, [user]);
 
@@ -410,6 +423,8 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
             const deliveredAt = toJsDate(notification.date);
             // console.log('🔔 FOREGROUND push:', title, 'category_key:', pushCatKey);
             saveNotification(id, title || '', body || '', pushCatKey || undefined, deliveredAt);
+            // Dismiss this notification from the notification center so catchDelivered won't re-process it
+            Notifications.dismissNotificationAsync(id).catch(() => { });
         });
         return () => sub.remove();
     }, [saveNotification]);

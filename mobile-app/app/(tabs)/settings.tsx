@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { useHomeAssistant } from '../../contexts/HomeAssistantContext';
 import { useTheme, THEMES, ThemeType, AutoThemeConfig, THEME_DISPLAY_NAMES, DARK_THEMES, LIGHT_THEMES } from '../../contexts/ThemeContext';
-import { Wifi, WifiOff, Save, LogOut, User, Server, Key, CheckCircle, XCircle, Shield, Bell, Palette, ChevronRight, LucideIcon, X, ScanFace, MapPin, Smartphone, Search, Calendar, Trash2, Users, Eye, EyeOff, Sun, Moon, Store, Camera, RotateCw, Cloud, CloudRain, ShoppingCart, DoorOpen, DoorClosed, BellRing, Wind, Fan, Waves, BatteryMedium, Lock, Disc3 } from 'lucide-react-native';
+import { Wifi, WifiOff, Save, LogOut, User, Server, Key, CheckCircle, XCircle, Shield, Bell, Palette, ChevronRight, LucideIcon, X, ScanFace, MapPin, Smartphone, Search, Calendar, Trash2, Users, Eye, EyeOff, Sun, Moon, Store, Camera, RotateCw, Cloud, CloudRain, ShoppingCart, DoorOpen, DoorClosed, BellRing, Wind, Fan, Waves, BatteryMedium, Lock, Disc3, MessageSquare, MessageCircle } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -223,7 +223,7 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
         }
     };
 
-    const toggleSetting = async (category: 'security' | 'household' | 'home' | 'weather' | 'baby' | 'calendar', key: string) => {
+    const toggleSetting = async (category: 'security' | 'household' | 'home' | 'weather' | 'baby' | 'calendar' | 'planner' | 'pinnwand', key: string) => {
         let newSettings = JSON.parse(JSON.stringify(notificationSettings));
         if (!newSettings[category]) newSettings[category] = {} as any;
         // @ts-ignore
@@ -292,6 +292,76 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
 
                     {notificationSettings.enabled && (
                         <>
+                            {/* ===== FAMILIENPLANER ===== */}
+                            <View style={[styles.settingGroup, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                                <Text style={[styles.groupTitle, { color: colors.subtext }]}>FAMILIENPLANER</Text>
+                                <View style={styles.settingRow}>
+                                    <View style={[styles.iconBadge, { backgroundColor: '#10B98125' }]}>
+                                        <CheckCircle size={20} color="#10B981" />
+                                    </View>
+                                    <View style={{ flex: 1, marginLeft: 12 }}>
+                                        <Text style={[styles.settingLabel, { color: colors.text }]}>Aufgaben-Erinnerungen</Text>
+                                        <Text style={[styles.settingDescription, { color: colors.subtext }]}>Erinnerungen für fällige Aufgaben</Text>
+                                    </View>
+                                    <Switch
+                                        value={notificationSettings.planner?.taskReminders !== false}
+                                        onValueChange={() => toggleSetting('planner', 'taskReminders')}
+                                        trackColor={{ false: colors.border, true: colors.accent }}
+                                        thumbColor={'#fff'}
+                                    />
+                                </View>
+                                <View style={[styles.settingRow, { borderTopWidth: 1, borderTopColor: colors.border }]}>
+                                    <View style={[styles.iconBadge, { backgroundColor: '#3B82F625' }]}>
+                                        <Calendar size={20} color="#3B82F6" />
+                                    </View>
+                                    <View style={{ flex: 1, marginLeft: 12 }}>
+                                        <Text style={[styles.settingLabel, { color: colors.text }]}>Wiederkehrende Aufgaben</Text>
+                                        <Text style={[styles.settingDescription, { color: colors.subtext }]}>Benachrichtigungen für wiederkehrende Aufgaben</Text>
+                                    </View>
+                                    <Switch
+                                        value={notificationSettings.planner?.recurringReminders !== false}
+                                        onValueChange={() => toggleSetting('planner', 'recurringReminders')}
+                                        trackColor={{ false: colors.border, true: colors.accent }}
+                                        thumbColor={'#fff'}
+                                    />
+                                </View>
+                            </View>
+
+                            {/* ===== PINNWAND ===== */}
+                            <View style={[styles.settingGroup, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                                <Text style={[styles.groupTitle, { color: colors.subtext }]}>PINNWAND</Text>
+                                <View style={styles.settingRow}>
+                                    <View style={[styles.iconBadge, { backgroundColor: '#F59E0B25' }]}>
+                                        <MessageSquare size={20} color="#F59E0B" />
+                                    </View>
+                                    <View style={{ flex: 1, marginLeft: 12 }}>
+                                        <Text style={[styles.settingLabel, { color: colors.text }]}>Neue Beiträge</Text>
+                                        <Text style={[styles.settingDescription, { color: colors.subtext }]}>Benachrichtigungen für neue Pinnwand-Einträge</Text>
+                                    </View>
+                                    <Switch
+                                        value={notificationSettings.pinnwand?.newPosts !== false}
+                                        onValueChange={() => toggleSetting('pinnwand', 'newPosts')}
+                                        trackColor={{ false: colors.border, true: colors.accent }}
+                                        thumbColor={'#fff'}
+                                    />
+                                </View>
+                                <View style={[styles.settingRow, { borderTopWidth: 1, borderTopColor: colors.border }]}>
+                                    <View style={[styles.iconBadge, { backgroundColor: '#8B5CF625' }]}>
+                                        <MessageCircle size={20} color="#8B5CF6" />
+                                    </View>
+                                    <View style={{ flex: 1, marginLeft: 12 }}>
+                                        <Text style={[styles.settingLabel, { color: colors.text }]}>Kommentare</Text>
+                                        <Text style={[styles.settingDescription, { color: colors.subtext }]}>Benachrichtigungen für Kommentare auf der Pinnwand</Text>
+                                    </View>
+                                    <Switch
+                                        value={notificationSettings.pinnwand?.comments !== false}
+                                        onValueChange={() => toggleSetting('pinnwand', 'comments')}
+                                        trackColor={{ false: colors.border, true: colors.accent }}
+                                        thumbColor={'#fff'}
+                                    />
+                                </View>
+                            </View>
+
                             {/* ===== DYNAMISCHE PUSH-KATEGORIEN GRUPPIERT ===== */}
                             {groupedTypes.map(group => (
                                 <View key={group.name} style={[styles.settingGroup, { backgroundColor: colors.card, borderColor: colors.border }]}>

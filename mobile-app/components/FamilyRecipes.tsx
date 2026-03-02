@@ -157,6 +157,12 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
     const [isSaving, setIsSaving] = useState(false);
     const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null);
 
+    // Meal planner picker state
+    const [showMealPlanPicker, setShowMealPlanPicker] = useState(false);
+    const [mealPlanRecipe, setMealPlanRecipe] = useState<Recipe | null>(null);
+    const [mealPlanDayOffset, setMealPlanDayOffset] = useState(0);
+    const [mealPlanSlot, setMealPlanSlot] = useState('dinner');
+
     const loadRecipes = useCallback(async () => {
         if (!householdId) return;
         setIsLoading(true);
@@ -651,17 +657,41 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
         setShowCategoryPicker(false);
     };
 
-    const handlePlanRecipe = async (recipe: Recipe) => {
-        if (!householdId) return;
+    const handlePlanRecipe = (recipe: Recipe) => {
+        setMealPlanRecipe(recipe);
+        setMealPlanDayOffset(0);
+        setMealPlanSlot('dinner');
+        setShowMealPlanPicker(true);
+    };
+
+    const confirmPlanRecipe = async () => {
+        if (!householdId || !mealPlanRecipe) return;
         try {
-            const today = new Date().toISOString().split('T')[0];
-            const { error } = await supabase.from('family_planner').insert({
-                household_id: householdId, created_by: user?.id,
-                title: recipe.title, description: recipe.description || '',
-                type: 'recipe', date: today, recipe_id: recipe.id,
+            const targetDate = new Date();
+            targetDate.setDate(targetDate.getDate() + mealPlanDayOffset);
+            // Calculate week start (Monday)
+            const day = targetDate.getDay();
+            const diff = targetDate.getDate() - day + (day === 0 ? -6 : 1);
+            const monday = new Date(targetDate);
+            monday.setDate(diff);
+            monday.setHours(0, 0, 0, 0);
+            const ws = monday.toISOString().split('T')[0];
+            const dow = (targetDate.getDay() + 6) % 7; // Monday=0
+
+            const { error } = await supabase.from('meal_plans').insert({
+                household_id: householdId,
+                week_start: ws,
+                day_of_week: dow,
+                meal_type: mealPlanSlot,
+                meal_name: mealPlanRecipe.title,
+                ingredients: mealPlanRecipe.ingredients,
             });
             if (error) throw error;
-            showAlert('Geplant ✓', `"${recipe.title}" wurde zum Planer hinzugefügt.`);
+            setShowMealPlanPicker(false);
+            const dayLabels = ['Heute', 'Morgen', 'Übermorgen'];
+            const slotLabels: Record<string, string> = { breakfast: 'Frühstück', lunch: 'Mittagessen', dinner: 'Abendessen' };
+            const dayLabel = mealPlanDayOffset < 3 ? dayLabels[mealPlanDayOffset] : `in ${mealPlanDayOffset} Tagen`;
+            showAlert('Geplant ✓', `"${mealPlanRecipe.title}" wurde für ${dayLabel} (${slotLabels[mealPlanSlot] || mealPlanSlot}) eingeplant.`);
         } catch (e: any) { showAlert('Fehler', e.message); }
     };
 
@@ -1622,6 +1652,59 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
                     {viewMode === 'create_own' && renderCreateOwn()}
                     {viewMode === 'create_web' && renderCreateWeb()}
                     {viewMode === 'cooking' && renderCooking()}
+
+                    {/* Meal Plan Picker Modal */}
+                    <Modal visible={showMealPlanPicker} transparent animationType="slide" onRequestClose={() => setShowMealPlanPicker(false)}>
+                        <View style={s.overlay}>
+                            <Pressable style={{ flex: 1 }} onPress={() => setShowMealPlanPicker(false)} />
+                            <View style={[s.bottomSheet, { backgroundColor: colors.background }]}>
+                                <View style={[s.sheetHandle, { backgroundColor: colors.border }]} />
+                                <Text style={[s.sheetTitle, { color: colors.text }]}>Mahlzeit einplanen</Text>
+                                {mealPlanRecipe && (
+                                    <Text style={{ color: colors.subtext, fontSize: 13, marginBottom: 14, paddingHorizontal: 20 }} numberOfLines={1}>
+                                        {mealPlanRecipe.title}
+                                    </Text>
+                                )}
+
+                                {/* Day selector */}
+                                <Text style={{ color: colors.subtext, fontSize: 12, fontWeight: '600', paddingHorizontal: 20, marginBottom: 8 }}>TAG</Text>
+                                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 20, marginBottom: 16 }}>
+                                    {[0, 1, 2, 3, 4, 5, 6].map(offset => {
+                                        const d = new Date(); d.setDate(d.getDate() + offset);
+                                        const labels = ['Heute', 'Morgen'];
+                                        const label = offset < 2 ? labels[offset] : `${['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][d.getDay()]} ${d.getDate()}.${d.getMonth() + 1}.`;
+                                        const selected = mealPlanDayOffset === offset;
+                                        return (
+                                            <Pressable key={offset} onPress={() => setMealPlanDayOffset(offset)}
+                                                style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: selected ? colors.accent : colors.card, borderWidth: 1, borderColor: selected ? colors.accent : colors.border }}>
+                                                <Text style={{ color: selected ? '#fff' : colors.text, fontWeight: '600', fontSize: 13 }}>{label}</Text>
+                                            </Pressable>
+                                        );
+                                    })}
+                                </ScrollView>
+
+                                {/* Slot selector */}
+                                <Text style={{ color: colors.subtext, fontSize: 12, fontWeight: '600', paddingHorizontal: 20, marginBottom: 8 }}>MAHLZEIT</Text>
+                                <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 20, marginBottom: 20 }}>
+                                    {[{ key: 'breakfast', label: 'Frühstück', emoji: '☕' }, { key: 'lunch', label: 'Mittagessen', emoji: '🥪' }, { key: 'dinner', label: 'Abendessen', emoji: '🍲' }].map(slot => {
+                                        const selected = mealPlanSlot === slot.key;
+                                        return (
+                                            <Pressable key={slot.key} onPress={() => setMealPlanSlot(slot.key)}
+                                                style={{ flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 12, backgroundColor: selected ? colors.accent + '20' : colors.card, borderWidth: 1, borderColor: selected ? colors.accent : colors.border }}>
+                                                <Text style={{ fontSize: 20, marginBottom: 4 }}>{slot.emoji}</Text>
+                                                <Text style={{ color: selected ? colors.accent : colors.text, fontWeight: '600', fontSize: 12 }}>{slot.label}</Text>
+                                            </Pressable>
+                                        );
+                                    })}
+                                </View>
+
+                                <Pressable onPress={confirmPlanRecipe}
+                                    style={{ marginHorizontal: 20, marginBottom: 24, paddingVertical: 14, borderRadius: 14, backgroundColor: colors.accent, alignItems: 'center' }}>
+                                    <Text style={{ color: '#fff', fontWeight: '700', fontSize: 16 }}>Einplanen</Text>
+                                </Pressable>
+                            </View>
+                        </View>
+                    </Modal>
                 </View>
             </GestureHandlerRootView>
         </Modal>

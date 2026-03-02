@@ -16,9 +16,10 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.stibe88.mobileapp",
       "appleTeamId": "QF59FHQ44R",
-      "buildNumber": "122",
+      "buildNumber": "123",
       "entitlements": {
         "com.apple.security.application-groups": [
+          "group.com.stibe88.mobileapp",
           "group.com.stibe88.mobileapp"
         ]
       },
@@ -31,6 +32,9 @@
         "UIBackgroundModes": [
           "location",
           "fetch",
+          "remote-notification",
+          "location",
+          "fetch",
           "remote-notification"
         ]
       }
@@ -40,7 +44,17 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -96,8 +110,31 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "6d60636a-e8bd-43e6-a2a2-d25e7390c709"
+        "projectId": "6d60636a-e8bd-43e6-a2a2-d25e7390c709",
+        "build": {
+          "experimental": {
+            "ios": {
+              "appExtensions": [
+                {
+                  "bundleIdentifier": "com.stibe88.mobileapp.widget",
+                  "targetName": "mobilewidget",
+                  "entitlements": {
+                    "com.apple.security.application-groups": [
+                      "group.com.stibe88.mobileapp"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        }
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/6d60636a-e8bd-43e6-a2a2-d25e7390c709"
     }
   }
 }

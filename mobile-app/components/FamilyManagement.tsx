@@ -5,7 +5,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useHousehold } from '../hooks/useHousehold';
 import { supabase } from '../lib/supabase';
-import { Users, UserPlus, Mail, Crown, X, Send, Lock, Eye, EyeOff, Trash2, Key, Shield, ShieldOff, MoreVertical, Camera, UserCheck, CalendarDays } from 'lucide-react-native';
+import { Users, UserPlus, Mail, Crown, X, Send, Lock, Eye, EyeOff, Trash2, Key, Shield, ShieldOff, MoreVertical, Camera, UserCheck, CalendarDays, ChevronRight, Plus, Link2, Baby, Smartphone } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
@@ -61,9 +61,11 @@ export const FamilyManagement = ({ colors, onClose }: FamilyManagementProps) => 
     const [members, setMembers] = useState<FamilyMember[]>([]);
     const [invitations, setInvitations] = useState<Invitation[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [showInviteFlow, setShowInviteFlow] = useState(false);
     const [showInviteModal, setShowInviteModal] = useState(false);
     const [inviteEmail, setInviteEmail] = useState('');
     const [invitePassword, setInvitePassword] = useState('');
+    const [inviteName, setInviteName] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [isInviting, setIsInviting] = useState(false);
     const [inviteRole, setInviteRole] = useState<'member' | 'guest'>('member');
@@ -343,10 +345,22 @@ export const FamilyManagement = ({ colors, onClose }: FamilyManagementProps) => 
         }
     };
 
-    const getInitials = (email: string) => (email || '??').substring(0, 2).toUpperCase();
+    const getInitials = (name: string) => {
+        if (!name) return '??';
+        const parts = name.trim().split(/\s+/);
+        if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+        return name.substring(0, 2).toUpperCase();
+    };
     const getAvatarColor = (index: number) => {
-        const palettes = [['#3B82F6', '#1D4ED8'], ['#8B5CF6', '#6D28D9'], ['#EC4899', '#DB2777'], ['#10B981', '#059669']];
+        const palettes = [['#EC4899', '#DB2777'], ['#3B82F6', '#1D4ED8'], ['#8B5CF6', '#6D28D9'], ['#10B981', '#059669'], ['#F59E0B', '#D97706']];
         return palettes[index % palettes.length];
+    };
+    const getRoleLabel = (member: FamilyMember) => {
+        if (member.email === user?.email && member.role === 'admin') return 'Gründer';
+        if (member.role === 'admin') return 'Admin';
+        if (member.role === 'guest') return 'Gast';
+        if (member.role === 'child') return 'Kind';
+        return 'Mitglied';
     };
 
     const getAvatarPublicUrl = (avatarPath: string) => {
@@ -403,27 +417,13 @@ export const FamilyManagement = ({ colors, onClose }: FamilyManagementProps) => 
 
     return (
         <View style={styles.container}>
-            <View style={styles.header}>
-                <Text style={[styles.title, { color: colors.subtext }]}>{members.length} Mitglieder</Text>
-                {userRole === 'admin' && (
-                    <View style={{ flexDirection: 'row', gap: 8 }}>
-                        <Pressable onPress={() => setShowAddChildModal(true)} style={[styles.inviteBtn, { backgroundColor: '#10B981' }]}>
-                            <UserPlus size={16} color="#fff" />
-                            <Text style={styles.inviteBtnText}>Kind</Text>
-                        </Pressable>
-                        <Pressable onPress={() => setShowInviteModal(true)} style={[styles.inviteBtn, { backgroundColor: colors.accent }]}>
-                            <UserPlus size={16} color="#fff" />
-                            <Text style={styles.inviteBtnText}>Einladen</Text>
-                        </Pressable>
-                    </View>
-                )}
-            </View>
-
+            {/* Section: Members */}
+            <Text style={[styles.sectionHeader, { color: colors.subtext, borderBottomColor: colors.border }]}>MITGLIEDER DIESES CIRCLES</Text>
             <View style={styles.list}>
                 {members.map((member, index) => (
                     <Pressable
                         key={member.id}
-                        style={[styles.memberCard, { backgroundColor: colors.background, borderColor: colors.border, opacity: member.is_active === false ? 0.6 : 1 }]}
+                        style={[styles.memberCard, { backgroundColor: colors.card, opacity: member.is_active === false ? 0.6 : 1 }]}
                         onPress={() => {
                             if (userRole === 'admin' && member.email !== user?.email) {
                                 setSelectedMember(member);
@@ -435,42 +435,50 @@ export const FamilyManagement = ({ colors, onClose }: FamilyManagementProps) => 
                             <Image source={{ uri: getAvatarPublicUrl(member.avatar_url) }} style={styles.avatar} />
                         ) : (
                             <LinearGradient colors={getAvatarColor(index) as any} style={styles.avatar}>
-                                <Text style={styles.avatarText}>{member.display_name ? member.display_name.substring(0, 2).toUpperCase() : getInitials(member.email)}</Text>
+                                <Text style={styles.avatarText}>{getInitials(member.display_name || member.email)}</Text>
                             </LinearGradient>
                         )}
                         <View style={styles.memberInfo}>
-                            <Text style={[styles.memberEmail, { color: colors.text }]} numberOfLines={1}>{member.display_name || member.email}</Text>
-                            <View style={styles.roleRow}>
-                                {member.role === 'admin' ? (
-                                    <View style={styles.adminBadge}><Crown size={10} color="#FBBF24" /><Text style={styles.adminText}>Admin</Text></View>
-                                ) : member.role === 'guest' ? (
-                                    <View style={[styles.adminBadge, { backgroundColor: 'rgba(139, 92, 246, 0.15)' }]}><UserCheck size={10} color="#8B5CF6" /><Text style={[styles.adminText, { color: '#8B5CF6' }]}>Gast</Text></View>
-                                ) : member.role === 'child' ? (
-                                    <View style={[styles.adminBadge, { backgroundColor: 'rgba(16, 185, 129, 0.15)' }]}><Text style={[styles.adminText, { color: '#10B981' }]}>👶 Kind</Text></View>
-                                ) : <Text style={[styles.memberRole, { color: colors.subtext }]}>Mitglied</Text>}
-                                {member.email === user?.email && <Text style={[styles.meTag, { color: colors.subtext }]}>• Du</Text>}
-                                {member.is_active === false && <Text style={[styles.meTag, { color: colors.error }]}>• Deaktiviert</Text>}
-                                {member.planner_access !== false && member.is_active !== false && member.role !== 'child' && (
-                                    <View style={[styles.adminBadge, { backgroundColor: 'rgba(16, 185, 129, 0.15)' }]}><CalendarDays size={10} color="#10B981" /><Text style={[styles.adminText, { color: '#10B981' }]}>Planner</Text></View>
-                                )}
-                            </View>
+                            <Text style={[styles.memberName, { color: colors.text }]} numberOfLines={1}>{member.display_name || member.email}</Text>
+                            <Text style={[styles.memberRole, { color: colors.subtext }]}>{getRoleLabel(member)}{member.email === user?.email ? ' · Du' : ''}{member.is_active === false ? ' · Deaktiviert' : ''}</Text>
                         </View>
-                        {userRole === 'admin' && member.email !== user?.email && <MoreVertical size={18} color={colors.subtext} />}
+                        {member.is_active !== false && (
+                            <View style={{ alignItems: 'center' }}>
+                                <Smartphone size={16} color={colors.subtext} />
+                                <Text style={{ color: colors.subtext, fontSize: 9, marginTop: 2 }}>Online</Text>
+                            </View>
+                        )}
                     </Pressable>
                 ))}
 
                 {invitations.map(invite => (
-                    <View key={invite.id} style={[styles.memberCard, { backgroundColor: 'rgba(245, 158, 11, 0.05)', borderColor: 'rgba(245, 158, 11, 0.2)' }]}>
-                        <View style={[styles.avatar, { backgroundColor: 'rgba(245, 158, 11, 0.2)' }]}>
+                    <View key={invite.id} style={[styles.memberCard, { backgroundColor: colors.card }]}>
+                        <View style={[styles.avatar, { backgroundColor: '#F59E0B30' }]}>
                             <Mail size={16} color="#F59E0B" />
                         </View>
                         <View style={styles.memberInfo}>
-                            <Text style={[styles.memberEmail, { color: colors.text }]}>{invite.email}</Text>
-                            <Text style={{ color: '#F59E0B', fontSize: 11 }}>Einladung ausstehend</Text>
+                            <Text style={[styles.memberName, { color: colors.text }]}>{invite.email}</Text>
+                            <Text style={{ color: '#F59E0B', fontSize: 12 }}>Einladung ausstehend</Text>
                         </View>
                     </View>
                 ))}
             </View>
+
+            {/* Section: Invite */}
+            {userRole === 'admin' && (
+                <>
+                    <Text style={[styles.sectionHeader, { color: colors.subtext, borderBottomColor: colors.border }]}>NEUE MITGLIEDER EINLADEN</Text>
+                    <Pressable onPress={() => setShowInviteFlow(true)} style={[styles.memberCard, { backgroundColor: colors.card }]}>
+                        <View style={[styles.avatar, { backgroundColor: colors.background }]}>
+                            <Plus size={20} color={colors.text} />
+                        </View>
+                        <View style={styles.memberInfo}>
+                            <Text style={[styles.memberName, { color: colors.text }]}>Neue Mitglieder einladen</Text>
+                            <Text style={[styles.memberRole, { color: colors.subtext }]}>Alle Geliebten sind willkommen</Text>
+                        </View>
+                    </Pressable>
+                </>
+            )}
 
             {/* Admin Modal */}
             <Modal visible={showAdminModal} animationType={dismissingForImpersonate ? 'none' : 'slide'} presentationStyle={dismissingForImpersonate ? 'overFullScreen' : 'pageSheet'} onRequestClose={() => setShowAdminModal(false)}>
@@ -626,94 +634,87 @@ export const FamilyManagement = ({ colors, onClose }: FamilyManagementProps) => 
                 />
             )}
 
-            {/* Invite Modal (same as before) */}
-            <Modal visible={showInviteModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowInviteModal(false)}>
+            {/* Invite Flow Modal */}
+            <Modal visible={showInviteFlow} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowInviteFlow(false)}>
                 <View style={[styles.modalContent, { backgroundColor: colors.background }]}>
                     <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-                        <Text style={[styles.modalTitle, { color: colors.text }]}>Mitglied einladen</Text>
-                        <Pressable onPress={() => setShowInviteModal(false)}><X size={24} color={colors.subtext} /></Pressable>
+                        <Text style={[styles.modalTitle, { color: colors.text }]}>Freunde & Familie einladen</Text>
+                        <Pressable onPress={() => setShowInviteFlow(false)}><X size={24} color={colors.subtext} /></Pressable>
                     </View>
-                    <ScrollView style={{ padding: 16 }}>
-                        <Text style={[styles.label, { color: colors.subtext }]}>E-Mail</Text>
-                        <TextInput style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]} value={inviteEmail} onChangeText={setInviteEmail} autoCapitalize="none" keyboardType="email-address" placeholder="email@example.com" placeholderTextColor={colors.subtext} />
-                        <Text style={[styles.label, { color: colors.subtext, marginTop: 16 }]}>Initialpasswort</Text>
-                        <View style={[styles.input, { flexDirection: 'row', alignItems: 'center', borderColor: colors.border, backgroundColor: colors.card }]}>
-                            <TextInput style={{ flex: 1, color: colors.text }} value={invitePassword} onChangeText={setInvitePassword} secureTextEntry={!showPassword} autoCapitalize="none" placeholder="Mind. 6 Zeichen" placeholderTextColor={colors.subtext} />
-                            <Pressable onPress={() => setShowPassword(!showPassword)}>{showPassword ? <EyeOff size={18} color={colors.subtext} /> : <Eye size={18} color={colors.subtext} />}</Pressable>
-                        </View>
-                        <Text style={[styles.label, { color: colors.subtext, marginTop: 16 }]}>Rolle</Text>
-                        <View style={{ flexDirection: 'row', gap: 8, marginTop: 4, marginBottom: 16 }}>
-                            <Pressable
-                                onPress={() => setInviteRole('member')}
-                                style={[{
-                                    flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center', borderWidth: 1.5,
-                                    borderColor: inviteRole === 'member' ? colors.accent : colors.border,
-                                    backgroundColor: inviteRole === 'member' ? colors.accent + '15' : colors.card,
-                                }]}
-                            >
-                                <Users size={18} color={inviteRole === 'member' ? colors.accent : colors.subtext} />
-                                <Text style={{ color: inviteRole === 'member' ? colors.accent : colors.subtext, fontSize: 12, fontWeight: '600', marginTop: 4 }}>Mitglied</Text>
+                    <ScrollView style={{ flex: 1 }}>
+                        {/* Invite Methods */}
+                        <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
+                            <Pressable onPress={() => { setShowInviteFlow(false); setTimeout(() => setShowInviteModal(true), 350); }} style={[styles.inviteMethodRow, { borderBottomColor: colors.border }]}>
+                                <View style={[styles.inviteMethodIcon, { backgroundColor: '#3B82F620' }]}><Mail size={20} color="#3B82F6" /></View>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={[styles.inviteMethodTitle, { color: colors.text }]}>Neues Mitglied einladen</Text>
+                                    <Text style={[styles.inviteMethodSub, { color: colors.subtext }]}>Per E-Mail-Adresse einladen</Text>
+                                </View>
+                                <ChevronRight size={18} color={colors.subtext} />
                             </Pressable>
-                            <Pressable
-                                onPress={() => setInviteRole('guest')}
-                                style={[{
-                                    flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center', borderWidth: 1.5,
-                                    borderColor: inviteRole === 'guest' ? '#8B5CF6' : colors.border,
-                                    backgroundColor: inviteRole === 'guest' ? 'rgba(139,92,246,0.15)' : colors.card,
-                                }]}
-                            >
-                                <UserCheck size={18} color={inviteRole === 'guest' ? '#8B5CF6' : colors.subtext} />
-                                <Text style={{ color: inviteRole === 'guest' ? '#8B5CF6' : colors.subtext, fontSize: 12, fontWeight: '600', marginTop: 4 }}>Gast</Text>
+                            <Pressable onPress={() => { setShowInviteFlow(false); setTimeout(() => setShowAddChildModal(true), 350); }} style={[styles.inviteMethodRow, { borderBottomColor: colors.border }]}>
+                                <View style={[styles.inviteMethodIcon, { backgroundColor: '#10B98120' }]}><Baby size={20} color="#10B981" /></View>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={[styles.inviteMethodTitle, { color: colors.text }]}>Erstelle ein Konto für ein Kind</Text>
+                                    <Text style={[styles.inviteMethodSub, { color: colors.subtext }]}>Für Kinder ohne E-Mail-Adresse</Text>
+                                </View>
+                                <ChevronRight size={18} color={colors.subtext} />
+                            </Pressable>
+                            <Pressable style={[styles.inviteMethodRow, { borderBottomWidth: 0 }]}>
+                                <View style={[styles.inviteMethodIcon, { backgroundColor: '#8B5CF620' }]}><Link2 size={20} color="#8B5CF6" /></View>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={[styles.inviteMethodTitle, { color: colors.text }]}>Über einen Link einladen</Text>
+                                    <Text style={[styles.inviteMethodSub, { color: colors.subtext }]}>Teilen Sie Ihren Einladungslink</Text>
+                                </View>
+                                <ChevronRight size={18} color={colors.subtext} />
                             </Pressable>
                         </View>
-                        {inviteRole === 'guest' && (
-                            <Text style={{ color: colors.subtext, fontSize: 11, marginBottom: 8, fontStyle: 'italic' }}>
-                                Gäste sehen nur die Steuerungen, die du ihnen zuweist.
-                            </Text>
-                        )}
-                        <View style={[styles.adminRow, { marginBottom: 16, paddingHorizontal: 4 }]}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                <CalendarDays size={16} color={colors.subtext} />
-                                <Text style={[styles.label, { color: colors.text, marginBottom: 0 }]}>Familienplaner</Text>
-                            </View>
-                            <Switch
-                                value={invitePlannerAccess}
-                                onValueChange={setInvitePlannerAccess}
-                                trackColor={{ false: '#334155', true: '#10B981' }}
-                            />
-                        </View>
-                        <Pressable onPress={handleInvite} disabled={isInviting} style={[styles.submitBtn, { backgroundColor: colors.accent, marginTop: 8 }]}>
-                            {isInviting ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>Hinzufügen</Text>}
-                        </Pressable>
                     </ScrollView>
                 </View>
             </Modal>
 
-            {/* Add Child Modal */}
-            <Modal visible={showAddChildModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowAddChildModal(false)}>
-                <View style={[styles.modalContent, { backgroundColor: colors.background }]}>
-                    <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-                        <Text style={[styles.modalTitle, { color: colors.text }]}>Kind hinzufügen</Text>
-                        <Pressable onPress={() => setShowAddChildModal(false)}><X size={24} color={colors.subtext} /></Pressable>
+            {/* Invite Modal - Centered form */}
+            <Modal visible={showInviteModal} transparent animationType="fade" onRequestClose={() => setShowInviteModal(false)}>
+                <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+                    <View style={styles.centeredOverlay}>
+                        <View style={[styles.centeredCard, { backgroundColor: colors.card }]}>
+                            <Pressable onPress={() => setShowInviteModal(false)} style={styles.closeCircle}><X size={18} color="#fff" /></Pressable>
+                            <Text style={[styles.centeredTitle, { color: colors.text }]}>Mitglied einladen</Text>
+                            <Text style={[styles.centeredSub, { color: colors.subtext }]}>Laden Sie Personen ein, die Ihnen am nächsten stehen.</Text>
+                            <TextInput style={[styles.centeredInput, { color: colors.text, backgroundColor: colors.background }]} value={inviteName} onChangeText={setInviteName} placeholder="Vorname" placeholderTextColor={colors.subtext} />
+                            <TextInput style={[styles.centeredInput, { color: colors.text, backgroundColor: colors.background }]} value={inviteEmail} onChangeText={setInviteEmail} autoCapitalize="none" keyboardType="email-address" placeholder="E-Mail-Adresse" placeholderTextColor={colors.subtext} />
+                            <TextInput style={[styles.centeredInput, { color: colors.text, backgroundColor: colors.background }]} value={invitePassword} onChangeText={setInvitePassword} secureTextEntry autoCapitalize="none" placeholder="Passwort (mind. 6 Zeichen)" placeholderTextColor={colors.subtext} />
+                            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
+                                <Pressable onPress={() => setInviteRole('member')} style={[styles.roleChip, { borderColor: inviteRole === 'member' ? colors.accent : colors.border, backgroundColor: inviteRole === 'member' ? colors.accent + '20' : 'transparent' }]}>
+                                    <Text style={{ color: inviteRole === 'member' ? colors.accent : colors.subtext, fontSize: 13, fontWeight: '600' }}>Mitglied</Text>
+                                </Pressable>
+                                <Pressable onPress={() => setInviteRole('guest')} style={[styles.roleChip, { borderColor: inviteRole === 'guest' ? '#8B5CF6' : colors.border, backgroundColor: inviteRole === 'guest' ? '#8B5CF620' : 'transparent' }]}>
+                                    <Text style={{ color: inviteRole === 'guest' ? '#8B5CF6' : colors.subtext, fontSize: 13, fontWeight: '600' }}>Gast</Text>
+                                </Pressable>
+                            </View>
+                            <Pressable onPress={handleInvite} disabled={isInviting} style={[styles.submitBtn, { backgroundColor: colors.accent }]}>
+                                {isInviting ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>Einladen</Text>}
+                            </Pressable>
+                        </View>
                     </View>
-                    <ScrollView style={{ padding: 16 }}>
-                        <Text style={[styles.label, { color: colors.subtext }]}>Name des Kindes</Text>
-                        <TextInput
-                            style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
-                            value={childName}
-                            onChangeText={setChildName}
-                            placeholder="z.B. Max"
-                            placeholderTextColor={colors.subtext}
-                            autoCapitalize="words"
-                        />
-                        <Text style={{ color: colors.subtext, fontSize: 12, marginTop: 8, lineHeight: 18 }}>
-                            Kinder werden ohne E-Mail-Adresse hinzugefügt und erscheinen automatisch in den Belohnungen und bei der Aufgaben-Zuweisung.
-                        </Text>
-                        <Pressable onPress={handleAddChild} disabled={isAddingChild} style={[styles.submitBtn, { backgroundColor: '#10B981', marginTop: 20 }]}>
-                            {isAddingChild ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>Kind hinzufügen</Text>}
-                        </Pressable>
-                    </ScrollView>
-                </View>
+                </KeyboardAvoidingView>
+            </Modal>
+
+            {/* Add Child Modal - Centered form */}
+            <Modal visible={showAddChildModal} transparent animationType="fade" onRequestClose={() => setShowAddChildModal(false)}>
+                <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+                    <View style={styles.centeredOverlay}>
+                        <View style={[styles.centeredCard, { backgroundColor: colors.card }]}>
+                            <Pressable onPress={() => setShowAddChildModal(false)} style={styles.closeCircle}><X size={18} color="#fff" /></Pressable>
+                            <Text style={[styles.centeredTitle, { color: colors.text }]}>Wie heisst dein Kind?</Text>
+                            <Text style={[styles.centeredSub, { color: colors.subtext }]}>Diese Informationen sind nur für Sie und die Mitglieder Ihres privaten Kreises sichtbar.</Text>
+                            <TextInput style={[styles.centeredInput, { color: colors.text, backgroundColor: colors.background }]} value={childName} onChangeText={setChildName} placeholder="Vorname" placeholderTextColor={colors.subtext} autoCapitalize="words" />
+                            <Pressable onPress={handleAddChild} disabled={isAddingChild} style={[styles.submitBtn, { backgroundColor: colors.accent }]}>
+                                {isAddingChild ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>Fortfahren</Text>}
+                            </Pressable>
+                        </View>
+                    </View>
+                </KeyboardAvoidingView>
             </Modal>
         </View>
     );
@@ -721,33 +722,40 @@ export const FamilyManagement = ({ colors, onClose }: FamilyManagementProps) => 
 
 const styles = StyleSheet.create({
     container: { padding: 8 },
-    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-    title: { fontSize: 13, fontWeight: '600' },
-    inviteBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, gap: 4 },
-    inviteBtnText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
-    list: { gap: 8 },
-    memberCard: { flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 12, borderWidth: 1 },
-    avatar: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-    avatarText: { color: '#fff', fontWeight: 'bold', fontSize: 12 },
-    memberInfo: { flex: 1, marginLeft: 10 },
-    memberEmail: { fontSize: 14, fontWeight: '500' },
-    roleRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
-    memberRole: { fontSize: 11 },
-    meTag: { fontSize: 11, marginLeft: 4 },
-    adminBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(245, 158, 11, 0.15)', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4, gap: 2 },
-    adminText: { color: '#F59E0B', fontSize: 10, fontWeight: 'bold' },
+    sectionHeader: { fontSize: 11, fontWeight: '700', letterSpacing: 1, paddingVertical: 12, paddingHorizontal: 4, borderBottomWidth: 1, marginTop: 8 },
+    list: { gap: 4, marginTop: 4 },
+    memberCard: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 14 },
+    avatar: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+    avatarText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
+    memberInfo: { flex: 1, marginLeft: 12 },
+    memberName: { fontSize: 16, fontWeight: '600' },
+    memberRole: { fontSize: 13, marginTop: 1 },
+    // Modals
     modalContent: { flex: 1 },
     modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1 },
     modalTitle: { fontSize: 18, fontWeight: 'bold' },
     label: { fontSize: 12, marginBottom: 4 },
     input: { borderWidth: 1, padding: 12, borderRadius: 10, fontSize: 15 },
-    submitBtn: { padding: 16, borderRadius: 12, alignItems: 'center' },
+    submitBtn: { padding: 16, borderRadius: 24, alignItems: 'center' },
     submitBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+    // Invite methods
+    inviteMethodRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, gap: 14 },
+    inviteMethodIcon: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+    inviteMethodTitle: { fontSize: 15, fontWeight: '600' },
+    inviteMethodSub: { fontSize: 12, marginTop: 2 },
+    // Centered modals
+    centeredOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', padding: 24 },
+    centeredCard: { borderRadius: 24, padding: 28, paddingTop: 48 },
+    closeCircle: { position: 'absolute', top: 16, left: 16, width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
+    centeredTitle: { fontSize: 24, fontWeight: '800', textAlign: 'center', marginBottom: 8 },
+    centeredSub: { fontSize: 14, textAlign: 'center', lineHeight: 20, marginBottom: 24 },
+    centeredInput: { padding: 16, borderRadius: 16, fontSize: 16, marginBottom: 12 },
+    roleChip: { flex: 1, paddingVertical: 10, borderRadius: 12, alignItems: 'center', borderWidth: 1.5 },
     // Admin specific
     selectedHeader: { alignItems: 'center', marginVertical: 20 },
     selectedEmail: { fontSize: 18, fontWeight: 'bold', marginTop: 12 },
     adminSection: { borderTopWidth: 1, paddingTop: 16, marginTop: 16 },
     adminRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
     actionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 10, gap: 8 },
-    actionBtnText: { color: '#fff', fontWeight: 'bold' }
+    actionBtnText: { color: '#fff', fontWeight: 'bold' },
 });

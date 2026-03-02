@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     View, Text, StyleSheet, Pressable, ScrollView, TextInput,
-    ActivityIndicator, Alert, Modal, Linking,
+    ActivityIndicator, Alert, Modal, Linking, Image, Platform,
 } from 'react-native';
-import { X, Plus, Trash2, Phone, MapPin, User, Edit3, Siren, Hospital, GraduationCap, Baby, Users, ClipboardList, Heart } from 'lucide-react-native';
+import { X, Plus, Trash2, Phone, MapPin, User, Edit3, Siren, Hospital, GraduationCap, Baby, Users, ClipboardList, Heart, Camera } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useHousehold } from '../hooks/useHousehold';
 import { supabase } from '../lib/supabase';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 
 interface Contact {
     id: string;
@@ -16,6 +18,7 @@ interface Contact {
     phone: string;
     category: string;
     notes: string | null;
+    image_url: string | null;
     created_at: string;
 }
 
@@ -30,6 +33,8 @@ const CATEGORIES = [
     { key: 'other', label: 'Sonstige', icon: ClipboardList, color: '#6B7280' },
 ];
 
+const STORAGE_BUCKET = 'avatars'; // Reuse existing bucket
+
 interface ContactsProps { visible: boolean; onClose: () => void; }
 
 export const FamilyContacts: React.FC<ContactsProps> = ({ visible, onClose }) => {
@@ -43,7 +48,10 @@ export const FamilyContacts: React.FC<ContactsProps> = ({ visible, onClose }) =>
     const [formPhone, setFormPhone] = useState('');
     const [formCategory, setFormCategory] = useState('other');
     const [formNotes, setFormNotes] = useState('');
+    const [formImageUri, setFormImageUri] = useState<string | null>(null); // Local picked URI
+    const [formImageUrl, setFormImageUrl] = useState<string | null>(null); // Existing Supabase URL
     const [editId, setEditId] = useState<string | null>(null);
+    const [isUploading, setIsUploading] = useState(false);
 
     const loadContacts = useCallback(async () => {
         if (!householdId) return;
@@ -63,25 +71,98 @@ export const FamilyContacts: React.FC<ContactsProps> = ({ visible, onClose }) =>
 
     useEffect(() => { if (visible) loadContacts(); }, [visible, loadContacts]);
 
+    // ── Image Picker ──
+    const pickImage = async () => {
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['images'],
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.7,
+        });
+        if (!result.canceled && result.assets.length > 0) {
+            setFormImageUri(result.assets[0].uri);
+        }
+    };
+
+    // ── Upload Image to Supabase Storage ──
+    const uploadImage = async (contactId: string): Promise<string | null> => {
+        if (!formImageUri) return formImageUrl; // Keep existing
+
+        try {
+            if (Platform.OS === 'web') return null;
+            const file = new FileSystem.File(formImageUri);
+            const arrayBuffer = await file.arrayBuffer();
+
+            const fileExt = formImageUri.split('.').pop()?.toLowerCase() || 'jpeg';
+            const fileName = `contact-${contactId}-${Date.now()}.${fileExt}`;
+            const contentType = fileExt === 'png' ? 'image/png' : 'image/jpeg';
+
+            const { error: uploadError } = await supabase.storage
+                .from(STORAGE_BUCKET)
+                .upload(fileName, arrayBuffer, { contentType, upsert: true });
+
+            if (uploadError) throw uploadError;
+
+            const { data: urlData } = supabase.storage
+                .from(STORAGE_BUCKET)
+                .getPublicUrl(fileName);
+
+            return urlData.publicUrl;
+        } catch (e) {
+            console.warn('Image upload failed:', e);
+            return formImageUrl;
+        }
+    };
+
+    // ── Save Contact ──
     const handleSave = async () => {
         if (!formName.trim() || !formPhone.trim() || !householdId) return;
+        setIsUploading(true);
         try {
-            const payload = { household_id: householdId, name: formName.trim(), phone: formPhone.trim(), category: formCategory, notes: formNotes.trim() || null };
+            const payload: any = {
+                household_id: householdId,
+                name: formName.trim(),
+                phone: formPhone.trim(),
+                category: formCategory,
+                notes: formNotes.trim() || null,
+            };
+
             if (editId) {
+                // Upload image if changed
+                const imageUrl = await uploadImage(editId);
+                payload.image_url = imageUrl;
                 await supabase.from('family_contacts').update(payload).eq('id', editId);
             } else {
-                await supabase.from('family_contacts').insert(payload);
+                // Insert first to get ID, then upload
+                const { data, error } = await supabase
+                    .from('family_contacts')
+                    .insert(payload)
+                    .select('id')
+                    .single();
+                if (error) throw error;
+                if (data && formImageUri) {
+                    const imageUrl = await uploadImage(data.id);
+                    await supabase.from('family_contacts')
+                        .update({ image_url: imageUrl })
+                        .eq('id', data.id);
+                }
             }
             resetForm(); loadContacts();
         } catch (e: any) { Alert.alert('Fehler', e.message); }
+        finally { setIsUploading(false); }
     };
 
     const resetForm = () => {
-        setFormName(''); setFormPhone(''); setFormCategory('other'); setFormNotes(''); setEditId(null); setShowAdd(false);
+        setFormName(''); setFormPhone(''); setFormCategory('other');
+        setFormNotes(''); setFormImageUri(null); setFormImageUrl(null);
+        setEditId(null); setShowAdd(false);
     };
 
     const openEdit = (c: Contact) => {
-        setFormName(c.name); setFormPhone(c.phone); setFormCategory(c.category); setFormNotes(c.notes || ''); setEditId(c.id); setShowAdd(true);
+        setFormName(c.name); setFormPhone(c.phone); setFormCategory(c.category);
+        setFormNotes(c.notes || ''); setFormImageUri(null);
+        setFormImageUrl(c.image_url || null);
+        setEditId(c.id); setShowAdd(true);
     };
 
     const handleDelete = (c: Contact) => {
@@ -97,6 +178,9 @@ export const FamilyContacts: React.FC<ContactsProps> = ({ visible, onClose }) =>
         ...cat,
         items: contacts.filter(c => c.category === cat.key),
     })).filter(g => g.items.length > 0);
+
+    // Determine which image to show in form
+    const formDisplayImage = formImageUri || formImageUrl;
 
     return (
         <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -125,22 +209,29 @@ export const FamilyContacts: React.FC<ContactsProps> = ({ visible, onClose }) =>
                                         <group.icon size={16} color={group.color} />
                                         <Text style={[styles.groupTitle, { color: colors.subtext }]}>{group.label}</Text>
                                     </View>
-                                    {group.items.map(c => (
-                                        <Pressable key={c.id} style={[styles.contactCard, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => Linking.openURL(`tel:${c.phone}`)}>
-                                            <View style={[styles.contactIcon, { backgroundColor: group.color + '15' }]}>
-                                                <group.icon size={20} color={group.color} />
-                                            </View>
-                                            <View style={{ flex: 1 }}>
-                                                <Text style={[styles.contactName, { color: colors.text }]}>{c.name}</Text>
-                                                <Text style={[styles.contactPhone, { color: colors.accent }]}>{c.phone}</Text>
-                                                {c.notes && <Text style={[styles.contactNotes, { color: colors.subtext }]}>{c.notes}</Text>}
-                                            </View>
-                                            <View style={styles.contactActions}>
-                                                <Pressable onPress={() => openEdit(c)} hitSlop={8}><Edit3 size={14} color={colors.subtext} /></Pressable>
-                                                <Pressable onPress={() => handleDelete(c)} hitSlop={8}><Trash2 size={14} color={colors.subtext} /></Pressable>
-                                            </View>
-                                        </Pressable>
-                                    ))}
+                                    {group.items.map(c => {
+                                        const cat = getCategory(c.category);
+                                        return (
+                                            <Pressable key={c.id} style={[styles.contactCard, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => Linking.openURL(`tel:${c.phone}`)}>
+                                                {c.image_url ? (
+                                                    <Image source={{ uri: c.image_url }} style={styles.contactImage} />
+                                                ) : (
+                                                    <View style={[styles.contactIcon, { backgroundColor: cat.color + '15' }]}>
+                                                        <cat.icon size={20} color={cat.color} />
+                                                    </View>
+                                                )}
+                                                <View style={{ flex: 1 }}>
+                                                    <Text style={[styles.contactName, { color: colors.text }]}>{c.name}</Text>
+                                                    <Text style={[styles.contactPhone, { color: colors.accent }]}>{c.phone}</Text>
+                                                    {c.notes && <Text style={[styles.contactNotes, { color: colors.subtext }]}>{c.notes}</Text>}
+                                                </View>
+                                                <View style={styles.contactActions}>
+                                                    <Pressable onPress={() => openEdit(c)} hitSlop={8}><Edit3 size={14} color={colors.subtext} /></Pressable>
+                                                    <Pressable onPress={() => handleDelete(c)} hitSlop={8}><Trash2 size={14} color={colors.subtext} /></Pressable>
+                                                </View>
+                                            </Pressable>
+                                        );
+                                    })}
                                 </View>
                             ))
                         )}
@@ -155,6 +246,19 @@ export const FamilyContacts: React.FC<ContactsProps> = ({ visible, onClose }) =>
                 <Modal visible={showAdd} transparent animationType="fade">
                     <View style={styles.overlay}><View style={[styles.popup, { backgroundColor: colors.card }]}>
                         <Text style={[styles.popupTitle, { color: colors.text }]}>{editId ? 'Bearbeiten' : 'Neuer Kontakt'}</Text>
+
+                        {/* Image Picker */}
+                        <Pressable onPress={pickImage} style={[styles.imagePicker, { borderColor: colors.border, backgroundColor: colors.background }]}>
+                            {formDisplayImage ? (
+                                <Image source={{ uri: formDisplayImage }} style={styles.imagePreview} />
+                            ) : (
+                                <View style={styles.imagePickerPlaceholder}>
+                                    <Camera size={24} color={colors.subtext} />
+                                    <Text style={{ color: colors.subtext, fontSize: 11, marginTop: 4 }}>Foto</Text>
+                                </View>
+                            )}
+                        </Pressable>
+
                         <TextInput style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]} value={formName} onChangeText={setFormName} placeholder="Name" placeholderTextColor={colors.subtext} />
                         <TextInput style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background, marginTop: 8 }]} value={formPhone} onChangeText={setFormPhone} placeholder="Telefonnummer" placeholderTextColor={colors.subtext} keyboardType="phone-pad" />
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10, maxHeight: 44 }}>
@@ -168,7 +272,12 @@ export const FamilyContacts: React.FC<ContactsProps> = ({ visible, onClose }) =>
                         <TextInput style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background, marginTop: 10 }]} value={formNotes} onChangeText={setFormNotes} placeholder="Notizen (optional)" placeholderTextColor={colors.subtext} />
                         <View style={{ flexDirection: 'row', gap: 8, marginTop: 14 }}>
                             <Pressable style={[styles.cancelBtn, { borderColor: colors.border }]} onPress={resetForm}><Text style={{ color: colors.subtext }}>Abbrechen</Text></Pressable>
-                            <Pressable style={[styles.saveBtn, { backgroundColor: colors.accent }]} onPress={handleSave}><Text style={{ color: '#fff', fontWeight: '700' }}>Speichern</Text></Pressable>
+                            <Pressable style={[styles.saveBtn, { backgroundColor: colors.accent, opacity: isUploading ? 0.6 : 1 }]} onPress={handleSave} disabled={isUploading}>
+                                {isUploading
+                                    ? <ActivityIndicator size="small" color="#fff" />
+                                    : <Text style={{ color: '#fff', fontWeight: '700' }}>Speichern</Text>
+                                }
+                            </Pressable>
                         </View>
                     </View></View>
                 </Modal>
@@ -188,6 +297,7 @@ const styles = StyleSheet.create({
     groupTitle: { fontSize: 14, fontWeight: '700' },
     contactCard: { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 14, borderWidth: 1, marginBottom: 8 },
     contactIcon: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+    contactImage: { width: 40, height: 40, borderRadius: 12, marginRight: 12 },
     contactName: { fontSize: 15, fontWeight: '600' },
     contactPhone: { fontSize: 14, fontWeight: '600', marginTop: 2 },
     contactNotes: { fontSize: 12, marginTop: 2 },
@@ -202,6 +312,13 @@ const styles = StyleSheet.create({
     overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 24 },
     popup: { borderRadius: 20, padding: 20 },
     popupTitle: { fontSize: 18, fontWeight: '800', marginBottom: 12 },
+    imagePicker: {
+        alignSelf: 'center', width: 72, height: 72, borderRadius: 36,
+        borderWidth: 2, borderStyle: 'dashed', overflow: 'hidden',
+        marginBottom: 14, justifyContent: 'center', alignItems: 'center',
+    },
+    imagePreview: { width: 72, height: 72, borderRadius: 36 },
+    imagePickerPlaceholder: { alignItems: 'center', justifyContent: 'center' },
     input: { borderWidth: 1, padding: 12, borderRadius: 12, fontSize: 15 },
     catBtn: { alignItems: 'center', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, borderWidth: 1, borderColor: 'transparent', marginRight: 6 },
     cancelBtn: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 12, borderWidth: 1 },

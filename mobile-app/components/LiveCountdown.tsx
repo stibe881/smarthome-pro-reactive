@@ -37,10 +37,12 @@ export function getCountdownTimeRemaining(targetDate: string, targetTime: string
 
     const isPast = msLeft < 0;
 
-    let useTime = format === 'time';
-    if (format === 'auto' && msLeft <= 86400000 && msLeft > 0) {
-        // Less than 24 hours left, switch to time
-        useTime = true;
+    let useTime = false;
+    if (format === 'time' || format === 'auto') {
+        // Show time format only when less than 24 hours remain
+        if (msLeft <= 86400000 && msLeft > 0) {
+            useTime = true;
+        }
     }
 
     if (useTime) {
@@ -51,10 +53,12 @@ export function getCountdownTimeRemaining(targetDate: string, targetTime: string
         if (daysLeft === 0 && hrsLeft === 0) {
             return { isTime: true, value: `${minsLeft}m`, isPast: false, isToday: true };
         }
-        if (daysLeft === 0) {
-            return { isTime: true, value: `${hrsLeft}h ${minsLeft}m`, isPast: false, isToday: true };
-        }
-        return { isTime: true, value: `${daysLeft}T ${hrsLeft}h`, isPast: false, isToday: false };
+        return { isTime: true, value: `${hrsLeft}h ${minsLeft}m`, isPast: false, isToday: true };
+    }
+
+    // More than 24h left — show days
+    if (isPast) {
+        return { isTime: false, value: -1, isPast: true, isToday: false };
     }
 
     // Default days view

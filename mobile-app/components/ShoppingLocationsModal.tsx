@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { View, Text, Pressable, ScrollView, Modal, TextInput, Alert, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
-import { X, Plus, MapPin, Trash2, Navigation, Store } from 'lucide-react-native';
+import { X, Plus, MapPin, Trash2, Navigation, Store, Search, CheckCircle, AlertCircle } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import * as Location from 'expo-location';
 import { supabase } from '../lib/supabase';
 import { useHousehold } from '../hooks/useHousehold';
 
 interface ShoppingLocation {
-    id: string; // UUID from Supabase
+    id: string;
     name: string;
     lat: number;
     lng: number;
@@ -19,6 +19,8 @@ interface Props {
     onClose: () => void;
 }
 
+type SearchState = 'idle' | 'searching' | 'found' | 'not_found' | 'manual';
+
 export const ShoppingLocationsModal = ({ visible, onClose }: Props) => {
     const { colors } = useTheme();
     const { householdId, loading: householdLoading } = useHousehold();
@@ -27,11 +29,18 @@ export const ShoppingLocationsModal = ({ visible, onClose }: Props) => {
 
     const [showAddForm, setShowAddForm] = useState(false);
     const [newName, setNewName] = useState('');
-    const [newLat, setNewLat] = useState('');
-    const [newLng, setNewLng] = useState('');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [searchState, setSearchState] = useState<SearchState>('idle');
+    const [foundAddress, setFoundAddress] = useState('');
+    const [foundLat, setFoundLat] = useState(0);
+    const [foundLng, setFoundLng] = useState(0);
+
+    // Manual fallback
+    const [manualAddress, setManualAddress] = useState('');
+
+    // Current location
     const [isLocating, setIsLocating] = useState(false);
 
-    // Load shops when visible and household is ready
     useEffect(() => {
         if (visible && householdId) {
             loadShops();
@@ -51,11 +60,9 @@ export const ShoppingLocationsModal = ({ visible, onClose }: Props) => {
             if (error) throw error;
             setShops(data || []);
 
-            // Sync to AsyncStorage for background task
             if (data && data.length > 0) {
                 const forStorage = data.map((s: any) => ({ name: s.name, lat: s.lat, lng: s.lng }));
                 await AsyncStorage.setItem('@smarthome_shopping_locations', JSON.stringify(forStorage));
-                console.log(`🛒 Synced ${data.length} shops to AsyncStorage`);
             } else {
                 await AsyncStorage.removeItem('@smarthome_shopping_locations');
             }
@@ -67,18 +74,112 @@ export const ShoppingLocationsModal = ({ visible, onClose }: Props) => {
         }
     };
 
-    const handleAddShop = async () => {
-        if (!householdId) return;
-
-        const lat = parseFloat(newLat);
-        const lng = parseFloat(newLng);
-
-        if (!newName.trim()) {
-            Alert.alert('Fehler', 'Bitte gib einen Namen ein.');
+    // ── Smart Search (Geocoding) ──
+    const handleSearch = async () => {
+        const query = searchQuery.trim();
+        if (!query) {
+            Alert.alert('Hinweis', 'Bitte gib einen Laden oder eine Adresse ein (z.B. "Migros, Zell")');
             return;
         }
-        if (isNaN(lat) || isNaN(lng)) {
-            Alert.alert('Fehler', 'Ungültige Koordinaten.');
+
+        setSearchState('searching');
+        try {
+            const results = await Location.geocodeAsync(query);
+            if (results && results.length > 0) {
+                const { latitude, longitude } = results[0];
+                setFoundLat(latitude);
+                setFoundLng(longitude);
+
+                // Reverse geocode to get a human-readable address
+                const addresses = await Location.reverseGeocodeAsync({ latitude, longitude });
+                if (addresses && addresses.length > 0) {
+                    const a = addresses[0];
+                    const parts = [a.name, a.street, a.city].filter(Boolean);
+                    setFoundAddress(parts.join(', '));
+                } else {
+                    setFoundAddress(`${latitude.toFixed(5)}, ${longitude.toFixed(5)}`);
+                }
+
+                setSearchState('found');
+            } else {
+                setSearchState('not_found');
+            }
+        } catch (e) {
+            console.warn('Geocode failed:', e);
+            setSearchState('not_found');
+        }
+    };
+
+    // ── Manual Address Search ──
+    const handleManualSearch = async () => {
+        const query = manualAddress.trim();
+        if (!query) return;
+
+        setSearchState('searching');
+        try {
+            const results = await Location.geocodeAsync(query);
+            if (results && results.length > 0) {
+                const { latitude, longitude } = results[0];
+                setFoundLat(latitude);
+                setFoundLng(longitude);
+
+                const addresses = await Location.reverseGeocodeAsync({ latitude, longitude });
+                if (addresses && addresses.length > 0) {
+                    const a = addresses[0];
+                    const parts = [a.name, a.street, a.city].filter(Boolean);
+                    setFoundAddress(parts.join(', '));
+                } else {
+                    setFoundAddress(`${latitude.toFixed(5)}, ${longitude.toFixed(5)}`);
+                }
+                setSearchState('found');
+            } else {
+                Alert.alert('Nicht gefunden', 'Die Adresse konnte nicht gefunden werden. Bitte versuche es mit einer genaueren Angabe.');
+                setSearchState('manual');
+            }
+        } catch (e) {
+            Alert.alert('Fehler', 'Suche fehlgeschlagen.');
+            setSearchState('manual');
+        }
+    };
+
+    // ── Use Current Location ──
+    const handleGetCurrentLocation = async () => {
+        setIsLocating(true);
+        try {
+            const { status } = await Location.requestForegroundPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert('Berechtigung fehlt', 'Standortzugriff wurde nicht erlaubt.');
+                return;
+            }
+            const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+            setFoundLat(loc.coords.latitude);
+            setFoundLng(loc.coords.longitude);
+
+            const addresses = await Location.reverseGeocodeAsync({
+                latitude: loc.coords.latitude,
+                longitude: loc.coords.longitude,
+            });
+            if (addresses && addresses.length > 0) {
+                const a = addresses[0];
+                const parts = [a.name, a.street, a.city].filter(Boolean);
+                setFoundAddress(parts.join(', '));
+            } else {
+                setFoundAddress(`${loc.coords.latitude.toFixed(5)}, ${loc.coords.longitude.toFixed(5)}`);
+            }
+            setSearchState('found');
+        } catch (e) {
+            Alert.alert('Fehler', 'Standort konnte nicht ermittelt werden.');
+        } finally {
+            setIsLocating(false);
+        }
+    };
+
+    // ── Confirm & Save ──
+    const handleConfirmAndSave = async () => {
+        if (!householdId) return;
+        const name = newName.trim() || searchQuery.trim();
+        if (!name) {
+            Alert.alert('Fehler', 'Bitte gib einen Namen ein.');
             return;
         }
 
@@ -87,21 +188,29 @@ export const ShoppingLocationsModal = ({ visible, onClose }: Props) => {
                 .from('shopping_locations')
                 .insert({
                     household_id: householdId,
-                    name: newName.trim(),
-                    lat,
-                    lng
+                    name,
+                    lat: foundLat,
+                    lng: foundLng,
                 });
 
             if (error) throw error;
 
             await loadShops();
-            setNewName('');
-            setNewLat('');
-            setNewLng('');
-            setShowAddForm(false);
+            resetForm();
         } catch (e: any) {
             Alert.alert('Fehler', 'Konnte Standort nicht speichern: ' + e.message);
         }
+    };
+
+    const resetForm = () => {
+        setShowAddForm(false);
+        setNewName('');
+        setSearchQuery('');
+        setSearchState('idle');
+        setFoundAddress('');
+        setFoundLat(0);
+        setFoundLng(0);
+        setManualAddress('');
     };
 
     const handleDelete = (id: string, name: string) => {
@@ -129,24 +238,6 @@ export const ShoppingLocationsModal = ({ visible, onClose }: Props) => {
         );
     };
 
-    const handleGetCurrentLocation = async () => {
-        setIsLocating(true);
-        try {
-            const { status } = await Location.requestForegroundPermissionsAsync();
-            if (status !== 'granted') {
-                Alert.alert('Berechtigung fehlt', 'Standortzugriff wurde nicht erlaubt.');
-                return;
-            }
-            const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-            setNewLat(loc.coords.latitude.toFixed(6));
-            setNewLng(loc.coords.longitude.toFixed(6));
-        } catch (e) {
-            Alert.alert('Fehler', 'Standort konnte nicht ermittelt werden.');
-        } finally {
-            setIsLocating(false);
-        }
-    };
-
     return (
         <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
@@ -164,10 +255,10 @@ export const ShoppingLocationsModal = ({ visible, onClose }: Props) => {
                         </View>
 
                         <Text style={[styles.description, { color: colors.subtext }]}>
-                            Push-Benachrichtigung wenn du dich in der Nähe eines Ladens befindest und Artikel auf der Einkaufsliste stehen. (Synchronisiert für alle Nutzer im Haushalt)
+                            Push-Benachrichtigung wenn du dich in der Nähe eines Ladens befindest und Artikel auf der Einkaufsliste stehen.
                         </Text>
 
-                        <ScrollView style={styles.body} contentContainerStyle={{ paddingBottom: 24 }}>
+                        <ScrollView style={styles.body} contentContainerStyle={{ paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
                             {loading ? (
                                 <ActivityIndicator size="large" color={colors.accent} style={{ marginTop: 20 }} />
                             ) : (
@@ -202,54 +293,154 @@ export const ShoppingLocationsModal = ({ visible, onClose }: Props) => {
                             {showAddForm ? (
                                 <View style={[styles.addForm, { backgroundColor: colors.card, borderColor: colors.border }]}>
                                     <Text style={[styles.addFormTitle, { color: colors.text }]}>Neuen Standort hinzufügen</Text>
+
+                                    {/* Step 1: Name */}
                                     <TextInput
                                         style={[styles.input, { backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
-                                        placeholder="Name (z.B. Migros Sursee)"
+                                        placeholder="Name (z.B. Migros Zell)"
                                         placeholderTextColor={colors.subtext}
                                         value={newName}
                                         onChangeText={setNewName}
                                     />
-                                    <View style={{ flexDirection: 'row', gap: 8 }}>
-                                        <TextInput
-                                            style={[styles.input, { flex: 1, backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
-                                            placeholder="Breitengrad"
-                                            placeholderTextColor={colors.subtext}
-                                            keyboardType="decimal-pad"
-                                            value={newLat}
-                                            onChangeText={setNewLat}
-                                        />
-                                        <TextInput
-                                            style={[styles.input, { flex: 1, backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
-                                            placeholder="Längengrad"
-                                            placeholderTextColor={colors.subtext}
-                                            keyboardType="decimal-pad"
-                                            value={newLng}
-                                            onChangeText={setNewLng}
-                                        />
-                                    </View>
-                                    {/* Get Current Location */}
-                                    <Pressable
-                                        onPress={handleGetCurrentLocation}
-                                        style={[styles.locationBtn, { backgroundColor: colors.success + '20', borderColor: colors.success + '40' }]}
-                                    >
-                                        <Navigation size={16} color={colors.success} />
-                                        <Text style={{ color: colors.success, fontWeight: '600', fontSize: 14 }}>
-                                            {isLocating ? 'Ermittle Standort...' : 'Aktuellen Standort verwenden'}
-                                        </Text>
-                                    </Pressable>
 
+                                    {/* Step 2: Search by store name */}
+                                    {searchState !== 'found' && (
+                                        <>
+                                            {searchState !== 'manual' ? (
+                                                <>
+                                                    <Text style={[styles.stepLabel, { color: colors.subtext }]}>LADEN SUCHEN</Text>
+                                                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                                                        <TextInput
+                                                            style={[styles.input, { flex: 1, backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
+                                                            placeholder="z.B. Migros, Zell"
+                                                            placeholderTextColor={colors.subtext}
+                                                            value={searchQuery}
+                                                            onChangeText={setSearchQuery}
+                                                            onSubmitEditing={handleSearch}
+                                                        />
+                                                        <Pressable
+                                                            onPress={handleSearch}
+                                                            style={[styles.searchBtn, { backgroundColor: colors.accent }]}
+                                                        >
+                                                            {searchState === 'searching'
+                                                                ? <ActivityIndicator size="small" color="#fff" />
+                                                                : <Search size={20} color="#fff" />
+                                                            }
+                                                        </Pressable>
+                                                    </View>
+                                                </>
+                                            ) : (
+                                                /* Manual address fallback */
+                                                <>
+                                                    <Text style={[styles.stepLabel, { color: colors.subtext }]}>ADRESSE EINGEBEN</Text>
+                                                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                                                        <TextInput
+                                                            style={[styles.input, { flex: 1, backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
+                                                            placeholder="z.B. Bahnhofstrasse 1, 6130 Willisau"
+                                                            placeholderTextColor={colors.subtext}
+                                                            value={manualAddress}
+                                                            onChangeText={setManualAddress}
+                                                            onSubmitEditing={handleManualSearch}
+                                                        />
+                                                        <Pressable
+                                                            onPress={handleManualSearch}
+                                                            style={[styles.searchBtn, { backgroundColor: colors.accent }]}
+                                                        >
+                                                            {searchState === 'searching'
+                                                                ? <ActivityIndicator size="small" color="#fff" />
+                                                                : <Search size={20} color="#fff" />
+                                                            }
+                                                        </Pressable>
+                                                    </View>
+                                                </>
+                                            )}
+
+                                            {/* Not found message */}
+                                            {searchState === 'not_found' && (
+                                                <View style={[styles.resultCard, { backgroundColor: '#FEF2F2', borderColor: '#FECACA' }]}>
+                                                    <AlertCircle size={20} color="#EF4444" />
+                                                    <View style={{ flex: 1 }}>
+                                                        <Text style={{ color: '#991B1B', fontWeight: '600', fontSize: 14 }}>Nicht gefunden</Text>
+                                                        <Text style={{ color: '#B91C1C', fontSize: 12, marginTop: 2 }}>
+                                                            Versuche es mit einer genaueren Angabe oder gib die Adresse ein.
+                                                        </Text>
+                                                    </View>
+                                                </View>
+                                            )}
+
+                                            {/* Alternative options */}
+                                            {(searchState === 'not_found' || searchState === 'idle') && (
+                                                <View style={{ gap: 6, marginTop: 4 }}>
+                                                    {searchState === 'not_found' && (
+                                                        <Pressable
+                                                            onPress={() => setSearchState('manual')}
+                                                            style={[styles.altBtn, { backgroundColor: colors.background, borderColor: colors.border }]}
+                                                        >
+                                                            <MapPin size={16} color={colors.accent} />
+                                                            <Text style={{ color: colors.accent, fontWeight: '600', fontSize: 13 }}>Adresse manuell eingeben</Text>
+                                                        </Pressable>
+                                                    )}
+                                                    <Pressable
+                                                        onPress={handleGetCurrentLocation}
+                                                        style={[styles.altBtn, { backgroundColor: (colors.success || '#10B981') + '15', borderColor: (colors.success || '#10B981') + '40' }]}
+                                                    >
+                                                        <Navigation size={16} color={colors.success || '#10B981'} />
+                                                        <Text style={{ color: colors.success || '#10B981', fontWeight: '600', fontSize: 13 }}>
+                                                            {isLocating ? 'Ermittle...' : 'Aktuellen Standort verwenden'}
+                                                        </Text>
+                                                    </Pressable>
+                                                </View>
+                                            )}
+
+                                            {searchState === 'manual' && (
+                                                <Pressable
+                                                    onPress={() => setSearchState('idle')}
+                                                    style={{ marginTop: 4 }}
+                                                >
+                                                    <Text style={{ color: colors.accent, fontSize: 13, textAlign: 'center' }}>← Zurück zur Suche</Text>
+                                                </Pressable>
+                                            )}
+                                        </>
+                                    )}
+
+                                    {/* Found Result */}
+                                    {searchState === 'found' && (
+                                        <View style={[styles.resultCard, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }]}>
+                                            <CheckCircle size={20} color="#16A34A" />
+                                            <View style={{ flex: 1 }}>
+                                                <Text style={{ color: '#166534', fontWeight: '600', fontSize: 14 }}>Gefunden!</Text>
+                                                <Text style={{ color: '#15803D', fontSize: 12, marginTop: 2 }}>{foundAddress}</Text>
+                                                <Text style={{ color: '#22C55E', fontSize: 10, marginTop: 2 }}>
+                                                    {foundLat.toFixed(5)}, {foundLng.toFixed(5)}
+                                                </Text>
+                                            </View>
+                                            <Pressable
+                                                onPress={() => { setSearchState('idle'); setFoundAddress(''); }}
+                                                style={{ padding: 4 }}
+                                            >
+                                                <Text style={{ color: '#16A34A', fontSize: 12, fontWeight: '600' }}>Ändern</Text>
+                                            </Pressable>
+                                        </View>
+                                    )}
+
+                                    {/* Action Buttons */}
                                     <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
                                         <Pressable
-                                            onPress={() => { setShowAddForm(false); setNewName(''); setNewLat(''); setNewLng(''); }}
+                                            onPress={resetForm}
                                             style={[styles.formBtn, { backgroundColor: colors.background, borderColor: colors.border, borderWidth: 1 }]}
                                         >
                                             <Text style={{ color: colors.subtext, fontWeight: '600' }}>Abbrechen</Text>
                                         </Pressable>
                                         <Pressable
-                                            onPress={handleAddShop}
-                                            style={[styles.formBtn, { backgroundColor: colors.accent, flex: 2 }]}
+                                            onPress={handleConfirmAndSave}
+                                            disabled={searchState !== 'found'}
+                                            style={[styles.formBtn, {
+                                                backgroundColor: searchState === 'found' ? colors.accent : colors.border,
+                                                flex: 2,
+                                                opacity: searchState === 'found' ? 1 : 0.5,
+                                            }]}
                                         >
-                                            <Text style={{ color: '#fff', fontWeight: '700' }}>Hinzufügen</Text>
+                                            <Text style={{ color: '#fff', fontWeight: '700' }}>Speichern</Text>
                                         </Pressable>
                                     </View>
                                 </View>
@@ -293,14 +484,19 @@ const styles = StyleSheet.create({
     addForm: { borderRadius: 16, padding: 16, marginTop: 4, borderWidth: 1, gap: 10 },
     addFormTitle: { fontSize: 16, fontWeight: '700', marginBottom: 4 },
     input: { height: 44, borderRadius: 12, paddingHorizontal: 14, fontSize: 15, borderWidth: 1 },
-    locationBtn: {
-        flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-        paddingVertical: 12, borderRadius: 12, borderWidth: 1,
+    stepLabel: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', marginTop: 4 },
+    searchBtn: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+    resultCard: {
+        flexDirection: 'row', alignItems: 'center', gap: 10,
+        padding: 12, borderRadius: 12, borderWidth: 1,
+    },
+    altBtn: {
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+        paddingVertical: 10, borderRadius: 10, borderWidth: 1,
     },
     formBtn: { flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
     addBtn: {
         flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
         paddingVertical: 16, borderRadius: 16, marginTop: 4, borderWidth: 1, borderStyle: 'dashed',
     },
-    resetBtn: { alignItems: 'center', paddingVertical: 14, marginTop: 20, borderTopWidth: 1 },
 });

@@ -781,7 +781,7 @@ export default function Dashboard() {
             (async () => {
                 // 1. Try user-specific config
                 if (user?.id) {
-                    const userCfg = await AsyncStorage.getItem(`@quick_actions_user_${user.id} `);
+                    const userCfg = await AsyncStorage.getItem(`@quick_actions_user_${user.id}`);
                     if (userCfg) {
                         try { setQuickActions(JSON.parse(userCfg)); return; } catch { }
                     }
