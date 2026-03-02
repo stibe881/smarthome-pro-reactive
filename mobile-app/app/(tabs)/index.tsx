@@ -2305,7 +2305,12 @@ export default function Dashboard() {
                             // Detect radio playback — hide shuffle/repeat/progress for radio
                             const contentType = livePlayer.attributes?.media_content_type || massEntity?.attributes?.media_content_type || '';
                             const appName = (livePlayer.attributes?.app_name || massEntity?.attributes?.app_name || '').toLowerCase();
-                            const isRadio = contentType === 'channel' || appName.includes('tunein') || appName.includes('radio');
+                            const contentId = (livePlayer.attributes?.media_content_id || massEntity?.attributes?.media_content_id || '').toLowerCase();
+                            const isRadio = contentType === 'channel' || contentType === 'podcast'
+                                || appName.includes('tunein') || appName.includes('radio')
+                                || contentId.includes('tunein') || contentId.includes('radio')
+                                || mediaDuration === 0;
+                            console.log(`📻 Radio check: contentType=${contentType}, appName=${appName}, contentId=${contentId?.substring(0, 50)}, duration=${mediaDuration}, isRadio=${isRadio}`);
 
                             return (
                                 <View style={{ position: 'relative' }}>

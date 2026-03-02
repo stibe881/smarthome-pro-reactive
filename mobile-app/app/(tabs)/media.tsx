@@ -663,46 +663,8 @@ export default function Media() {
                         />
                     </View>
 
-                    {/* Grouped Player Lists */}
-                    {(() => {
-                        const sortFn = (a: any, b: any) => getPlayerName(a.entity_id).localeCompare(getPlayerName(b.entity_id));
-                        const grp = sortedPlayers.filter(p => getPlayerType(p.entity_id) === 'group').sort(sortFn);
-                        const spk = sortedPlayers.filter(p => getPlayerType(p.entity_id) === 'speaker').sort(sortFn);
-                        const tv = sortedPlayers.filter(p => getPlayerType(p.entity_id) === 'tv').sort(sortFn);
-
-                        const section = (label: string, list: any[]) => list.length === 0 ? null : (
-                            <View key={label}>
-                                <Text style={styles.sectionTitle}>{label}</Text>
-                                <View style={styles.listContainer}>
-                                    {list.map(p => (
-                                        <ExpandedPlayerRow
-                                            key={p.entity_id}
-                                            player={p}
-                                            isSelected={p.entity_id === activePlayer.entity_id}
-                                            imageUrl={getEntityPictureUrl(p.attributes.entity_picture)}
-                                            onSelect={() => transferSessionToPlayer(p.entity_id)}
-                                            onSpotify={() => handleSpotify(p.entity_id)}
-                                            onPlayPause={(playing) => handlePlayPause(p.entity_id, playing)}
-                                            onPower={(on) => handlePower(p.entity_id, on)}
-                                            onVolume={(v) => handleVolumeChange(p.entity_id, v)}
-                                            onShuffle={() => handleShuffle(p.entity_id)}
-                                            onRepeat={() => handleRepeat(p.entity_id)}
-                                            spotifyActive={!!spotifyToken}
-                                            getPlayerName={getPlayerName}
-                                        />
-                                    ))}
-                                </View>
-                            </View>
-                        );
-
-                        return (
-                            <>
-                                {section('Gruppen', grp)}
-                                {section('Lautsprecher', spk)}
-                                {section('Fernseher', tv)}
-                            </>
-                        );
-                    })()}
+                    {/* Player list removed — only HeroPlayer is shown */}
+                    {/* Users switch players via the player picker (tap player name) */}
 
                     {/* Manage Button */}
                     {userRole === 'admin' && (
