@@ -938,17 +938,20 @@ const HeroPlayer = ({ player, massPlayer, imageUrl, massImageUrl, onSelect, onSp
     const artist = player?.attributes?.media_artist || '';
     const volume = player?.attributes?.volume_level ?? 0.4;
 
+
+    // --- Progress Bar: Use MASS player attributes if available (Cast devices often lack these) ---
+    const attrs = massPlayer?.attributes || player?.attributes || {};
+    const mediaDuration = attrs.media_duration || 0;
+
     // Detect radio playback — hide shuffle/repeat for radio
     const contentType = player?.attributes?.media_content_type || massPlayer?.attributes?.media_content_type || '';
     const appName = (player?.attributes?.app_name || massPlayer?.attributes?.app_name || '').toLowerCase();
     const contentId = (player?.attributes?.media_content_id || massPlayer?.attributes?.media_content_id || '').toLowerCase();
     const isRadio = contentType === 'channel' || contentType === 'podcast'
         || appName.includes('tunein') || appName.includes('radio')
-        || contentId.includes('tunein') || contentId.includes('radio');
-
-    // --- Progress Bar: Use MASS player attributes if available (Cast devices often lack these) ---
-    const attrs = massPlayer?.attributes || player?.attributes || {};
-    const mediaDuration = attrs.media_duration || 0;
+        || contentId.includes('tunein') || contentId.includes('radio')
+        || (isPlaying && mediaDuration === 0);
+    console.log(`📻 HeroPlayer radio check: contentType=${contentType}, appName=${appName}, contentId=${contentId?.substring(0, 50)}, duration=${mediaDuration}, isRadio=${isRadio}`);
     const mediaPosition = attrs.media_position || 0;
     const positionUpdatedAt = attrs.media_position_updated_at;
     const [currentPosition, setCurrentPosition] = useState(mediaPosition);
