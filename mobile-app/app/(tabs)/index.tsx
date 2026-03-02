@@ -2347,19 +2347,6 @@ export default function Dashboard() {
                                         <Text style={{ fontSize: 20, fontWeight: '700', color: colors.text, textAlign: 'center', marginBottom: 4 }} numberOfLines={1}>{mediaTitle}</Text>
                                         {artist ? <Text style={{ fontSize: 15, color: colors.subtext, textAlign: 'center' }} numberOfLines={1}>{artist}</Text> : null}
 
-                                        {/* Progress Bar */}
-                                        {mediaDuration > 0 && (
-                                            <View style={{ width: '100%', marginTop: 16 }}>
-                                                <View style={{ height: 4, borderRadius: 2, backgroundColor: colors.background, overflow: 'hidden' }}>
-                                                    <View style={{ height: '100%', borderRadius: 2, backgroundColor: colors.accent, width: `${Math.min(progressPct, 100)}%` }} />
-                                                </View>
-                                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 6 }}>
-                                                    <Text style={{ color: colors.subtext, fontSize: 11, fontWeight: '500' }}>{fmtTime(elapsed)}</Text>
-                                                    <Text style={{ color: colors.subtext, fontSize: 11, fontWeight: '500' }}>{fmtTime(mediaDuration)}</Text>
-                                                </View>
-                                            </View>
-                                        )}
-
                                         {/* Controls */}
                                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 20, marginTop: 28 }}>
                                             <Pressable onPress={handleShuffle} hitSlop={12} style={{ padding: 8, backgroundColor: shuffleOn ? '#1DB954' + '20' : 'transparent', borderRadius: 16 }}>
@@ -2438,6 +2425,19 @@ export default function Dashboard() {
                                                 <Radio size={20} color="#FF6B00" />
                                             </Pressable>
                                         </View>
+
+                                        {/* Progress Bar - at bottom, distinct color */}
+                                        {mediaDuration > 0 && (
+                                            <View style={{ width: '100%', marginTop: 20 }}>
+                                                <View style={{ height: 3, borderRadius: 2, backgroundColor: colors.background, overflow: 'hidden' }}>
+                                                    <View style={{ height: '100%', borderRadius: 2, backgroundColor: '#F59E0B', width: `${Math.min(progressPct, 100)}%` }} />
+                                                </View>
+                                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
+                                                    <Text style={{ color: '#F59E0B', fontSize: 11, fontWeight: '600' }}>{fmtTime(elapsed)}</Text>
+                                                    <Text style={{ color: colors.subtext, fontSize: 11, fontWeight: '500' }}>{fmtTime(mediaDuration)}</Text>
+                                                </View>
+                                            </View>
+                                        )}
                                     </View>
                                 </View>
                             );
