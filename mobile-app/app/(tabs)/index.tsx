@@ -2616,9 +2616,12 @@ export default function Dashboard() {
                                 <FlatList
                                     data={(() => {
                                         const allowed = dashboardConfig?.mediaPlayerConfig?.allowedPlaylists;
-                                        return allowed && allowed.length > 0
-                                            ? popupPlaylists.filter((p: any) => allowed.includes(p.media_content_id))
-                                            : popupPlaylists;
+                                        if (allowed && allowed.length > 0) {
+                                            return allowed
+                                                .map((id: string) => popupPlaylists.find((p: any) => p.media_content_id === id))
+                                                .filter(Boolean);
+                                        }
+                                        return popupPlaylists;
                                     })()}
                                     keyExtractor={i => i.media_content_id}
                                     style={{ maxHeight: 400 }}

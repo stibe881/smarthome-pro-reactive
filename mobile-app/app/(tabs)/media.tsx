@@ -909,27 +909,53 @@ export default function Media() {
                                         </Pressable>
                                     )}
                                     <FlatList
-                                        data={editingPlaylists ? playlists : (allowedPlaylists.length > 0
-                                            ? playlists.filter(p => allowedPlaylists.includes(p.media_content_id))
-                                            : playlists)}
+                                        data={(() => {
+                                            if (editingPlaylists) {
+                                                // Show selected playlists first (in order), then unselected
+                                                const selected = allowedPlaylists
+                                                    .map(id => playlists.find(p => p.media_content_id === id))
+                                                    .filter(Boolean);
+                                                const unselected = playlists.filter(p => !allowedPlaylists.includes(p.media_content_id));
+                                                return [...selected, ...unselected];
+                                            }
+                                            if (allowedPlaylists.length > 0) {
+                                                // Sort by allowedPlaylists order
+                                                return allowedPlaylists
+                                                    .map(id => playlists.find(p => p.media_content_id === id))
+                                                    .filter(Boolean);
+                                            }
+                                            return playlists;
+                                        })()}
                                         keyExtractor={i => i.media_content_id}
                                         renderItem={({ item }) => {
                                             const isAllowed = allowedPlaylists.includes(item.media_content_id);
+                                            const idx = allowedPlaylists.indexOf(item.media_content_id);
+                                            const moveUp = () => {
+                                                if (idx <= 0) return;
+                                                const updated = [...allowedPlaylists];
+                                                [updated[idx - 1], updated[idx]] = [updated[idx], updated[idx - 1]];
+                                                setAllowedPlaylists(updated);
+                                                const mediaPlayerConfig = { ...dashboardConfig?.mediaPlayerConfig, allowedPlaylists: updated };
+                                                saveDashboardConfig({ ...dashboardConfig, mediaPlayerConfig });
+                                            };
+                                            const moveDown = () => {
+                                                if (idx < 0 || idx >= allowedPlaylists.length - 1) return;
+                                                const updated = [...allowedPlaylists];
+                                                [updated[idx], updated[idx + 1]] = [updated[idx + 1], updated[idx]];
+                                                setAllowedPlaylists(updated);
+                                                const mediaPlayerConfig = { ...dashboardConfig?.mediaPlayerConfig, allowedPlaylists: updated };
+                                                saveDashboardConfig({ ...dashboardConfig, mediaPlayerConfig });
+                                            };
                                             return (
                                                 <Pressable
                                                     style={[styles.modalItem, editingPlaylists && { opacity: isAllowed ? 1 : 0.5 }]}
                                                     onPress={() => {
                                                         if (editingPlaylists) {
-                                                            // Toggle playlist selection
                                                             const updated = isAllowed
                                                                 ? allowedPlaylists.filter(id => id !== item.media_content_id)
                                                                 : [...allowedPlaylists, item.media_content_id];
                                                             setAllowedPlaylists(updated);
-                                                            // Save to Supabase
-                                                            const mediaPlayerConfig = {
-                                                                ...dashboardConfig?.mediaPlayerConfig,
-                                                                allowedPlaylists: updated,
-                                                            };
+                                                            const mediaPlayerConfig = { ...dashboardConfig?.mediaPlayerConfig, allowedPlaylists: updated };
                                                             saveDashboardConfig({ ...dashboardConfig, mediaPlayerConfig });
                                                         } else {
                                                             browsePlaylistTracks(item);
@@ -951,7 +977,18 @@ export default function Media() {
                                                         <Text style={styles.modalItemText}>{item.title}</Text>
                                                         <Text style={{ color: '#64748B', fontSize: 12 }}>{item.media_content_type?.replace('spotify://', '') || 'Playlist'}</Text>
                                                     </View>
-                                                    {!editingPlaylists && <ChevronRight size={20} color="#64748B" />}
+                                                    {editingPlaylists && isAllowed ? (
+                                                        <View style={{ flexDirection: 'row', gap: 4 }}>
+                                                            <Pressable onPress={moveUp} hitSlop={8} style={{ padding: 6, backgroundColor: idx > 0 ? '#334155' : 'transparent', borderRadius: 8 }}>
+                                                                <ChevronLeft size={16} color={idx > 0 ? '#94A3B8' : 'transparent'} style={{ transform: [{ rotate: '90deg' }] }} />
+                                                            </Pressable>
+                                                            <Pressable onPress={moveDown} hitSlop={8} style={{ padding: 6, backgroundColor: idx < allowedPlaylists.length - 1 ? '#334155' : 'transparent', borderRadius: 8 }}>
+                                                                <ChevronRight size={16} color={idx < allowedPlaylists.length - 1 ? '#94A3B8' : 'transparent'} style={{ transform: [{ rotate: '90deg' }] }} />
+                                                            </Pressable>
+                                                        </View>
+                                                    ) : !editingPlaylists ? (
+                                                        <ChevronRight size={20} color="#64748B" />
+                                                    ) : null}
                                                 </Pressable>
                                             );
                                         }}
