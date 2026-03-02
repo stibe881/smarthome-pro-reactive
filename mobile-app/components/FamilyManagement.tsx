@@ -5,7 +5,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useHousehold } from '../hooks/useHousehold';
 import { supabase } from '../lib/supabase';
-import { Users, UserPlus, Mail, Crown, X, Send, Lock, Eye, EyeOff, Trash2, Key, Shield, ShieldOff, MoreVertical, Camera, UserCheck, CalendarDays, ChevronRight, Plus, Link2, Baby, Smartphone } from 'lucide-react-native';
+import { Users, UserPlus, Mail, Crown, X, Send, Lock, Eye, EyeOff, Trash2, Key, Shield, ShieldOff, MoreVertical, Camera, UserCheck, CalendarDays, ChevronRight, ChevronDown, Plus, Link2, Baby, Smartphone } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
@@ -112,6 +112,7 @@ export const FamilyManagement = ({ colors, onClose }: FamilyManagementProps) => 
     const [showGuestPermissions, setShowGuestPermissions] = useState(false);
     const [dismissingForImpersonate, setDismissingForImpersonate] = useState(false);
     const [editDisplayName, setEditDisplayName] = useState('');
+    const [modulesExpanded, setModulesExpanded] = useState(false);
 
     useEffect(() => {
         loadFamilyData();
@@ -606,7 +607,10 @@ export const FamilyManagement = ({ colors, onClose }: FamilyManagementProps) => 
                                     </View>
                                 </Pressable>
                                 <Text style={[styles.selectedEmail, { color: colors.text }]}>{selectedMember.display_name || selectedMember.email}</Text>
-                                <Text style={[styles.memberRole, { color: colors.subtext }]}>{selectedMember.role === 'admin' ? 'Administrator' : selectedMember.role === 'guest' ? 'Gast' : 'Familienmitglied'}</Text>
+                                <Text style={[styles.memberRole, { color: colors.subtext }]}>{selectedMember.role === 'admin' ? 'Administrator' : selectedMember.role === 'guest' ? 'Gast' : selectedMember.role === 'child' ? 'Kind' : 'Familienmitglied'}</Text>
+                                {selectedMember.email && selectedMember.display_name && !selectedMember.email.endsWith('@kind.lokal') && (
+                                    <Text style={[styles.memberRole, { color: colors.subtext, fontSize: 12, marginTop: 2 }]}>{selectedMember.email}</Text>
+                                )}
                             </View>
 
                             {/* Display Name Editor */}
@@ -672,21 +676,28 @@ export const FamilyManagement = ({ colors, onClose }: FamilyManagementProps) => 
                             {/* Module Access Toggles – shown when planner access is enabled */}
                             {selectedMember.planner_access !== false && (
                                 <View style={[styles.adminSection, { borderTopColor: colors.border }]}>
-                                    <Text style={[styles.label, { color: colors.subtext, marginBottom: 12 }]}>Family-Hub Module</Text>
-                                    {ALL_FAMILY_MODULES.map((mod, idx) => {
-                                        const memberModules = selectedMember.allowed_modules || ALL_FAMILY_MODULES.map(m => m.key);
-                                        const isEnabled = memberModules.includes(mod.key);
-                                        return (
-                                            <View key={mod.key} style={[styles.adminRow, idx > 0 && { marginTop: 8 }]}>
-                                                <Text style={[styles.label, { color: colors.text, marginBottom: 0, fontSize: 14 }]}>{mod.label}</Text>
-                                                <Switch
-                                                    value={isEnabled}
-                                                    onValueChange={(val) => handleToggleModule(mod.key, val)}
-                                                    trackColor={{ false: '#334155', true: '#10B981' }}
-                                                />
-                                            </View>
-                                        );
-                                    })}
+                                    <Pressable onPress={() => setModulesExpanded(!modulesExpanded)} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <Text style={[styles.label, { color: colors.subtext, marginBottom: 0 }]}>Family-Hub Module</Text>
+                                        {modulesExpanded ? <ChevronDown size={18} color={colors.subtext} /> : <ChevronRight size={18} color={colors.subtext} />}
+                                    </Pressable>
+                                    {modulesExpanded && (
+                                        <View style={{ marginTop: 12 }}>
+                                            {ALL_FAMILY_MODULES.map((mod, idx) => {
+                                                const memberModules = selectedMember.allowed_modules || ALL_FAMILY_MODULES.map(m => m.key);
+                                                const isEnabled = memberModules.includes(mod.key);
+                                                return (
+                                                    <View key={mod.key} style={[styles.adminRow, idx > 0 && { marginTop: 8 }]}>
+                                                        <Text style={[styles.label, { color: colors.text, marginBottom: 0, fontSize: 14 }]}>{mod.label}</Text>
+                                                        <Switch
+                                                            value={isEnabled}
+                                                            onValueChange={(val) => handleToggleModule(mod.key, val)}
+                                                            trackColor={{ false: '#334155', true: '#10B981' }}
+                                                        />
+                                                    </View>
+                                                );
+                                            })}
+                                        </View>
+                                    )}
                                 </View>
                             )}
 
