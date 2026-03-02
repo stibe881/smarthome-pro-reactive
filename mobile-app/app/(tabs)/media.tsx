@@ -19,7 +19,7 @@ import { PlayerType } from '../../components/MediaPlayerSelectionModal';
 import { MediaPlayerSelectionModal } from '../../components/MediaPlayerSelectionModal';
 
 export default function Media() {
-    const { entities, isConnected, isConnecting, callService, getEntityPictureUrl, browseMedia, dashboardConfig } = useHomeAssistant();
+    const { entities, isConnected, isConnecting, callService, getEntityPictureUrl, browseMedia, dashboardConfig, saveDashboardConfig } = useHomeAssistant();
     const { colors } = useTheme();
     const { userRole } = useAuth();
     const { width } = useWindowDimensions();
@@ -48,6 +48,17 @@ export default function Media() {
     const [playlistTracks, setPlaylistTracks] = useState<any[]>([]);
     const [loadingTracks, setLoadingTracks] = useState(false);
     const [selectedPlaylistItem, setSelectedPlaylistItem] = useState<any>(null);
+
+    // Admin Playlist Selection
+    const [allowedPlaylists, setAllowedPlaylists] = useState<string[]>([]);
+    const [editingPlaylists, setEditingPlaylists] = useState(false);
+    const isAdmin = userRole === 'admin';
+
+    // Load allowed playlists from config
+    useEffect(() => {
+        const allowed = dashboardConfig?.mediaPlayerConfig?.allowedPlaylists;
+        if (allowed) setAllowedPlaylists(allowed);
+    }, [dashboardConfig?.mediaPlayerConfig?.allowedPlaylists]);
 
     // Delayed disconnection state - don't show overlay for brief blips
     const [showDisconnected, setShowDisconnected] = useState(false);
@@ -878,20 +889,74 @@ export default function Media() {
                         ) : (
                             /* Playlist List */
                             loadingPlaylists ? <ActivityIndicator color="#1DB954" size="large" /> : (
-                                <FlatList
-                                    data={playlists}
-                                    keyExtractor={i => i.media_content_id}
-                                    renderItem={({ item }) => (
-                                        <Pressable style={styles.modalItem} onPress={() => browsePlaylistTracks(item)}>
-                                            <Image source={{ uri: getEntityPictureUrl(item.thumbnail) }} style={{ width: 48, height: 48, borderRadius: 6, marginRight: 4 }} />
-                                            <View style={{ flex: 1 }}>
-                                                <Text style={styles.modalItemText}>{item.title}</Text>
-                                                <Text style={{ color: '#64748B', fontSize: 12 }}>{item.media_content_type?.replace('spotify://', '') || 'Playlist'}</Text>
-                                            </View>
-                                            <ChevronRight size={20} color="#64748B" />
+                                <>
+                                    {isAdmin && (
+                                        <Pressable
+                                            onPress={() => setEditingPlaylists(!editingPlaylists)}
+                                            style={{
+                                                flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+                                                paddingVertical: 10, marginBottom: 8,
+                                                borderRadius: 12,
+                                                backgroundColor: editingPlaylists ? '#1DB954' + '20' : 'transparent',
+                                                borderWidth: 1,
+                                                borderColor: editingPlaylists ? '#1DB954' : '#334155',
+                                            }}
+                                        >
+                                            <Settings size={16} color={editingPlaylists ? '#1DB954' : '#64748B'} />
+                                            <Text style={{ color: editingPlaylists ? '#1DB954' : '#94A3B8', fontSize: 14, fontWeight: '600' }}>
+                                                {editingPlaylists ? 'Fertig' : 'Playlists verwalten'}
+                                            </Text>
                                         </Pressable>
                                     )}
-                                />
+                                    <FlatList
+                                        data={editingPlaylists ? playlists : (allowedPlaylists.length > 0 && !isAdmin
+                                            ? playlists.filter(p => allowedPlaylists.includes(p.media_content_id))
+                                            : playlists)}
+                                        keyExtractor={i => i.media_content_id}
+                                        renderItem={({ item }) => {
+                                            const isAllowed = allowedPlaylists.includes(item.media_content_id);
+                                            return (
+                                                <Pressable
+                                                    style={[styles.modalItem, editingPlaylists && { opacity: isAllowed ? 1 : 0.5 }]}
+                                                    onPress={() => {
+                                                        if (editingPlaylists) {
+                                                            // Toggle playlist selection
+                                                            const updated = isAllowed
+                                                                ? allowedPlaylists.filter(id => id !== item.media_content_id)
+                                                                : [...allowedPlaylists, item.media_content_id];
+                                                            setAllowedPlaylists(updated);
+                                                            // Save to Supabase
+                                                            const mediaPlayerConfig = {
+                                                                ...dashboardConfig?.mediaPlayerConfig,
+                                                                allowedPlaylists: updated,
+                                                            };
+                                                            saveDashboardConfig({ ...dashboardConfig, mediaPlayerConfig });
+                                                        } else {
+                                                            browsePlaylistTracks(item);
+                                                        }
+                                                    }}
+                                                >
+                                                    {editingPlaylists && (
+                                                        <View style={{
+                                                            width: 24, height: 24, borderRadius: 6,
+                                                            borderWidth: 2, borderColor: isAllowed ? '#1DB954' : '#475569',
+                                                            backgroundColor: isAllowed ? '#1DB954' : 'transparent',
+                                                            alignItems: 'center', justifyContent: 'center', marginRight: 8,
+                                                        }}>
+                                                            {isAllowed && <Text style={{ color: '#FFF', fontSize: 14, fontWeight: '700' }}>✓</Text>}
+                                                        </View>
+                                                    )}
+                                                    <Image source={{ uri: getEntityPictureUrl(item.thumbnail) }} style={{ width: 48, height: 48, borderRadius: 6, marginRight: 4 }} />
+                                                    <View style={{ flex: 1 }}>
+                                                        <Text style={styles.modalItemText}>{item.title}</Text>
+                                                        <Text style={{ color: '#64748B', fontSize: 12 }}>{item.media_content_type?.replace('spotify://', '') || 'Playlist'}</Text>
+                                                    </View>
+                                                    {!editingPlaylists && <ChevronRight size={20} color="#64748B" />}
+                                                </Pressable>
+                                            );
+                                        }}
+                                    />
+                                </>
                             )
                         )}
                         <Pressable style={styles.closeButton} onPress={() => { setSpotifyModalVisible(false); setPlaylistTracks([]); setSelectedPlaylistItem(null); }}>
