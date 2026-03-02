@@ -8,7 +8,7 @@ import { useHomeAssistant } from '../../contexts/HomeAssistantContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { COUNTDOWN_ICONS } from '../../components/FamilyCountdowns';
-import { Lightbulb, Blinds, Thermometer, Droplets, Wind, Lock, Unlock, Zap, Music, Play, Pause, SkipForward, SkipBack, Bot, PartyPopper, Calendar, CloudRain, Cloud, Sun, Moon, ShoppingCart, Info, Loader2, UtensilsCrossed, Shirt, Clapperboard, BedDouble, ChevronRight, ChevronLeft, Shield, LucideIcon, DoorOpen, DoorClosed, WifiOff, Tv, X, Wifi, RefreshCw, Power, Battery, PlayCircle, Home, Map, MapPin, Fan, Clock, Video, Star, Square, Bell, Baby, Cake, Search, Speaker, Volume1, Volume2, VolumeX, Minus, Plus, Shuffle, Repeat, Repeat1, Disc } from 'lucide-react-native';
+import { Lightbulb, Blinds, Thermometer, Droplets, Wind, Lock, Unlock, Zap, Music, Play, Pause, SkipForward, SkipBack, Bot, PartyPopper, Calendar, CloudRain, Cloud, Sun, Moon, ShoppingCart, Info, Loader2, UtensilsCrossed, Shirt, Clapperboard, BedDouble, ChevronRight, ChevronLeft, Shield, LucideIcon, DoorOpen, DoorClosed, WifiOff, Tv, X, Wifi, RefreshCw, Power, Battery, PlayCircle, Home, Map, MapPin, Fan, Clock, Video, Star, Square, Bell, Baby, Cake, Search, Speaker, Volume1, Volume2, VolumeX, Minus, Plus, Shuffle, Repeat, Repeat1, Disc, Radio } from 'lucide-react-native';
 import Slider from '@react-native-community/slider';
 import * as Haptics from 'expo-haptics';
 import SecurityModal from '../../components/SecurityModal';
@@ -558,7 +558,12 @@ export default function Dashboard() {
     const [popupPlaylistTracks, setPopupPlaylistTracks] = useState<any[]>([]);
     const [selectedPopupPlaylistItem, setSelectedPopupPlaylistItem] = useState<any>(null);
     const [loadingPopupTracks, setLoadingPopupTracks] = useState(false);
-    const [pendingModal, setPendingModal] = useState<'picker' | 'spotify' | null>(null);
+    const [pendingModal, setPendingModal] = useState<'picker' | 'spotify' | 'tunein' | null>(null);
+    // TuneIn state
+    const [tuneinPopupVisible, setTuneinPopupVisible] = useState(false);
+    const [tuneinItems, setTuneinItems] = useState<any[]>([]);
+    const [tuneinBreadcrumb, setTuneinBreadcrumb] = useState<{ title: string, contentId?: string, contentType?: string }[]>([]);
+    const [loadingTunein, setLoadingTunein] = useState(false);
 
     // When main modal closes and a pending modal is set, open it
     useEffect(() => {
@@ -583,6 +588,45 @@ export default function Dashboard() {
                             })
                             .catch(() => Alert.alert('Fehler', 'Playlists konnten nicht geladen werden.'))
                             .finally(() => setLoadingPopupPlaylists(false));
+                    }
+                }
+                if (pendingModal === 'tunein') {
+                    setTuneinPopupVisible(true);
+                    setLoadingTunein(true);
+                    setTuneinBreadcrumb([{ title: 'Radio' }]);
+                    // Browse MASS player's root media to find TuneIn
+                    const massPlayer = activeMediaPlayer ? (() => {
+                        const id = activeMediaPlayer.entity_id;
+                        const MASS_ID_MAPPING: Record<string, string> = { 'media_player.nest_buro': 'media_player.nest_garage_2' };
+                        if (MASS_ID_MAPPING[id]) return MASS_ID_MAPPING[id];
+                        if (id.startsWith('media_player.ma_') || id.startsWith('media_player.mass_')) return id;
+                        const massId = id.replace('media_player.', 'media_player.mass_');
+                        if (entities.find(e => e.entity_id === massId)) return massId;
+                        const coreName = id.replace('media_player.', '').replace('nest_', '').replace('google_', '').replace('hub_', '').replace('home_', '');
+                        const mc = entities.find(e => (e.entity_id.startsWith('media_player.mass_') || e.entity_id.startsWith('media_player.ma_')) && e.entity_id.includes(coreName));
+                        return mc ? mc.entity_id : id;
+                    })() : null;
+                    if (massPlayer) {
+                        browseMedia(massPlayer)
+                            .then((root: any) => {
+                                if (!root?.children) { setTuneinItems([]); return; }
+                                // Look for TuneIn or Radio in the root children
+                                const tuneinFolder = root.children.find((c: any) =>
+                                    c.title?.toLowerCase().includes('tunein') ||
+                                    c.title?.toLowerCase().includes('radio') ||
+                                    c.media_content_id?.toLowerCase().includes('tunein')
+                                );
+                                if (tuneinFolder) {
+                                    return browseMedia(massPlayer, tuneinFolder.media_content_id, tuneinFolder.media_content_type)
+                                        .then((content: any) => setTuneinItems(content?.children || []));
+                                }
+                                // Fallback: show all root items
+                                setTuneinItems(root.children);
+                            })
+                            .catch(() => Alert.alert('Fehler', 'Radio konnte nicht geladen werden.'))
+                            .finally(() => setLoadingTunein(false));
+                    } else {
+                        setLoadingTunein(false);
                     }
                 }
                 setPendingModal(null);
@@ -2376,6 +2420,16 @@ export default function Dashboard() {
                                             >
                                                 <Disc size={20} color="#1DB954" />
                                             </Pressable>
+                                            <Pressable
+                                                onPress={() => {
+                                                    setPendingModal('tunein');
+                                                    setMediaPlayerModalVisible(false);
+                                                }}
+                                                hitSlop={8}
+                                                style={{ padding: 10, backgroundColor: '#FF6B00' + '20', borderRadius: 16 }}
+                                            >
+                                                <Radio size={20} color="#FF6B00" />
+                                            </Pressable>
                                         </View>
                                     </View>
                                 </View>
@@ -2590,6 +2644,118 @@ export default function Dashboard() {
                                     )}
                                 />
                             )
+                        )}
+                    </View>
+                </View>
+            </Modal>
+
+            {/* TuneIn Radio Browser Modal */}
+            <Modal visible={tuneinPopupVisible} animationType="slide" transparent={true} onRequestClose={() => { setTuneinPopupVisible(false); setTuneinItems([]); setTuneinBreadcrumb([]); }}>
+                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
+                    <Pressable style={{ flex: 1 }} onPress={() => { setTuneinPopupVisible(false); setTuneinItems([]); setTuneinBreadcrumb([]); }} />
+                    <View style={{ backgroundColor: colors.card, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '80%', padding: 20 }}>
+                        <View style={{ alignItems: 'center', marginBottom: 12 }}>
+                            <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: colors.subtext + '40' }} />
+                        </View>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+                            {tuneinBreadcrumb.length > 1 && (
+                                <Pressable onPress={async () => {
+                                    const newBc = [...tuneinBreadcrumb];
+                                    newBc.pop();
+                                    setTuneinBreadcrumb(newBc);
+                                    const prev = newBc[newBc.length - 1];
+                                    if (prev.contentId) {
+                                        setLoadingTunein(true);
+                                        // Resolve MASS player again
+                                        const id = activeMediaPlayer?.entity_id || '';
+                                        const MASS_MAP: Record<string, string> = { 'media_player.nest_buro': 'media_player.nest_garage_2' };
+                                        let massP = MASS_MAP[id] || id;
+                                        if (!massP.includes('mass_') && !massP.includes('ma_')) {
+                                            const mId = id.replace('media_player.', 'media_player.mass_');
+                                            if (entities.find(e => e.entity_id === mId)) massP = mId;
+                                        }
+                                        try {
+                                            const content = await browseMedia(massP, prev.contentId, prev.contentType);
+                                            setTuneinItems(content?.children || []);
+                                        } catch { } finally { setLoadingTunein(false); }
+                                    }
+                                }} style={{ marginRight: 12, padding: 4 }}>
+                                    <ChevronLeft size={24} color={colors.subtext} />
+                                </Pressable>
+                            )}
+                            <Radio size={22} color="#FF6B00" style={{ marginRight: 8 }} />
+                            <Text style={{ color: colors.text, fontSize: 18, fontWeight: '700', flex: 1 }}>
+                                {tuneinBreadcrumb[tuneinBreadcrumb.length - 1]?.title || 'Radio'}
+                            </Text>
+                        </View>
+
+                        {loadingTunein ? <ActivityIndicator color="#FF6B00" size="large" /> : (
+                            <FlatList
+                                data={tuneinItems}
+                                keyExtractor={(i, idx) => (i.media_content_id || '') + idx}
+                                style={{ maxHeight: 400 }}
+                                renderItem={({ item }) => {
+                                    const canBrowse = item.can_expand || (item.children && item.children.length > 0);
+                                    const isStation = !canBrowse && item.can_play;
+                                    return (
+                                        <Pressable
+                                            style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 }}
+                                            onPress={async () => {
+                                                if (!activeMediaPlayer) return;
+                                                if (canBrowse) {
+                                                    // Browse deeper
+                                                    setLoadingTunein(true);
+                                                    const id = activeMediaPlayer.entity_id;
+                                                    const MASS_MAP: Record<string, string> = { 'media_player.nest_buro': 'media_player.nest_garage_2' };
+                                                    let massP = MASS_MAP[id] || id;
+                                                    if (!massP.includes('mass_') && !massP.includes('ma_')) {
+                                                        const mId = id.replace('media_player.', 'media_player.mass_');
+                                                        if (entities.find(e => e.entity_id === mId)) massP = mId;
+                                                    }
+                                                    try {
+                                                        const content = await browseMedia(massP, item.media_content_id, item.media_content_type);
+                                                        setTuneinItems(content?.children || []);
+                                                        setTuneinBreadcrumb(b => [...b, { title: item.title, contentId: item.media_content_id, contentType: item.media_content_type }]);
+                                                    } catch { Alert.alert('Fehler', 'Navigation fehlgeschlagen'); }
+                                                    finally { setLoadingTunein(false); }
+                                                } else if (isStation) {
+                                                    // Play the station
+                                                    setTuneinPopupVisible(false);
+                                                    setTuneinItems([]);
+                                                    setTuneinBreadcrumb([]);
+                                                    setTimeout(() => setMediaPlayerModalVisible(true), 300);
+                                                    const id = activeMediaPlayer.entity_id;
+                                                    const MASS_MAP: Record<string, string> = { 'media_player.nest_buro': 'media_player.nest_garage_2' };
+                                                    let massTarget = MASS_MAP[id] || id;
+                                                    if (!massTarget.includes('mass_') && !massTarget.includes('ma_')) {
+                                                        const mId = id.replace('media_player.', 'media_player.mass_');
+                                                        if (entities.find(e => e.entity_id === mId)) massTarget = mId;
+                                                    }
+                                                    try {
+                                                        await callService('media_player', 'play_media', massTarget, {
+                                                            media_content_id: item.media_content_id,
+                                                            media_content_type: item.media_content_type || 'music'
+                                                        });
+                                                    } catch (e) { console.warn('TuneIn play failed', e); }
+                                                }
+                                            }}
+                                        >
+                                            {item.thumbnail ? (
+                                                <Image source={{ uri: getEntityPictureUrl(item.thumbnail) }} style={{ width: 48, height: 48, borderRadius: canBrowse ? 6 : 24 }} />
+                                            ) : (
+                                                <View style={{ width: 48, height: 48, borderRadius: canBrowse ? 6 : 24, backgroundColor: '#FF6B00' + '15', alignItems: 'center', justifyContent: 'center' }}>
+                                                    {canBrowse ? <Radio size={22} color="#FF6B00" /> : <Play size={22} color="#FF6B00" />}
+                                                </View>
+                                            )}
+                                            <View style={{ flex: 1 }}>
+                                                <Text style={{ color: colors.text, fontSize: 15, fontWeight: canBrowse ? '600' : '500' }} numberOfLines={1}>{item.title}</Text>
+                                                {item.media_content_type && <Text style={{ color: colors.subtext, fontSize: 11 }}>{canBrowse ? 'Kategorie' : 'Sender'}</Text>}
+                                            </View>
+                                            {canBrowse ? <ChevronRight size={20} color={colors.subtext} /> : <Play size={16} color={'#FF6B00'} />}
+                                        </Pressable>
+                                    );
+                                }}
+                            />
                         )}
                     </View>
                 </View>
