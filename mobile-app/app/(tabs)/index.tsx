@@ -567,7 +567,6 @@ export default function Dashboard() {
 
     // Progress bar smooth ticker — forces re-render for time labels
     const [progressTick, setProgressTick] = useState(0);
-    const progressAnim = useRef(new Animated.Value(0)).current;
     useEffect(() => {
         if (!mediaPlayerModalVisible) return;
         const timer = setInterval(() => setProgressTick(t => t + 1), 500);
@@ -2416,31 +2415,27 @@ export default function Dashboard() {
                                             </Pressable>
                                         </View>
                                     </View>
-                                    {/* Progress Bar - flush at bottom edge, animated */}
-                                    {mediaDuration > 0 && (() => {
-                                        // Animate progress width smoothly
-                                        Animated.timing(progressAnim, {
-                                            toValue: Math.min(progressPct, 100),
-                                            duration: 800,
-                                            useNativeDriver: false,
-                                        }).start();
-                                        const animWidth = progressAnim.interpolate({
-                                            inputRange: [0, 100],
-                                            outputRange: ['0%', '100%'],
-                                            extrapolate: 'clamp',
-                                        });
-                                        return (
-                                            <View style={{ width: '100%', paddingBottom: 12 }}>
-                                                <View style={{ height: 3, backgroundColor: colors.background, overflow: 'hidden' }}>
-                                                    <Animated.View style={{ height: '100%', backgroundColor: '#F59E0B', width: animWidth }} />
-                                                </View>
-                                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4, paddingHorizontal: 16 }}>
-                                                    <Text style={{ color: '#F59E0B', fontSize: 11, fontWeight: '600' }}>{fmtTime(elapsed)}</Text>
-                                                    <Text style={{ color: colors.subtext, fontSize: 11, fontWeight: '500' }}>{fmtTime(mediaDuration)}</Text>
-                                                </View>
+                                    {/* Progress Slider - seekable, at bottom edge */}
+                                    {mediaDuration > 0 && (
+                                        <View style={{ width: '100%', paddingBottom: 12, paddingHorizontal: 0 }}>
+                                            <Slider
+                                                style={{ width: '100%', height: 24 }}
+                                                minimumValue={0}
+                                                maximumValue={mediaDuration}
+                                                value={elapsed}
+                                                onSlidingComplete={(value: number) => {
+                                                    callService('media_player', 'media_seek', resolveTarget(livePlayer.entity_id), { seek_position: value });
+                                                }}
+                                                minimumTrackTintColor={'#F59E0B'}
+                                                maximumTrackTintColor={colors.background}
+                                                thumbTintColor={'#F59E0B'}
+                                            />
+                                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, marginTop: -2 }}>
+                                                <Text style={{ color: '#F59E0B', fontSize: 11, fontWeight: '600' }}>{fmtTime(elapsed)}</Text>
+                                                <Text style={{ color: colors.subtext, fontSize: 11, fontWeight: '500' }}>{fmtTime(mediaDuration)}</Text>
                                             </View>
-                                        );
-                                    })()}
+                                        </View>
+                                    )}
                                 </View>
                             );
                         })()}
