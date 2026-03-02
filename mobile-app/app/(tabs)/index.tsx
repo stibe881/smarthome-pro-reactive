@@ -2310,7 +2310,6 @@ export default function Dashboard() {
                                 || appName.includes('tunein') || appName.includes('radio')
                                 || contentId.includes('tunein') || contentId.includes('radio')
                                 || mediaDuration === 0;
-                            console.log(`📻 Radio check: contentType=${contentType}, appName=${appName}, contentId=${contentId?.substring(0, 50)}, duration=${mediaDuration}, isRadio=${isRadio}`);
 
                             return (
                                 <View style={{ position: 'relative' }}>

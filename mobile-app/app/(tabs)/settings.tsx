@@ -1777,17 +1777,19 @@ export default function Settings() {
                                 </Pressable>
                             </View>
 
-                            {/* Schnellaktionen */}
-                            <SettingsSection title="Schnellaktionen" colors={colors}>
-                                <SettingsRow
-                                    icon={<Zap size={20} color="#F59E0B" />}
-                                    iconColor="#F59E0B"
-                                    label="Standard-Aktionen"
-                                    value="Für alle Nutzer"
-                                    showChevron
-                                    onPress={() => setQuickActionsAdminVisible(true)}
-                                    colors={colors}
-                                />
+                            {/* Personalisierung (merged Schnellaktionen + Widgets) */}
+                            <SettingsSection title="Personalisierung" colors={colors}>
+                                {effectiveRole === 'admin' && (
+                                    <SettingsRow
+                                        icon={<Zap size={20} color="#F59E0B" />}
+                                        iconColor="#F59E0B"
+                                        label="Standard-Aktionen"
+                                        value="Für alle Nutzer"
+                                        showChevron
+                                        onPress={() => setQuickActionsAdminVisible(true)}
+                                        colors={colors}
+                                    />
+                                )}
                                 <SettingsRow
                                     icon={<Zap size={20} color={colors.accent} />}
                                     iconColor={colors.accent}
@@ -1795,13 +1797,8 @@ export default function Settings() {
                                     value="Personalisieren"
                                     showChevron
                                     onPress={() => setQuickActionsUserVisible(true)}
-                                    isLast
                                     colors={colors}
                                 />
-                            </SettingsSection>
-
-                            {/* Widgets */}
-                            <SettingsSection title="Widgets" colors={colors}>
                                 <SettingsRow
                                     icon={<LayoutGrid size={20} color={colors.accent} />}
                                     iconColor={colors.accent}

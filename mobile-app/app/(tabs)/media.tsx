@@ -951,7 +951,6 @@ const HeroPlayer = ({ player, massPlayer, imageUrl, massImageUrl, onSelect, onSp
         || appName.includes('tunein') || appName.includes('radio')
         || contentId.includes('tunein') || contentId.includes('radio')
         || (isPlaying && mediaDuration === 0);
-    console.log(`📻 HeroPlayer radio check: contentType=${contentType}, appName=${appName}, contentId=${contentId?.substring(0, 50)}, duration=${mediaDuration}, isRadio=${isRadio}`);
     const mediaPosition = attrs.media_position || 0;
     const positionUpdatedAt = attrs.media_position_updated_at;
     const [currentPosition, setCurrentPosition] = useState(mediaPosition);
