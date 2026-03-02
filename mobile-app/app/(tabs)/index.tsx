@@ -8,7 +8,7 @@ import { useHomeAssistant } from '../../contexts/HomeAssistantContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { COUNTDOWN_ICONS } from '../../components/FamilyCountdowns';
-import { Lightbulb, Blinds, Thermometer, Droplets, Wind, Lock, Unlock, Zap, Music, Play, Pause, SkipForward, SkipBack, Bot, PartyPopper, Calendar, CloudRain, Cloud, Sun, Moon, ShoppingCart, Info, Loader2, UtensilsCrossed, Shirt, Clapperboard, BedDouble, ChevronRight, ChevronLeft, Shield, LucideIcon, DoorOpen, DoorClosed, WifiOff, Tv, X, Wifi, RefreshCw, Power, Battery, PlayCircle, Home, Map, MapPin, Fan, Clock, Video, Star, Square, Bell, Baby, Cake, Search, Speaker, Volume1, Volume2, VolumeX, Minus, Plus, Shuffle, Disc } from 'lucide-react-native';
+import { Lightbulb, Blinds, Thermometer, Droplets, Wind, Lock, Unlock, Zap, Music, Play, Pause, SkipForward, SkipBack, Bot, PartyPopper, Calendar, CloudRain, Cloud, Sun, Moon, ShoppingCart, Info, Loader2, UtensilsCrossed, Shirt, Clapperboard, BedDouble, ChevronRight, ChevronLeft, Shield, LucideIcon, DoorOpen, DoorClosed, WifiOff, Tv, X, Wifi, RefreshCw, Power, Battery, PlayCircle, Home, Map, MapPin, Fan, Clock, Video, Star, Square, Bell, Baby, Cake, Search, Speaker, Volume1, Volume2, VolumeX, Minus, Plus, Shuffle, Repeat, Repeat1, Disc } from 'lucide-react-native';
 import Slider from '@react-native-community/slider';
 import * as Haptics from 'expo-haptics';
 import SecurityModal from '../../components/SecurityModal';
@@ -2232,6 +2232,18 @@ export default function Dashboard() {
                             const handleVolumeChange = (value: number) => {
                                 callService('media_player', 'volume_set', resolveTarget(livePlayer.entity_id), { volume_level: Math.round(value * 100) / 100 });
                             };
+                            const handleShuffle = () => {
+                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                callService('media_player', 'shuffle_set', resolveTarget(livePlayer.entity_id), { shuffle: !livePlayer.attributes?.shuffle });
+                            };
+                            const handleRepeat = () => {
+                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                const current = livePlayer.attributes?.repeat || 'off';
+                                const next = current === 'off' ? 'all' : current === 'all' ? 'one' : 'off';
+                                callService('media_player', 'repeat_set', resolveTarget(livePlayer.entity_id), { repeat: next });
+                            };
+                            const shuffleOn = livePlayer.attributes?.shuffle === true;
+                            const repeatMode = livePlayer.attributes?.repeat || 'off';
 
                             return (
                                 <View style={{ position: 'relative' }}>
@@ -2271,7 +2283,11 @@ export default function Dashboard() {
                                         {artist ? <Text style={{ fontSize: 15, color: colors.subtext, textAlign: 'center' }} numberOfLines={1}>{artist}</Text> : null}
 
                                         {/* Controls */}
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 28, marginTop: 28 }}>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 20, marginTop: 28 }}>
+                                            <Pressable onPress={handleShuffle} hitSlop={12} style={{ padding: 8, backgroundColor: shuffleOn ? '#1DB954' + '20' : 'transparent', borderRadius: 16 }}>
+                                                <Shuffle size={20} color={shuffleOn ? '#1DB954' : colors.subtext} />
+                                            </Pressable>
+
                                             <Pressable onPress={handlePrev} hitSlop={12} style={{ padding: 10 }}>
                                                 <SkipBack size={28} color={colors.text} />
                                             </Pressable>
@@ -2282,6 +2298,14 @@ export default function Dashboard() {
 
                                             <Pressable onPress={handleNext} hitSlop={12} style={{ padding: 10 }}>
                                                 <SkipForward size={28} color={colors.text} />
+                                            </Pressable>
+
+                                            <Pressable onPress={handleRepeat} hitSlop={12} style={{ padding: 8, backgroundColor: repeatMode !== 'off' ? '#1DB954' + '20' : 'transparent', borderRadius: 16 }}>
+                                                {repeatMode === 'one' ? (
+                                                    <Repeat1 size={20} color="#1DB954" />
+                                                ) : (
+                                                    <Repeat size={20} color={repeatMode === 'all' ? '#1DB954' : colors.subtext} />
+                                                )}
                                             </Pressable>
                                         </View>
 
