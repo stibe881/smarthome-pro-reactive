@@ -77,6 +77,8 @@ const findNearbyShop = async (lat: number, lng: number): Promise<string | null> 
 };
 
 // Define the background task for Shopping
+const SHOPPING_NOTIF_ID = 'shopping-reminder-scheduled';
+
 if (Platform.OS !== 'web') TaskManager.defineTask(SHOPPING_TASK, async ({ data, error }: any) => {
     if (error) {
         console.error("Shopping Task Error:", error);
@@ -92,7 +94,8 @@ if (Platform.OS !== 'web') TaskManager.defineTask(SHOPPING_TASK, async ({ data, 
             const count = parseInt(countStr || '0');
 
             if (count <= 0) {
-                // List empty, reset any entry and return
+                // List empty → cancel any pending notification and reset
+                await Notifications.cancelScheduledNotificationAsync(SHOPPING_NOTIF_ID).catch(() => { });
                 await AsyncStorage.removeItem(SHOP_ENTRY_KEY);
                 return;
             }
@@ -101,7 +104,6 @@ if (Platform.OS !== 'web') TaskManager.defineTask(SHOPPING_TASK, async ({ data, 
             const settingsStr = await AsyncStorage.getItem(NOTIF_SETTINGS_KEY);
             if (settingsStr) {
                 const settings = JSON.parse(settingsStr);
-                // Check new structure (household.shopping) or fallback
                 if (settings.household?.shopping === false) {
                     console.log("Shopping notification disabled by setting");
                     return;
@@ -132,7 +134,7 @@ if (Platform.OS !== 'web') TaskManager.defineTask(SHOPPING_TASK, async ({ data, 
             if (matchingShop) {
                 console.log(`🛒 At Shop: ${matchingShop}`);
 
-                // Check entry data for dwell time tracking
+                // Check entry data for cooldown tracking
                 const entryDataStr = await AsyncStorage.getItem(SHOP_ENTRY_KEY);
                 let entryData = entryDataStr ? JSON.parse(entryDataStr) : null;
 
@@ -145,41 +147,40 @@ if (Platform.OS !== 'web') TaskManager.defineTask(SHOPPING_TASK, async ({ data, 
                     return;
                 }
 
-                // Check if this is a continued visit to the same shop
-                if (entryData && entryData.shop === matchingShop && !entryData.notified) {
-                    // Same shop, check dwell time (3 minutes = 180000ms)
-                    const elapsed = Date.now() - entryData.timestamp;
-                    if (elapsed >= 180000) {
-                        // 3 minutes elapsed → send notification
-                        console.log(`🛒 Dwell time reached (${Math.round(elapsed / 1000)}s) — sending shopping notification for ${matchingShop}`);
-                        await Notifications.scheduleNotificationAsync({
-                            content: {
-                                title: "Haushalt",
-                                body: "Schau doch kurz in eure Einkaufsliste",
-                                sound: true,
-                                categoryIdentifier: 'SHOPPING_ACTION',
-                                data: { action: 'open_list' }
-                            },
-                            trigger: null
-                        });
+                // First detection at this shop → schedule notification 3 min in the future
+                if (!entryData || entryData.shop !== matchingShop) {
+                    console.log(`🛒 Entered shop area: ${matchingShop} — scheduling notification in 3 minutes`);
 
-                        // Mark as notified
-                        await AsyncStorage.setItem(SHOP_ENTRY_KEY, JSON.stringify({
-                            shop: matchingShop, timestamp: entryData.timestamp, notified: true
-                        }));
-                    } else {
-                        console.log(`🛒 At ${matchingShop} for ${Math.round(elapsed / 1000)}s — waiting for 3min dwell time`);
-                    }
-                } else {
-                    // New shop visit — record entry timestamp, don't notify yet
-                    console.log(`🛒 Entered shop area: ${matchingShop} — starting 3min dwell timer`);
+                    // Cancel any previous scheduled shopping notification
+                    await Notifications.cancelScheduledNotificationAsync(SHOPPING_NOTIF_ID).catch(() => { });
+
+                    // Schedule notification with iOS-native 3-minute delay
+                    await Notifications.scheduleNotificationAsync({
+                        identifier: SHOPPING_NOTIF_ID,
+                        content: {
+                            title: "Einkaufsliste 🛒",
+                            body: `Du bist bei ${matchingShop} — schau doch kurz in eure Einkaufsliste!`,
+                            sound: true,
+                            categoryIdentifier: 'SHOPPING_ACTION',
+                            data: { action: 'open_list', category_key: 'shopping' }
+                        },
+                        trigger: { type: 'timeInterval' as any, seconds: 180, repeats: false },
+                    });
+
+                    // Record entry (notified will be set to true when notification fires)
                     await AsyncStorage.setItem(SHOP_ENTRY_KEY, JSON.stringify({
-                        shop: matchingShop, timestamp: Date.now(), notified: false
+                        shop: matchingShop, timestamp: Date.now(), notified: true
                     }));
                 }
+                // If same shop and already scheduled, do nothing (let the timer fire)
             } else {
-                // Not at a known shop -> Reset entry
-                await AsyncStorage.removeItem(SHOP_ENTRY_KEY);
+                // Not at a known shop → cancel pending notification and reset
+                const entryDataStr = await AsyncStorage.getItem(SHOP_ENTRY_KEY);
+                if (entryDataStr) {
+                    console.log(`🛒 Left shop area — cancelling scheduled notification`);
+                    await Notifications.cancelScheduledNotificationAsync(SHOPPING_NOTIF_ID).catch(() => { });
+                    await AsyncStorage.removeItem(SHOP_ENTRY_KEY);
+                }
             }
         } catch (e) {
             console.error("Shopping Task Logic Error:", e);

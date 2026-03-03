@@ -2,10 +2,10 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, Modal, Pressable, ScrollView, TextInput, Alert } from 'react-native';
 import { X, Plus, Trash2, GripVertical, Zap, Sun, Moon, Clapperboard, Blinds, Bot, BedDouble, Lightbulb, Power, Home, Star, Shield, Fan, Bell, Music, Play, Lock, Unlock, DoorOpen, DoorClosed, RefreshCw, Clock, Video, Baby, PartyPopper, LucideIcon, ChevronRight, Search } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useHomeAssistant } from '../contexts/HomeAssistantContext';
+import { supabase } from '../lib/supabase';
 
 interface QuickActionConfig {
     id: string;
@@ -55,7 +55,7 @@ interface QuickActionsConfigModalProps {
 export const QuickActionsConfigModal = ({ visible, onClose, isAdmin }: QuickActionsConfigModalProps) => {
     const { colors } = useTheme();
     const { user } = useAuth();
-    const { entities } = useHomeAssistant();
+    const { entities, dashboardConfig, saveDashboardConfig } = useHomeAssistant();
 
     const [actions, setActions] = useState<QuickActionConfig[]>([]);
     const [addMode, setAddMode] = useState<'list' | 'builtin' | 'entity' | 'edit' | null>(null);
@@ -66,33 +66,48 @@ export const QuickActionsConfigModal = ({ visible, onClose, isAdmin }: QuickActi
     const [actionLabel, setActionLabel] = useState('');
     const [actionDescription, setActionDescription] = useState('');
 
-    const storageKey = isAdmin ? '@quick_actions_admin' : `@quick_actions_user_${user?.id}`;
-
-    // Load actions
+    // Load actions from Supabase
     useEffect(() => {
         if (!visible) return;
         (async () => {
-            const stored = await AsyncStorage.getItem(storageKey);
-            if (stored) {
-                try { setActions(JSON.parse(stored)); return; } catch { }
-            }
-            // If admin with no config, load defaults. If user with no config, load admin or defaults.
             if (isAdmin) {
-                setActions(DEFAULT_QUICK_ACTIONS);
+                // Admin: load from dashboardConfig.quickActions
+                const adminActions = dashboardConfig?.quickActions;
+                setActions(adminActions && adminActions.length > 0 ? adminActions : DEFAULT_QUICK_ACTIONS);
             } else {
-                const adminCfg = await AsyncStorage.getItem('@quick_actions_admin');
-                if (adminCfg) {
-                    try { setActions(JSON.parse(adminCfg)); } catch { setActions(DEFAULT_QUICK_ACTIONS); }
-                } else {
-                    setActions(DEFAULT_QUICK_ACTIONS);
+                // User: load from family_members.quick_actions, fallback to admin config
+                if (user?.id) {
+                    try {
+                        const { data } = await supabase
+                            .from('family_members')
+                            .select('quick_actions')
+                            .eq('user_id', user.id)
+                            .single();
+                        if (data?.quick_actions && data.quick_actions.length > 0) {
+                            setActions(data.quick_actions);
+                            return;
+                        }
+                    } catch { /* fallback below */ }
                 }
+                // Fallback: admin config or defaults
+                const adminActions = dashboardConfig?.quickActions;
+                setActions(adminActions && adminActions.length > 0 ? adminActions : DEFAULT_QUICK_ACTIONS);
             }
         })();
-    }, [visible, storageKey]);
+    }, [visible, isAdmin, dashboardConfig?.quickActions]);
 
     const saveActions = async (newActions: QuickActionConfig[]) => {
         setActions(newActions);
-        await AsyncStorage.setItem(storageKey, JSON.stringify(newActions));
+        if (isAdmin) {
+            // Save to household dashboardConfig
+            await saveDashboardConfig({ ...dashboardConfig, quickActions: newActions });
+        } else if (user?.id) {
+            // Save to family_members.quick_actions
+            await supabase
+                .from('family_members')
+                .update({ quick_actions: newActions })
+                .eq('user_id', user.id);
+        }
     };
 
     const deleteAction = (id: string) => {
@@ -158,16 +173,19 @@ export const QuickActionsConfigModal = ({ visible, onClose, isAdmin }: QuickActi
             { text: 'Abbrechen', style: 'cancel' },
             {
                 text: 'Zurücksetzen', style: 'destructive', onPress: async () => {
-                    await AsyncStorage.removeItem(storageKey);
                     if (isAdmin) {
                         setActions(DEFAULT_QUICK_ACTIONS);
+                        await saveDashboardConfig({ ...dashboardConfig, quickActions: DEFAULT_QUICK_ACTIONS });
                     } else {
-                        const adminCfg = await AsyncStorage.getItem('@quick_actions_admin');
-                        if (adminCfg) {
-                            try { setActions(JSON.parse(adminCfg)); } catch { setActions(DEFAULT_QUICK_ACTIONS); }
-                        } else {
-                            setActions(DEFAULT_QUICK_ACTIONS);
+                        // Clear user override → inherits admin config
+                        if (user?.id) {
+                            await supabase
+                                .from('family_members')
+                                .update({ quick_actions: null })
+                                .eq('user_id', user.id);
                         }
+                        const adminActions = dashboardConfig?.quickActions;
+                        setActions(adminActions && adminActions.length > 0 ? adminActions : DEFAULT_QUICK_ACTIONS);
                     }
                 }
             },
@@ -357,7 +375,7 @@ export const QuickActionsConfigModal = ({ visible, onClose, isAdmin }: QuickActi
             <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: colors.border }}>
                     <Text style={{ color: colors.text, fontSize: 20, fontWeight: '700' }}>
-                        {isAdmin ? 'Schnellaktionen (Admin)' : 'Meine Schnellaktionen'}
+                        {isAdmin ? 'Standard-Aktionen' : 'Meine Schnellaktionen'}
                     </Text>
                     <Pressable onPress={onClose} style={{ padding: 8 }}>
                         <X size={24} color={colors.subtext} />

@@ -806,30 +806,36 @@ export default function Dashboard() {
         if (ec.door_apartment_sensor) setCfgDoorApartSensor(ec.door_apartment_sensor);
     }, [dashboardConfig]);
 
-    // Quick Actions Config: user → admin → defaults
+    // Quick Actions Config: user (Supabase) → admin (dashboardConfig) → defaults
     const [quickActions, setQuickActions] = useState<QuickActionConfig[]>(DEFAULT_QUICK_ACTIONS);
 
     // Reload quick actions every time the Dashboard tab is focused
-    // (so changes from Settings are immediately reflected)
     useFocusEffect(
         useCallback(() => {
             (async () => {
-                // 1. Try user-specific config
+                // 1. Try user-specific config from Supabase family_members
                 if (user?.id) {
-                    const userCfg = await AsyncStorage.getItem(`@quick_actions_user_${user.id}`);
-                    if (userCfg) {
-                        try { setQuickActions(JSON.parse(userCfg)); return; } catch { }
-                    }
+                    try {
+                        const { data } = await supabase
+                            .from('family_members')
+                            .select('quick_actions')
+                            .eq('user_id', user.id)
+                            .single();
+                        if (data?.quick_actions && data.quick_actions.length > 0) {
+                            setQuickActions(data.quick_actions);
+                            return;
+                        }
+                    } catch { /* fallback below */ }
                 }
-                // 2. Try admin config
-                const adminCfg = await AsyncStorage.getItem('@quick_actions_admin');
-                if (adminCfg) {
-                    try { setQuickActions(JSON.parse(adminCfg)); return; } catch { }
+                // 2. Try admin config from dashboardConfig (Supabase household)
+                if (dashboardConfig?.quickActions && dashboardConfig.quickActions.length > 0) {
+                    setQuickActions(dashboardConfig.quickActions);
+                    return;
                 }
                 // 3. Use defaults
                 setQuickActions(DEFAULT_QUICK_ACTIONS);
             })();
-        }, [user?.id])
+        }, [user?.id, dashboardConfig?.quickActions])
     );
 
     // Wizard is only shown manually from Settings, not auto-opened here
@@ -892,7 +898,24 @@ export default function Dashboard() {
         return entities.filter(e => e.entity_id.startsWith('vacuum.'));
     }, [entities, dashboardConfig]);
     const mediaPlayers = useMemo(() => {
-        // Dynamic Config (from Wizard) OR Fallback to Whitelist
+        // 1. Use MediaPlayerSelectionModal config (Supabase-persisted)
+        const mpConfig = dashboardConfig?.mediaPlayerConfig;
+        if (mpConfig?.visiblePlayers && mpConfig.visiblePlayers.length > 0) {
+            const names = mpConfig.customNames || {};
+            return mpConfig.visiblePlayers.map((id: string) => {
+                const entity = entities.find(e => e.entity_id === id);
+                if (!entity) return null;
+                return {
+                    ...entity,
+                    attributes: {
+                        ...entity.attributes,
+                        friendly_name: names[id] || MEDIA_PLAYER_CONFIG[id]?.name || entity.attributes.friendly_name
+                    }
+                };
+            }).filter(Boolean);
+        }
+
+        // 2. Fallback: Wizard config
         if (dashboardConfig.mediaPlayers && dashboardConfig.mediaPlayers.length > 0) {
             return dashboardConfig.mediaPlayers.map((def: any) => {
                 const entity = entities.find(e => e.entity_id === def.id);
@@ -907,7 +930,7 @@ export default function Dashboard() {
             }).filter(Boolean);
         }
 
-        // Fallback: Use Whitelist
+        // 3. Fallback: Use Whitelist
         return entities.filter(e => e.entity_id.startsWith('media_player.') && WHITELISTED_PLAYERS.includes(e.entity_id));
     }, [entities, dashboardConfig]);
     const climate = useMemo(() => entities.filter(e => e.entity_id.startsWith('climate.')), [entities]);
