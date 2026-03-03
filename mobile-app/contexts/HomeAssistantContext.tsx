@@ -50,141 +50,76 @@ const getShopList = async (): Promise<ShoppingLocation[]> => {
     return DEFAULT_SHOPS;
 };
 
-// Fallback: Generic shop names for reverse geocoding matching
-const TARGET_SHOPS = ['coop', 'migros', 'volg', 'aldi', 'lidl', 'kaufland', 'denner'];
-
-// Haversine distance formula (returns meters)
-const haversineDistance = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
-    const R = 6371000; // Earth's radius in meters
-    const toRad = (deg: number) => deg * (Math.PI / 180);
-    const dLat = toRad(lat2 - lat1);
-    const dLng = toRad(lng2 - lng1);
-    const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-};
-
-// Check if location is near a known shop (within 100m) - async to read dynamic list
-const findNearbyShop = async (lat: number, lng: number): Promise<string | null> => {
-    const shops = await getShopList();
-    for (const shop of shops) {
-        const distance = haversineDistance(lat, lng, shop.lat, shop.lng);
-        if (distance <= 100) { // 100 meters radius (GPS can be inaccurate)
-            console.log(`🛒 Near ${shop.name} (${Math.round(distance)}m)`);
-            return shop.name;
-        }
-    }
-    return null;
-};
-
-// Define the background task for Shopping
+// Define the background task for Shopping (Geofencing-based)
 const SHOPPING_NOTIF_ID = 'shopping-reminder-scheduled';
 
 if (Platform.OS !== 'web') TaskManager.defineTask(SHOPPING_TASK, async ({ data, error }: any) => {
     if (error) {
-        console.error("Shopping Task Error:", error);
+        console.error("Shopping Geofence Task Error:", error);
         return;
     }
 
-    if (data.locations && data.locations.length > 0) {
-        const { latitude, longitude } = data.locations[0].coords;
+    const { eventType, region } = data;
+    const shopName = region?.identifier || 'Laden';
 
-        try {
+    try {
+        if (eventType === Location.GeofencingEventType.Enter) {
+            console.log(`🛒 Entered shop geofence: ${shopName}`);
+
             // 1. Check Shopping List Count
             const countStr = await AsyncStorage.getItem(SHOPPING_COUNT_KEY);
             const count = parseInt(countStr || '0');
-
             if (count <= 0) {
-                // List empty → cancel any pending notification and reset
-                await Notifications.cancelScheduledNotificationAsync(SHOPPING_NOTIF_ID).catch(() => { });
-                await AsyncStorage.removeItem(SHOP_ENTRY_KEY);
+                console.log('🛒 Shopping list empty, skipping notification');
                 return;
             }
 
-            // Check Settings
+            // 2. Check Settings
             const settingsStr = await AsyncStorage.getItem(NOTIF_SETTINGS_KEY);
             if (settingsStr) {
                 const settings = JSON.parse(settingsStr);
                 if (settings.household?.shopping === false) {
-                    console.log("Shopping notification disabled by setting");
+                    console.log('🛒 Shopping notification disabled by setting');
                     return;
                 }
             }
 
-            // 2. Check if near a known shop (by GPS coordinates - reliable)
-            let matchingShop = await findNearbyShop(latitude, longitude);
-
-            // 3. Fallback: Reverse Geocode to check if we are at a shop (less reliable)
-            if (!matchingShop) {
-                const addresses = await Location.reverseGeocodeAsync({ latitude, longitude });
-                if (addresses && addresses.length > 0) {
-                    const address = addresses[0];
-                    const name = (address.name || '').toLowerCase();
-                    const street = (address.street || '').toLowerCase();
-
-                    const geocodeMatch = TARGET_SHOPS.find(shop =>
-                        name.includes(shop) || street.includes(shop)
-                    );
-                    if (geocodeMatch) {
-                        matchingShop = geocodeMatch;
-                        console.log(`🛒 At Shop (geocode): ${matchingShop}`);
-                    }
-                }
+            // 3. Check cooldown (don't re-notify for same shop visit)
+            const entryDataStr = await AsyncStorage.getItem(SHOP_ENTRY_KEY);
+            const entryData = entryDataStr ? JSON.parse(entryDataStr) : null;
+            if (entryData?.shop === shopName && entryData?.notified === true) {
+                console.log(`🛒 Already notified for ${shopName}, cooldown active`);
+                return;
             }
 
-            if (matchingShop) {
-                console.log(`🛒 At Shop: ${matchingShop}`);
+            // 4. Schedule notification with 3-minute delay (confirms user is really there)
+            console.log(`🛒 Scheduling notification for ${shopName} in 3 minutes`);
+            await Notifications.cancelScheduledNotificationAsync(SHOPPING_NOTIF_ID).catch(() => { });
+            await Notifications.scheduleNotificationAsync({
+                identifier: SHOPPING_NOTIF_ID,
+                content: {
+                    title: 'Einkaufsliste 🛒',
+                    body: `Du bist bei ${shopName} — schau doch kurz in eure Einkaufsliste!`,
+                    sound: true,
+                    categoryIdentifier: 'SHOPPING_ACTION',
+                    data: { action: 'open_list', category_key: 'shopping' },
+                },
+                trigger: { type: 'timeInterval' as any, seconds: 180, repeats: false },
+            });
 
-                // Check entry data for cooldown tracking
-                const entryDataStr = await AsyncStorage.getItem(SHOP_ENTRY_KEY);
-                let entryData = entryDataStr ? JSON.parse(entryDataStr) : null;
+            // 5. Mark as notified for this shop
+            await AsyncStorage.setItem(SHOP_ENTRY_KEY, JSON.stringify({
+                shop: shopName, timestamp: Date.now(), notified: true,
+            }));
 
-                const alreadyNotified = entryData
-                    && entryData.shop === matchingShop
-                    && entryData.notified === true;
-
-                if (alreadyNotified) {
-                    console.log(`🛒 Already notified for ${matchingShop}, cooldown active`);
-                    return;
-                }
-
-                // First detection at this shop → schedule notification 3 min in the future
-                if (!entryData || entryData.shop !== matchingShop) {
-                    console.log(`🛒 Entered shop area: ${matchingShop} — scheduling notification in 3 minutes`);
-
-                    // Cancel any previous scheduled shopping notification
-                    await Notifications.cancelScheduledNotificationAsync(SHOPPING_NOTIF_ID).catch(() => { });
-
-                    // Schedule notification with iOS-native 3-minute delay
-                    await Notifications.scheduleNotificationAsync({
-                        identifier: SHOPPING_NOTIF_ID,
-                        content: {
-                            title: "Einkaufsliste 🛒",
-                            body: `Du bist bei ${matchingShop} — schau doch kurz in eure Einkaufsliste!`,
-                            sound: true,
-                            categoryIdentifier: 'SHOPPING_ACTION',
-                            data: { action: 'open_list', category_key: 'shopping' }
-                        },
-                        trigger: { type: 'timeInterval' as any, seconds: 180, repeats: false },
-                    });
-
-                    // Record entry (notified will be set to true when notification fires)
-                    await AsyncStorage.setItem(SHOP_ENTRY_KEY, JSON.stringify({
-                        shop: matchingShop, timestamp: Date.now(), notified: true
-                    }));
-                }
-                // If same shop and already scheduled, do nothing (let the timer fire)
-            } else {
-                // Not at a known shop → cancel pending notification and reset
-                const entryDataStr = await AsyncStorage.getItem(SHOP_ENTRY_KEY);
-                if (entryDataStr) {
-                    console.log(`🛒 Left shop area — cancelling scheduled notification`);
-                    await Notifications.cancelScheduledNotificationAsync(SHOPPING_NOTIF_ID).catch(() => { });
-                    await AsyncStorage.removeItem(SHOP_ENTRY_KEY);
-                }
-            }
-        } catch (e) {
-            console.error("Shopping Task Logic Error:", e);
+        } else if (eventType === Location.GeofencingEventType.Exit) {
+            console.log(`🛒 Exited shop geofence: ${shopName}`);
+            // Cancel pending notification and reset cooldown
+            await Notifications.cancelScheduledNotificationAsync(SHOPPING_NOTIF_ID).catch(() => { });
+            await AsyncStorage.removeItem(SHOP_ENTRY_KEY);
         }
+    } catch (e) {
+        console.error('Shopping Geofence Task Logic Error:', e);
     }
 });
 
@@ -1162,39 +1097,49 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
     const startShoppingGeofencing = async () => {
         if (Platform.OS === 'web') return;
         try {
+            // Request foreground first, then background permissions
+            const { status: fgStatus } = await Location.requestForegroundPermissionsAsync();
+            if (fgStatus !== 'granted') {
+                console.log('🛒 Foreground location not granted');
+                return;
+            }
             const { status } = await Location.requestBackgroundPermissionsAsync();
             if (status !== 'granted') {
-                console.log("Bg Location not granted");
+                console.log('🛒 Background location not granted');
                 return;
             }
 
-            await Location.startLocationUpdatesAsync(SHOPPING_TASK, {
-                accuracy: Location.Accuracy.Balanced, // Battery-friendly: WiFi/Cell instead of GPS
-                distanceInterval: 50, // Update every 50m for better shop detection
-                deferredUpdatesInterval: 30000, // Check every 30s (needed for 3min dwell timer)
-                showsBackgroundLocationIndicator: false, // Hide blue bar on iOS
-                pausesUpdatesAutomatically: false, // CRITICAL: must be false, otherwise iOS pauses when stationary (inside shop)
-                activityType: Location.ActivityType.Fitness, // Less aggressive pausing than .Other
-                foregroundService: { // Android: required for background location
-                    notificationTitle: 'Einkaufs-Erinnerung',
-                    notificationBody: 'Standort wird im Hintergrund geprüft',
-                    notificationColor: '#3B82F6',
-                },
-            });
-            console.log("🛒 Shopping Geofencing (Background Task) started");
+            // Load shop list (custom from Supabase or defaults)
+            const shops = await getShopList();
+            if (shops.length === 0) {
+                console.log('🛒 No shops configured, skipping geofencing');
+                return;
+            }
+
+            // iOS supports max 20 geofence regions — we have ~12 shops
+            const regions = shops.slice(0, 20).map(shop => ({
+                identifier: shop.name,
+                latitude: shop.lat,
+                longitude: shop.lng,
+                radius: 150, // 150m — reliable for iOS WiFi/Cell triangulation
+                notifyOnEnter: true,
+                notifyOnExit: true,
+            }));
+
+            // Use native iOS geofencing (survives app termination, battery-efficient)
+            await Location.startGeofencingAsync(SHOPPING_TASK, regions);
+            console.log(`🛒 Shopping Geofencing started with ${regions.length} regions`);
         } catch (e: any) {
-            // Suppress error in Expo Go client (expected due to missing background update permissions)
+            // Suppress error in Expo Go client (expected)
             if (Constants.appOwnership === 'expo') {
-                // console.log("Shopping Geofence skipped in Expo Go:", e.message);
                 return;
             }
 
-            console.error("Failed to start shopping geofence", e);
+            console.error('Failed to start shopping geofence', e);
             if (e?.message && e.message.includes('NSLocation')) {
-                // Inform user about the need for a rebuild
                 setTimeout(() => {
                     alert(
-                        "Geofencing Fehler: Fehlende Berechtigungen.\n\n" +
+                        'Geofencing Fehler: Fehlende Berechtigungen.\n\n' +
                         "Bitte 'eas build --profile development --platform ios' ausführen, um die App mit den neuen Standort-Berechtigungen neu zu bauen."
                     );
                 }, 1000);
@@ -1708,33 +1653,24 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
                 const loc = await Location.getCurrentPositionAsync({});
                 const { latitude, longitude } = loc.coords;
 
-                // 4. GPS Proximity Check (same as background task)
-                const gpsMatch = await findNearbyShop(latitude, longitude);
-
-                // 5. Reverse Geocode Fallback
-                const addresses = await Location.reverseGeocodeAsync({ latitude, longitude });
-                let geocodeMatch = 'NONE';
-                let shopData = '';
-
-                if (addresses.length > 0) {
-                    const addr = addresses[0];
-                    const name = (addr.name || '').toLowerCase();
-                    const street = (addr.street || '').toLowerCase();
-
-                    shopData = `Name: ${addr.name}\nStreet: ${addr.street}\nCity: ${addr.city}`;
-
-                    const matchingShop = TARGET_SHOPS.find(shop =>
-                        name.includes(shop) || street.includes(shop)
-                    );
-                    if (matchingShop) geocodeMatch = matchingShop;
+                // 4. Check proximity to known shops (inline calculation)
+                const shopList = await getShopList();
+                let nearestShop = '';
+                let nearestDist = Infinity;
+                for (const shop of shopList) {
+                    const R = 6371000;
+                    const toRad = (d: number) => d * (Math.PI / 180);
+                    const dLat = toRad(shop.lat - latitude);
+                    const dLng = toRad(shop.lng - longitude);
+                    const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(latitude)) * Math.cos(toRad(shop.lat)) * Math.sin(dLng / 2) ** 2;
+                    const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                    if (dist < nearestDist) { nearestDist = dist; nearestShop = shop.name; }
                 }
 
-                // 6. Load shop list info
-                const shopList = await getShopList();
                 const storedRaw = await AsyncStorage.getItem(SHOPS_STORAGE_KEY);
                 const shopSource = storedRaw ? 'Supabase' : 'DEFAULT_SHOPS';
 
-                // 7. Check if SHOPPING_TASK is registered
+                // 5. Check if SHOPPING_TASK is registered
                 let taskRegistered = 'N/A';
                 if (Platform.OS !== 'web') {
                     const registered = await TaskManager.isTaskRegisteredAsync(SHOPPING_TASK);
@@ -1745,13 +1681,12 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
                     "🛒 Shopping Debug",
                     `List Count: ${countStr || 'NULL (0)'}\n` +
                     `Permissions: FG=${status}, BG=${bgStatus}\n` +
-                    `Task Running: ${taskRegistered}\n\n` +
-                    `📍 GPS Match: ${gpsMatch || 'NONE'}\n` +
-                    `📍 Geocode Match: ${geocodeMatch}\n\n` +
-                    `Shop List: ${shopList.length} Standorte (${shopSource})\n` +
-                    `Coords: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}\n` +
-                    `----------------\n` +
-                    shopData
+                    `Task Running: ${taskRegistered}\n` +
+                    `Mode: Geofencing (native)\n\n` +
+                    `📍 Nearest: ${nearestShop} (${Math.round(nearestDist)}m)\n` +
+                    `In Range: ${nearestDist <= 150 ? 'YES ✅' : 'NO'}\n\n` +
+                    `Shop List: ${shopList.length} Regionen (${shopSource})\n` +
+                    `Coords: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`
                 );
 
             } catch (e: any) {

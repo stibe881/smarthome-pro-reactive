@@ -199,38 +199,57 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     };
 
     // Function to fetch user role
+    // Uses family_members.role as SINGLE SOURCE OF TRUTH
     const fetchUserRole = async (userId: string) => {
-        // Check family_members first for guest role and planner access
-        const { data: memberData } = await supabase
+        // 1. Try family_members (primary source — set by create-family-member edge function)
+        const { data: memberData, error: memberError } = await supabase
             .from('family_members')
             .select('role, planner_access')
             .eq('user_id', userId)
-            .single();
+            .maybeSingle();
 
-        // Set planner access (default true for admins, respect DB for others)
         if (memberData) {
+            // Set planner access (default true for admins, respect DB for others)
             setHasPlannerAccess(memberData.role === 'admin' ? true : (memberData.planner_access !== false));
-        }
 
-        if (memberData?.role === 'guest') {
-            setUserRole('guest');
-            return;
-        }
-
-        // Fall back to user_roles for admin/user
-        const { data, error } = await supabase
-            .from('user_roles')
-            .select('role')
-            .eq('user_id', userId)
-            .single();
-
-        if (error) {
-            console.error('Error fetching user role:', error);
+            // Map family_members role to app role
+            if (memberData.role === 'admin') {
+                setUserRole('admin');
+                return;
+            }
+            if (memberData.role === 'guest') {
+                setUserRole('guest');
+                return;
+            }
+            // 'member', 'child', or any other role → 'user' (full dashboard, no admin features)
             setUserRole('user');
             return;
         }
 
-        setUserRole((data?.role as 'admin' | 'user' | 'guest') || 'user');
+        // 2. family_members didn't return data — check user_roles as fallback (legacy)
+        if (memberError) {
+            console.warn('family_members query failed (possible RLS issue):', memberError.message);
+        }
+
+        const { data: roleData, error: roleError } = await supabase
+            .from('user_roles')
+            .select('role')
+            .eq('user_id', userId)
+            .maybeSingle();
+
+        if (roleError) {
+            console.error('Error fetching user role from user_roles:', roleError);
+        }
+
+        if (roleData?.role) {
+            setUserRole((roleData.role as 'admin' | 'user' | 'guest'));
+            return;
+        }
+
+        // 3. Absolute fallback — no data in either table
+        // Default to 'user' (new self-registered users who created their own household)
+        console.warn('No role data found for user', userId, '— defaulting to user');
+        setUserRole('user');
     };
 
     const loadAvatar = async (userId: string) => {
