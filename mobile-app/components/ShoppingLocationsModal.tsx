@@ -3,7 +3,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { View, Text, Pressable, ScrollView, Modal, TextInput, Alert, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { X, Plus, MapPin, Trash2, Navigation, Store, Search, CheckCircle, AlertCircle } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
+import { useHomeAssistant } from '../contexts/HomeAssistantContext';
 import * as Location from 'expo-location';
+import * as Notifications from 'expo-notifications';
 import { supabase } from '../lib/supabase';
 import { useHousehold } from '../hooks/useHousehold';
 
@@ -24,6 +26,7 @@ type SearchState = 'idle' | 'searching' | 'found' | 'not_found' | 'manual';
 export const ShoppingLocationsModal = ({ visible, onClose }: Props) => {
     const { colors } = useTheme();
     const { householdId, loading: householdLoading } = useHousehold();
+    const { startShoppingGeofencing } = useHomeAssistant();
     const [shops, setShops] = useState<ShoppingLocation[]>([]);
     const [loading, setLoading] = useState(false);
 
@@ -197,6 +200,42 @@ export const ShoppingLocationsModal = ({ visible, onClose }: Props) => {
 
             await loadShops();
             resetForm();
+
+            // Restart geofencing with the updated shop list
+            startShoppingGeofencing();
+
+            // Immediate proximity check: iOS won't fire Enter for regions
+            // you're already inside when registering, so check manually
+            try {
+                const loc = await Location.getLastKnownPositionAsync();
+                if (loc) {
+                    const { latitude, longitude } = loc.coords;
+                    const toRad = (d: number) => d * (Math.PI / 180);
+                    const R = 6371000;
+                    const dLat = toRad(foundLat - latitude);
+                    const dLng = toRad(foundLng - longitude);
+                    const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(latitude)) * Math.cos(toRad(foundLat)) * Math.sin(dLng / 2) ** 2;
+                    const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+                    if (dist <= 200) {
+                        // User is near this shop right now — send immediate notification
+                        const countStr = await AsyncStorage.getItem('@smarthome_shopping_count');
+                        const count = parseInt(countStr || '0');
+                        if (count > 0) {
+                            await Notifications.scheduleNotificationAsync({
+                                content: {
+                                    title: 'Einkaufsliste 🛒',
+                                    body: `Du bist bei ${name} — schau doch kurz in eure Einkaufsliste!`,
+                                    sound: true,
+                                    categoryIdentifier: 'SHOPPING_ACTION',
+                                    data: { action: 'open_list', category_key: 'shopping' },
+                                },
+                                trigger: null,
+                            });
+                        }
+                    }
+                }
+            } catch { /* proximity check is best-effort */ }
         } catch (e: any) {
             Alert.alert('Fehler', 'Konnte Standort nicht speichern: ' + e.message);
         }
@@ -228,7 +267,9 @@ export const ShoppingLocationsModal = ({ visible, onClose }: Props) => {
                                 .eq('id', id);
 
                             if (error) throw error;
-                            loadShops();
+                            await loadShops();
+                            // Restart geofencing with updated list
+                            startShoppingGeofencing();
                         } catch (e: any) {
                             Alert.alert('Fehler', 'Konnte Standort nicht löschen.');
                         }
