@@ -35,6 +35,7 @@ const CATEGORY_RULES = [
     { key: 'birthday', label: 'Geburtstag', color: '#EC4899', keywords: ['geburtstag', '🎉'] },
     { key: 'doorbell', label: 'Türklingel', color: '#6366F1', keywords: ['geklingelt', 'klingel', 'doorbell'] },
     { key: 'weather', label: 'Wetter', color: '#EF4444', keywords: ['wetter', 'meteo', 'warnung'] },
+    { key: 'shopping', label: 'Einkaufen', color: '#10B981', keywords: ['einkaufsliste', 'einkauf'] },
 ];
 
 function getCatColor(title: string): string {
@@ -139,7 +140,7 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
     const pendingInserts = React.useRef(new Set<string>());
 
     // Add new notification to Supabase (state update comes via Realtime subscription)
-    const addNotification = useCallback(async (title: string, body: string, deliveredAt?: Date) => {
+    const addNotification = useCallback(async (title: string, body: string, deliveredAt?: Date, categoryKey?: string) => {
         if (!user) return;
 
         // Create a dedup key for in-memory lock (prevents async race condition)
@@ -173,6 +174,9 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
             };
             if (deliveredAt) {
                 insertPayload.created_at = deliveredAt.toISOString();
+            }
+            if (categoryKey) {
+                insertPayload.category_key = categoryKey;
             }
 
             const { error } = await supabase
@@ -411,7 +415,7 @@ export default function NotificationBell({ onAppOpen }: NotificationBellProps) {
         const enabled = isCategoryEnabledRef.current(title, pushCategoryKey);
         // console.log(`🔔 saveNotification: title="${title}", catKey="${pushCategoryKey}", enabled=${enabled}`);
         if (!enabled) return;
-        addNotificationRef.current(title || 'Benachrichtigung', body || '', deliveredAt);
+        addNotificationRef.current(title || 'Benachrichtigung', body || '', deliveredAt, pushCategoryKey || getCatKey(title) || undefined);
     }, []);
 
     // 1) FOREGROUND: Listen for notifications while app is active
