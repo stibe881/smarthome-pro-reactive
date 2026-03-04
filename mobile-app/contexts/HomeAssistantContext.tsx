@@ -84,16 +84,20 @@ if (Platform.OS !== 'web') TaskManager.defineTask(SHOPPING_TASK, async ({ data, 
                 }
             }
 
-            // 3. Check cooldown (don't re-notify for same shop visit)
+            // 3. Check cooldown (30 min per shop to avoid spam)
             const entryDataStr = await AsyncStorage.getItem(SHOP_ENTRY_KEY);
             const entryData = entryDataStr ? JSON.parse(entryDataStr) : null;
             if (entryData?.shop === shopName && entryData?.notified === true) {
-                console.log(`🛒 Already notified for ${shopName}, cooldown active`);
-                return;
+                const elapsed = Date.now() - (entryData.timestamp || 0);
+                if (elapsed < 30 * 60 * 1000) {
+                    console.log(`🛒 Already notified for ${shopName}, cooldown active (${Math.round(elapsed / 60000)}min ago)`);
+                    return;
+                }
             }
 
-            // 4. Schedule notification with 3-minute delay (confirms user is really there)
-            console.log(`🛒 Scheduling notification for ${shopName} in 3 minutes`);
+            // 4. Send notification IMMEDIATELY (no delay!)
+            // Background tasks can be killed by iOS — delayed triggers are unreliable
+            console.log(`🛒 Sending IMMEDIATE notification for ${shopName}`);
             await Notifications.cancelScheduledNotificationAsync(SHOPPING_NOTIF_ID).catch(() => { });
             await Notifications.scheduleNotificationAsync({
                 identifier: SHOPPING_NOTIF_ID,
@@ -104,7 +108,7 @@ if (Platform.OS !== 'web') TaskManager.defineTask(SHOPPING_TASK, async ({ data, 
                     categoryIdentifier: 'SHOPPING_ACTION',
                     data: { action: 'open_list', category_key: 'shopping' },
                 },
-                trigger: { type: 'timeInterval' as any, seconds: 180, repeats: false },
+                trigger: null,
             });
 
             // 5. Mark as notified for this shop
@@ -114,9 +118,8 @@ if (Platform.OS !== 'web') TaskManager.defineTask(SHOPPING_TASK, async ({ data, 
 
         } else if (eventType === Location.GeofencingEventType.Exit) {
             console.log(`🛒 Exited shop geofence: ${shopName}`);
-            // Cancel pending notification and reset cooldown
-            await Notifications.cancelScheduledNotificationAsync(SHOPPING_NOTIF_ID).catch(() => { });
-            await AsyncStorage.removeItem(SHOP_ENTRY_KEY);
+            // Don't cancel notification — it was already sent immediately
+            // Don't clear cooldown — use time-based cooldown (30 min) instead
         }
     } catch (e) {
         console.error('Shopping Geofence Task Logic Error:', e);
