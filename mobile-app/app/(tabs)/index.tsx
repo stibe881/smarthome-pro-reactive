@@ -755,6 +755,7 @@ export default function Dashboard() {
         setShoppingListVisible,
         startShoppingGeofencing,
         debugShoppingLogic,
+        testShoppingNotification,
         isHAInitialized,
         browseMedia
     } = useHomeAssistant();

@@ -258,6 +258,7 @@ interface HomeAssistantContextType {
     fetchWeatherForecast: (entityId: string, forecastType?: 'daily' | 'hourly') => Promise<any[]>;
     getCameraStream: (entityId: string) => Promise<string | null>;
     debugShoppingLogic: () => Promise<void>;
+    testShoppingNotification: () => Promise<void>;
     getExpoPushToken: () => string | null;
     isDoorbellRinging: boolean;
     setIsDoorbellRinging: (ringing: boolean) => void;
@@ -1116,8 +1117,35 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
                 return;
             }
 
-            // iOS supports max 20 geofence regions — we have ~12 shops
-            const regions = shops.slice(0, 20).map(shop => ({
+            // iOS supports max 20 geofence regions PER APP (not per task!)
+            // GEOFENCING_TASK (home) uses 1 region, so we limit shopping to 18 + 1 reserve
+            const MAX_SHOPPING_REGIONS = 18;
+
+            // Sort shops by distance from current position (nearest first)
+            let sortedShops = shops;
+            try {
+                const loc = await Location.getLastKnownPositionAsync() || await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+                if (loc) {
+                    const { latitude, longitude } = loc.coords;
+                    const toRad = (d: number) => d * (Math.PI / 180);
+                    sortedShops = [...shops].sort((a, b) => {
+                        const distA = Math.acos(
+                            Math.sin(toRad(latitude)) * Math.sin(toRad(a.lat)) +
+                            Math.cos(toRad(latitude)) * Math.cos(toRad(a.lat)) * Math.cos(toRad(a.lng - longitude))
+                        );
+                        const distB = Math.acos(
+                            Math.sin(toRad(latitude)) * Math.sin(toRad(b.lat)) +
+                            Math.cos(toRad(latitude)) * Math.cos(toRad(b.lat)) * Math.cos(toRad(b.lng - longitude))
+                        );
+                        return distA - distB;
+                    });
+                    console.log(`🛒 Sorted ${shops.length} shops by distance. Nearest: ${sortedShops[0]?.name}`);
+                }
+            } catch (locErr) {
+                console.warn('🛒 Could not get location for sorting, using original order');
+            }
+
+            const regions = sortedShops.slice(0, MAX_SHOPPING_REGIONS).map(shop => ({
                 identifier: shop.name,
                 latitude: shop.lat,
                 longitude: shop.lng,
@@ -1128,7 +1156,7 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
 
             // Use native iOS geofencing (survives app termination, battery-efficient)
             await Location.startGeofencingAsync(SHOPPING_TASK, regions);
-            console.log(`🛒 Shopping Geofencing started with ${regions.length} regions`);
+            console.log(`🛒 Shopping Geofencing started with ${regions.length}/${shops.length} regions (limit: ${MAX_SHOPPING_REGIONS})`);
         } catch (e: any) {
             // Suppress error in Expo Go client (expected)
             if (Constants.appOwnership === 'expo') {
@@ -1655,15 +1683,19 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
 
                 // 4. Check proximity to known shops (inline calculation)
                 const shopList = await getShopList();
+                const toRad = (d: number) => d * (Math.PI / 180);
+                const calcDist = (lat1: number, lng1: number, lat2: number, lng2: number) => {
+                    const R = 6371000;
+                    const dLat = toRad(lat2 - lat1);
+                    const dLng = toRad(lng2 - lng1);
+                    const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+                    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                };
+
                 let nearestShop = '';
                 let nearestDist = Infinity;
                 for (const shop of shopList) {
-                    const R = 6371000;
-                    const toRad = (d: number) => d * (Math.PI / 180);
-                    const dLat = toRad(shop.lat - latitude);
-                    const dLng = toRad(shop.lng - longitude);
-                    const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(latitude)) * Math.cos(toRad(shop.lat)) * Math.sin(dLng / 2) ** 2;
-                    const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                    const dist = calcDist(latitude, longitude, shop.lat, shop.lng);
                     if (dist < nearestDist) { nearestDist = dist; nearestShop = shop.name; }
                 }
 
@@ -1677,6 +1709,19 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
                     taskRegistered = registered ? 'YES ✅' : 'NO ❌';
                 }
 
+                // 6. Check if nearest shop is actually in the registered geofence regions (top 18)
+                const MAX_REGIONS = 18;
+                const sortedByDist = [...shopList].sort((a, b) => calcDist(latitude, longitude, a.lat, a.lng) - calcDist(latitude, longitude, b.lat, b.lng));
+                const registeredNames = sortedByDist.slice(0, MAX_REGIONS).map(s => s.name);
+                const isNearestRegistered = registeredNames.includes(nearestShop);
+
+                // 7. Check cooldown state
+                const entryDataStr = await AsyncStorage.getItem(SHOP_ENTRY_KEY);
+                const cooldownInfo = entryDataStr ? JSON.parse(entryDataStr) : null;
+                const cooldownText = cooldownInfo
+                    ? `Shop: ${cooldownInfo.shop}, Notified: ${cooldownInfo.notified ? 'JA' : 'NEIN'}`
+                    : 'Kein Cooldown';
+
                 Alert.alert(
                     "🛒 Shopping Debug",
                     `List Count: ${countStr || 'NULL (0)'}\n` +
@@ -1684,13 +1729,52 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
                     `Task Running: ${taskRegistered}\n` +
                     `Mode: Geofencing (native)\n\n` +
                     `📍 Nearest: ${nearestShop} (${Math.round(nearestDist)}m)\n` +
-                    `In Range: ${nearestDist <= 150 ? 'YES ✅' : 'NO'}\n\n` +
-                    `Shop List: ${shopList.length} Regionen (${shopSource})\n` +
-                    `Coords: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`
+                    `In Range: ${nearestDist <= 150 ? 'YES ✅' : 'NO'}\n` +
+                    `Registered: ${isNearestRegistered ? 'YES ✅' : '⚠️ NEIN (nicht in Top ' + MAX_REGIONS + ')'}\n\n` +
+                    `Regionen: ${Math.min(shopList.length, MAX_REGIONS)}/${shopList.length} aktiv (${shopSource})\n` +
+                    `Cooldown: ${cooldownText}\n` +
+                    `Coords: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`,
+                    [
+                        { text: 'OK', style: 'cancel' },
+                        {
+                            text: '🔔 Test Push',
+                            onPress: async () => {
+                                try {
+                                    await Notifications.scheduleNotificationAsync({
+                                        content: {
+                                            title: 'Einkaufsliste 🛒 (TEST)',
+                                            body: 'Test-Benachrichtigung — Notification-Pipeline funktioniert!',
+                                            sound: true,
+                                            categoryIdentifier: 'SHOPPING_ACTION',
+                                            data: { action: 'open_list', category_key: 'shopping' },
+                                        },
+                                        trigger: null,
+                                    });
+                                } catch { }
+                            }
+                        },
+                    ]
                 );
 
             } catch (e: any) {
                 Alert.alert("Debug Error", e.message);
+            }
+        },
+        testShoppingNotification: async () => {
+            try {
+                await Notifications.scheduleNotificationAsync({
+                    content: {
+                        title: 'Einkaufsliste 🛒 (TEST)',
+                        body: 'Dies ist eine Test-Benachrichtigung — deine Notification-Pipeline funktioniert!',
+                        sound: true,
+                        categoryIdentifier: 'SHOPPING_ACTION',
+                        data: { action: 'open_list', category_key: 'shopping' },
+                    },
+                    trigger: null,
+                });
+                Alert.alert('✅ Test gesendet', 'Eine Test-Push wurde ausgelöst. Du solltest sie jetzt sehen.');
+            } catch (e: any) {
+                Alert.alert('❌ Fehler', 'Push konnte nicht gesendet werden: ' + e.message);
             }
         },
         getExpoPushToken: () => expoPushToken,
