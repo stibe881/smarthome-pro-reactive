@@ -16,7 +16,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.stibe88.mobileapp",
       "appleTeamId": "QF59FHQ44R",
-      "buildNumber": "131",
+      "buildNumber": "132",
       "entitlements": {
         "com.apple.security.application-groups": [
           "group.com.stibe88.mobileapp",
@@ -46,7 +46,10 @@
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.RECORD_AUDIO",
-        "android.permission.MODIFY_AUDIO_SETTINGS"
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION"
       ]
     },
     "web": {
@@ -113,7 +116,6 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "6d60636a-e8bd-43e6-a2a2-d25e7390c709",
         "build": {
           "experimental": {
             "ios": {
@@ -130,14 +132,16 @@
               ]
             }
           }
-        }
+        },
+        "projectId": "7ddc52f1-a192-475a-935b-189b9214a137"
       }
     },
     "runtimeVersion": {
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/6d60636a-e8bd-43e6-a2a2-d25e7390c709"
-    }
+      "url": "https://u.expo.dev/7ddc52f1-a192-475a-935b-189b9214a137"
+    },
+    "owner": "stibe88"
   }
 }
