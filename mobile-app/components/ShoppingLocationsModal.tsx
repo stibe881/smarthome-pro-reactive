@@ -21,7 +21,7 @@ interface Props {
     onClose: () => void;
 }
 
-type SearchState = 'idle' | 'searching' | 'found' | 'not_found' | 'manual';
+type SearchState = 'idle' | 'searching' | 'found' | 'not_found' | 'manual' | 'manual_searching';
 
 export const ShoppingLocationsModal = ({ visible, onClose }: Props) => {
     const { colors } = useTheme();
@@ -118,7 +118,7 @@ export const ShoppingLocationsModal = ({ visible, onClose }: Props) => {
         const query = manualAddress.trim();
         if (!query) return;
 
-        setSearchState('searching');
+        setSearchState('manual_searching');
         try {
             const results = await Location.geocodeAsync(query);
             if (results && results.length > 0) {
@@ -347,7 +347,7 @@ export const ShoppingLocationsModal = ({ visible, onClose }: Props) => {
                                     {/* Step 2: Search by store name */}
                                     {searchState !== 'found' && (
                                         <>
-                                            {searchState !== 'manual' ? (
+                                            {searchState !== 'manual' && searchState !== 'manual_searching' ? (
                                                 <>
                                                     <Text style={[styles.stepLabel, { color: colors.subtext }]}>LADEN SUCHEN</Text>
                                                     <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -373,7 +373,7 @@ export const ShoppingLocationsModal = ({ visible, onClose }: Props) => {
                                             ) : (
                                                 /* Manual address fallback */
                                                 <>
-                                                    <Text style={[styles.stepLabel, { color: colors.subtext }]}>ADRESSE EINGEBEN</Text>
+                                                    <Text style={[styles.stepLabel, { color: colors.subtext }]}>ADRESSE MANUELL SUCHEN</Text>
                                                     <View style={{ flexDirection: 'row', gap: 8 }}>
                                                         <TextInput
                                                             style={[styles.input, { flex: 1, backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
@@ -387,7 +387,7 @@ export const ShoppingLocationsModal = ({ visible, onClose }: Props) => {
                                                             onPress={handleManualSearch}
                                                             style={[styles.searchBtn, { backgroundColor: colors.accent }]}
                                                         >
-                                                            {searchState === 'searching'
+                                                            {searchState === 'manual_searching'
                                                                 ? <ActivityIndicator size="small" color="#fff" />
                                                                 : <Search size={20} color="#fff" />
                                                             }

@@ -2,7 +2,7 @@
   "expo": {
     "name": "HomePilot Pro",
     "slug": "mobile-app",
-    "version": "1.4.0",
+    "version": "1.5.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -16,7 +16,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.stibe88.mobileapp",
       "appleTeamId": "QF59FHQ44R",
-      "buildNumber": "133",
+      "buildNumber": "135",
       "entitlements": {
         "com.apple.security.application-groups": [
           "group.com.stibe88.mobileapp",

@@ -92,7 +92,14 @@ if (Platform.OS !== 'web') TaskManager.defineTask(SHOPPING_TASK, async ({ data, 
                 const cachedPrefs = await AsyncStorage.getItem('@smarthome_user_notif_prefs');
                 if (cachedPrefs) {
                     const prefs = JSON.parse(cachedPrefs);
-                    if (prefs['shopping'] === false) {
+                    const isShoppingDisabled = prefs['shopping'] === false || 
+                                               prefs['einkauf'] === false || 
+                                               prefs['einkaufsliste'] === false || 
+                                               prefs['einkaufs_erinnerung'] === false || 
+                                               prefs['shopping_cart'] === false ||
+                                               prefs['shopping-cart'] === false;
+                    
+                    if (isShoppingDisabled) {
                         console.log('🛒 Shopping notification disabled by dynamic category preference');
                         return;
                     }
@@ -784,7 +791,18 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
                             if (cachedPrefs) {
                                 const prefs = JSON.parse(cachedPrefs);
                                 console.log(`🔔 Cached prefs for "${categoryKey}":`, prefs[categoryKey]);
-                                if (prefs[categoryKey] === false) {
+                                
+                                const isShoppingNotification = ['shopping', 'einkauf', 'einkaufsliste', 'einkaufs_erinnerung', 'shopping_cart', 'shopping-cart'].includes(categoryKey);
+                                const isShoppingDisabled = isShoppingNotification && (
+                                    prefs['shopping'] === false || 
+                                    prefs['einkauf'] === false || 
+                                    prefs['einkaufsliste'] === false || 
+                                    prefs['einkaufs_erinnerung'] === false || 
+                                    prefs['shopping_cart'] === false ||
+                                    prefs['shopping-cart'] === false
+                                );
+
+                                if (prefs[categoryKey] === false || isShoppingDisabled) {
                                     console.log(`🔕 Suppressing push for disabled category: ${categoryKey}`);
                                     return {
                                         shouldShowAlert: false,
