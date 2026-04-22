@@ -74,14 +74,31 @@ if (Platform.OS !== 'web') TaskManager.defineTask(SHOPPING_TASK, async ({ data, 
                 return;
             }
 
-            // 2. Check Settings
+            // 2. Check Settings (Master Switch, Legacy Household, and Dynamic Prefs)
             const settingsStr = await AsyncStorage.getItem(NOTIF_SETTINGS_KEY);
             if (settingsStr) {
                 const settings = JSON.parse(settingsStr);
-                if (settings.household?.shopping === false) {
-                    console.log('🛒 Shopping notification disabled by setting');
+                if (settings.enabled === false) {
+                    console.log('🛒 Shopping notification disabled by master switch');
                     return;
                 }
+                if (settings.household?.shopping === false) {
+                    console.log('🛒 Shopping notification disabled by legacy setting');
+                    return;
+                }
+            }
+
+            try {
+                const cachedPrefs = await AsyncStorage.getItem('@smarthome_user_notif_prefs');
+                if (cachedPrefs) {
+                    const prefs = JSON.parse(cachedPrefs);
+                    if (prefs['shopping'] === false) {
+                        console.log('🛒 Shopping notification disabled by dynamic category preference');
+                        return;
+                    }
+                }
+            } catch (e) {
+                console.warn('Error reading dynamic prefs in shopping task', e);
             }
 
             // 3. Check cooldown (30 min per shop to avoid spam)

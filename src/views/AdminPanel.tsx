@@ -35,16 +35,9 @@ export const AdminPanel: React.FC = () => {
             const role = await getCurrentUserRole();
             setIsAdmin(role === 'admin');
 
-            if (role === 'admin') {
-                const [userList, inviteList] = await Promise.all([
-                    getAllUsers(),
-                    getAllInvitations(),
-                ]);
-                setUsers(userList);
-                setInvitations(inviteList);
-
-                // Load HA settings
-                if (user) {
+            // Load HA settings independently so they load even if other admin data requests fail
+            if (user) {
+                try {
                     const { data } = await supabase
                         .from('user_settings')
                         .select('*')
@@ -55,7 +48,18 @@ export const AdminPanel: React.FC = () => {
                         if (data.ha_url) setHaUrl(data.ha_url);
                         if (data.ha_token) setHaToken(data.ha_token);
                     }
+                } catch (haError) {
+                    console.error('Error loading HA settings:', haError);
                 }
+            }
+
+            if (role === 'admin') {
+                const [userList, inviteList] = await Promise.all([
+                    getAllUsers(),
+                    getAllInvitations(),
+                ]);
+                setUsers(userList);
+                setInvitations(inviteList);
             }
         } catch (err) {
             console.error('Error loading admin data:', err);
