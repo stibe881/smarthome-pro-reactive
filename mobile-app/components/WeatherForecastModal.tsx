@@ -17,6 +17,7 @@ export default function WeatherForecastModal({ visible, onClose, weatherEntity, 
     const [forecast, setForecast] = useState<any[]>([]);
     const [hourlyForecast, setHourlyForecast] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
+    const [translatedAlertConfig, setTranslatedAlertConfig] = useState({ headline: '', desc: '' });
 
     // Fetch forecast when modal opens
     useEffect(() => {
@@ -36,8 +37,31 @@ export default function WeatherForecastModal({ visible, onClose, weatherEntity, 
                     setHourlyForecast([]);
                 })
                 .finally(() => setLoading(false));
+            
+            // Auto-translate alerts if necessary
+            if (weatherEntity.state?.toLowerCase() === 'exceptional' || meteoAlarm?.state === 'on') {
+                const hl = meteoAlarm?.attributes?.headline || "Wetterwarnung";
+                const desc = meteoAlarm?.attributes?.description || weatherEntity.attributes?.description || weatherEntity.attributes?.message || "Es liegt eine amtliche Wetterwarnung vor.";
+                
+                const googleTranslate = async (text: string) => {
+                    if (!text) return "";
+                    try {
+                        const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=de&dt=t&q=${encodeURIComponent(text)}`);
+                        const data = await res.json();
+                        return data[0].map((item: any) => item[0]).join('');
+                    } catch (e) {
+                        return text;
+                    }
+                };
+
+                Promise.all([googleTranslate(hl), googleTranslate(desc)]).then(([th, td]) => {
+                    setTranslatedAlertConfig({ headline: th, desc: td });
+                });
+            } else {
+                setTranslatedAlertConfig({ headline: '', desc: '' });
+            }
         }
-    }, [visible, weatherEntity?.entity_id]);
+    }, [visible, weatherEntity?.entity_id, weatherEntity?.state, meteoAlarm?.state]);
 
     if (!weatherEntity) return null;
 
@@ -100,37 +124,12 @@ export default function WeatherForecastModal({ visible, onClose, weatherEntity, 
         return mapping[state] || state;
     };
 
-    // Translate weather warning text to German
-    const translateWeather = (text: string): string => {
+    // Legacy regex translator for fallbacks if offline directly returning the passed string
+    const translateWeatherFallback = (text: string): string => {
         if (!text) return '';
         let t = text;
-        // Colors & Levels
-        t = t.replace(/Yellow/gi, 'Gelbe');
-        t = t.replace(/Orange/gi, 'Orange');
-        t = t.replace(/Red/gi, 'Rote');
-        t = t.replace(/Warning/gi, 'Warnung');
-        t = t.replace(/Watch/gi, 'Vorwarnung');
-        t = t.replace(/Alert/gi, 'Alarm');
-        // Types
-        t = t.replace(/Wind/gi, 'Wind');
-        t = t.replace(/Rain/gi, 'Regen');
-        t = t.replace(/Snow/gi, 'Schnee');
-        t = t.replace(/Ice/gi, 'Eis');
-        t = t.replace(/Thunderstorm/gi, 'Gewitter');
-        t = t.replace(/Fog/gi, 'Nebel');
-        t = t.replace(/Temperature/gi, 'Temperatur');
-        t = t.replace(/Heat/gi, 'Hitze');
-        t = t.replace(/Cold/gi, 'Kälte');
-        t = t.replace(/Flood/gi, 'Flut');
-        t = t.replace(/Forest Fire/gi, 'Waldbrand');
-        t = t.replace(/Avalanche/gi, 'Lawinen');
-        // Time phrases
-        t = t.replace(/is effective on/gi, 'gültig ab');
-        t = t.replace(/effective from/gi, 'gültig von');
-        t = t.replace(/from/gi, 'von');
-        t = t.replace(/to/gi, 'bis');
-        t = t.replace(/until/gi, 'bis');
-        t = t.replace(/valid/gi, 'gültig');
+        t = t.replace(/Yellow/gi, 'Gelbe').replace(/Orange/gi, 'Orange').replace(/Red/gi, 'Rote');
+        t = t.replace(/Warning/gi, 'Warnung').replace(/Watch/gi, 'Vorwarnung').replace(/Alert/gi, 'Alarm');
         return t;
     };
 
@@ -157,10 +156,10 @@ export default function WeatherForecastModal({ visible, onClose, weatherEntity, 
                                     <AlertTriangle size={32} color="#EF4444" />
                                     <View style={{ flex: 1 }}>
                                         <Text style={styles.warningTitle}>
-                                            {translateWeather(meteoAlarm?.attributes?.headline || "WETTERWARNUNG")}
+                                            {translatedAlertConfig.headline || translateWeatherFallback(meteoAlarm?.attributes?.headline || "WETTERWARNUNG")}
                                         </Text>
                                         <Text style={styles.warningText}>
-                                            {translateWeather(meteoAlarm?.attributes?.description || weatherEntity.attributes.description || weatherEntity.attributes.message || "Es liegt eine amtliche Wetterwarnung vor.")}
+                                            {translatedAlertConfig.desc || translateWeatherFallback(meteoAlarm?.attributes?.description || weatherEntity.attributes?.description || weatherEntity.attributes?.message || "Es liegt eine amtliche Wetterwarnung vor.")}
                                         </Text>
                                     </View>
                                 </View>
