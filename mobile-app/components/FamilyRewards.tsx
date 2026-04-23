@@ -26,6 +26,15 @@ interface RewardItem {
     created_at: string;
 }
 
+interface RewardTask {
+    id: string;
+    household_id: string;
+    title: string;
+    points: number;
+    emoji: string;
+    created_at: string;
+}
+
 interface HistoryEntry {
     id: string; member_name: string; points: number;
     reason: string; type: string; created_at: string;
@@ -44,12 +53,18 @@ export const FamilyRewards: React.FC<RewardsProps> = ({ visible, onClose }) => {
 
     const [members, setMembers] = useState<Reward[]>([]);
     const [rewards, setRewards] = useState<RewardItem[]>([]);
+    const [tasks, setTasks] = useState<RewardTask[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [tab, setTab] = useState<'points' | 'rewards'>('points');
+    const [tab, setTab] = useState<'points' | 'tasks' | 'rewards'>('points');
     const [showAddReward, setShowAddReward] = useState(false);
     const [newRewardTitle, setNewRewardTitle] = useState('');
     const [newRewardPoints, setNewRewardPoints] = useState('');
     const [newRewardEmoji, setNewRewardEmoji] = useState('🎁');
+
+    const [showAddTask, setShowAddTask] = useState(false);
+    const [newTaskTitle, setNewTaskTitle] = useState('');
+    const [newTaskPoints, setNewTaskPoints] = useState('');
+    const [newTaskEmoji, setNewTaskEmoji] = useState('✅');
 
     // History
     const [historyMember, setHistoryMember] = useState<Reward | null>(null);
@@ -151,6 +166,13 @@ export const FamilyRewards: React.FC<RewardsProps> = ({ visible, onClose }) => {
                 .eq('household_id', householdId)
                 .order('points_required');
             setRewards(catalogData || []);
+
+            const { data: tasksData } = await supabase
+                .from('reward_tasks')
+                .select('*')
+                .eq('household_id', householdId)
+                .order('points');
+            setTasks(tasksData || []);
         } catch (e) {
             console.error('Error loading rewards:', e);
         } finally {
@@ -186,6 +208,39 @@ export const FamilyRewards: React.FC<RewardsProps> = ({ visible, onClose }) => {
             if (error) { platformAlert('Fehler', error.message); return; }
             setNewRewardTitle(''); setNewRewardPoints(''); setShowAddReward(false); loadData();
         } catch (e: any) { platformAlert('Fehler', e.message); }
+    };
+
+    const addTask = async () => {
+        if (!newTaskTitle.trim() || !householdId) return;
+        try {
+            const { error } = await supabase.from('reward_tasks').insert({
+                household_id: householdId, title: newTaskTitle.trim(),
+                points: parseInt(newTaskPoints) || 5, emoji: newTaskEmoji,
+            });
+            if (error) { platformAlert('Fehler', error.message); return; }
+            setNewTaskTitle(''); setNewTaskPoints(''); setShowAddTask(false); loadData();
+        } catch (e: any) { platformAlert('Fehler', e.message); }
+    };
+    const assignTask = (member: Reward, task: RewardTask) => {
+        platformConfirm(
+            'Aufgabe anrechnen',
+            `${task.emoji} "${task.title}" für ${member.member_name} anrechnen? (+${task.points} Punkte)`,
+            async () => {
+                await supabase.from('reward_points')
+                    .update({ points: member.points + task.points })
+                    .eq('id', member.id);
+                if (householdId) {
+                    await supabase.from('reward_history').insert({
+                        household_id: householdId,
+                        member_name: member.member_name,
+                        points: task.points,
+                        reason: `${task.emoji} ${task.title} erledigt`,
+                        type: 'task',
+                    });
+                }
+                loadData();
+            }
+        );
     };
 
     const addPoints = (member: Reward, pts: number) => {
@@ -299,6 +354,13 @@ export const FamilyRewards: React.FC<RewardsProps> = ({ visible, onClose }) => {
                         <Text style={[styles.tabText, { color: tab === 'points' ? colors.accent : colors.subtext }]}>Punktestand</Text>
                     </Pressable>
                     <Pressable
+                        style={[styles.tabItem, tab === 'tasks' && [styles.tabItemActive, { backgroundColor: colors.accent + '15', borderColor: colors.accent + '40' }]]}
+                        onPress={() => setTab('tasks')}
+                    >
+                        <Award size={16} color={tab === 'tasks' ? colors.accent : colors.subtext} />
+                        <Text style={[styles.tabText, { color: tab === 'tasks' ? colors.accent : colors.subtext }]}>Aufgaben</Text>
+                    </Pressable>
+                    <Pressable
                         style={[styles.tabItem, tab === 'rewards' && [styles.tabItemActive, { backgroundColor: colors.accent + '15', borderColor: colors.accent + '40' }]]}
                         onPress={() => setTab('rewards')}
                     >
@@ -367,50 +429,75 @@ export const FamilyRewards: React.FC<RewardsProps> = ({ visible, onClose }) => {
                                         );
                                     })}
 
-                                    {/* Redeem Section */}
-                                    {rewards.length > 0 && (
-                                        <View style={{ marginTop: 24 }}>
-                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-                                                <Gift size={18} color={colors.accent} />
-                                                <Text style={[styles.sectionTitle, { color: colors.text }]}>Belohnung einlösen</Text>
-                                            </View>
-                                            {rewards.map(r => (
-                                                <View key={r.id} style={[styles.redeemCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                                                    <View style={styles.redeemHeader}>
-                                                        <View style={[styles.redeemEmojiWrap, { backgroundColor: colors.accent + '12' }]}>
-                                                            <Text style={{ fontSize: 22 }}>{r.emoji}</Text>
-                                                        </View>
-                                                        <View style={{ flex: 1 }}>
-                                                            <Text style={[styles.redeemTitle, { color: colors.text }]} numberOfLines={1}>{r.title}</Text>
-                                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
-                                                                <Star size={12} color={colors.accent} fill={colors.accent} />
-                                                                <Text style={{ color: colors.accent, fontSize: 13, fontWeight: '700' }}>{r.points_required} Punkte</Text>
-                                                            </View>
-                                                        </View>
-                                                    </View>
-                                                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingTop: 10 }}>
-                                                        {members.map(m => {
-                                                            const canRedeem = m.points >= r.points_required;
-                                                            return (
-                                                                <Pressable key={m.id}
-                                                                    style={[styles.redeemMemberBtn, {
-                                                                        borderColor: canRedeem ? '#10B981' : colors.border,
-                                                                        backgroundColor: canRedeem ? '#10B981' + '10' : 'transparent',
-                                                                    }]}
-                                                                    onPress={() => redeemReward(m, r)}
-                                                                >
-                                                                    <Text style={{ fontSize: 12, fontWeight: '600', color: canRedeem ? '#10B981' : colors.subtext }}>{m.member_name}</Text>
-                                                                    {canRedeem && <Check size={12} color="#10B981" />}
-                                                                </Pressable>
-                                                            );
-                                                        })}
-                                                    </ScrollView>
-                                                </View>
-                                            ))}
-                                        </View>
-                                    )}
+                                    {/* Redeem Section removed from Punktestand */}
                                 </>
                             )}
+                        </>
+                    ) : tab === 'tasks' ? (
+                        <>
+                            {tasks.length === 0 ? (
+                                <View style={styles.emptyState}>
+                                    <View style={[styles.emptyIcon, { backgroundColor: colors.accent + '12' }]}>
+                                        <Award size={36} color={colors.accent} />
+                                    </View>
+                                    <Text style={[styles.emptyTitle, { color: colors.text }]}>Keine Aufgaben</Text>
+                                    <Text style={[styles.emptyText, { color: colors.subtext }]}>
+                                        Erstelle Aufgaben, für deren Erledigung{'\n'}Punkte vergeben werden.
+                                    </Text>
+                                </View>
+                            ) : (
+                                <View style={{ marginTop: 8 }}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+                                        <Award size={18} color={colors.accent} />
+                                        <Text style={[styles.sectionTitle, { color: colors.text }]}>Aufgabe anrechnen</Text>
+                                    </View>
+                                    {tasks.map(t => (
+                                        <View key={t.id} style={[styles.redeemCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                                            <View style={styles.redeemHeader}>
+                                                <View style={[styles.redeemEmojiWrap, { backgroundColor: colors.accent + '12' }]}>
+                                                    <Text style={{ fontSize: 22 }}>{t.emoji}</Text>
+                                                </View>
+                                                <View style={{ flex: 1 }}>
+                                                    <Text style={[styles.redeemTitle, { color: colors.text }]} numberOfLines={1}>{t.title}</Text>
+                                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                                                        <Star size={12} color={colors.accent} fill={colors.accent} />
+                                                        <Text style={{ color: colors.accent, fontSize: 13, fontWeight: '700' }}>+{t.points} Punkte</Text>
+                                                    </View>
+                                                </View>
+                                                <Pressable
+                                                    onPress={() => {
+                                                        platformConfirm('Entfernen', `"${t.title}" entfernen?`, async () => {
+                                                            await supabase.from('reward_tasks').delete().eq('id', t.id);
+                                                            loadData();
+                                                        });
+                                                    }}
+                                                    style={[styles.deleteBtn, { backgroundColor: '#EF4444' + '10' }]}
+                                                    hitSlop={8}
+                                                >
+                                                    <Trash2 size={16} color="#EF4444" />
+                                                </Pressable>
+                                            </View>
+                                            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingTop: 10 }}>
+                                                {members.map(m => (
+                                                    <Pressable key={m.id}
+                                                        style={[styles.redeemMemberBtn, {
+                                                            borderColor: colors.border,
+                                                            backgroundColor: 'transparent',
+                                                        }]}
+                                                        onPress={() => assignTask(m, t)}
+                                                    >
+                                                        <Text style={{ fontSize: 12, fontWeight: '600', color: colors.text }}>{m.member_name}</Text>
+                                                    </Pressable>
+                                                ))}
+                                            </ScrollView>
+                                        </View>
+                                    ))}
+                                </View>
+                            )}
+                            <Pressable style={[styles.addFullBtn, { backgroundColor: colors.accent }]} onPress={() => setShowAddTask(true)}>
+                                <Plus size={18} color="#fff" />
+                                <Text style={styles.addFullBtnText}>Aufgabe erstellen</Text>
+                            </Pressable>
                         </>
                     ) : (
                         <>
@@ -425,32 +512,57 @@ export const FamilyRewards: React.FC<RewardsProps> = ({ visible, onClose }) => {
                                     </Text>
                                 </View>
                             ) : (
-                                rewards.map(r => (
-                                    <View key={r.id} style={[styles.catalogCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                                        <View style={[styles.catalogEmoji, { backgroundColor: colors.accent + '12' }]}>
-                                            <Text style={{ fontSize: 26 }}>{r.emoji}</Text>
-                                        </View>
-                                        <View style={{ flex: 1 }}>
-                                            <Text style={[styles.catalogTitle, { color: colors.text }]}>{r.title}</Text>
-                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 }}>
-                                                <Star size={12} color={colors.accent} fill={colors.accent} />
-                                                <Text style={{ color: colors.accent, fontSize: 13, fontWeight: '700' }}>{r.points_required} Punkte</Text>
-                                            </View>
-                                        </View>
-                                        <Pressable
-                                            onPress={() => {
-                                                platformConfirm('Entfernen', `"${r.title}" entfernen?`, async () => {
-                                                    await supabase.from('reward_catalog').delete().eq('id', r.id);
-                                                    loadData();
-                                                });
-                                            }}
-                                            style={[styles.deleteBtn, { backgroundColor: '#EF4444' + '10' }]}
-                                            hitSlop={8}
-                                        >
-                                            <Trash2 size={16} color="#EF4444" />
-                                        </Pressable>
+                                <View style={{ marginTop: 8 }}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+                                        <Gift size={18} color={colors.accent} />
+                                        <Text style={[styles.sectionTitle, { color: colors.text }]}>Belohnung einlösen</Text>
                                     </View>
-                                ))
+                                    {rewards.map(r => (
+                                        <View key={r.id} style={[styles.redeemCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                                            <View style={styles.redeemHeader}>
+                                                <View style={[styles.redeemEmojiWrap, { backgroundColor: colors.accent + '12' }]}>
+                                                    <Text style={{ fontSize: 22 }}>{r.emoji}</Text>
+                                                </View>
+                                                <View style={{ flex: 1 }}>
+                                                    <Text style={[styles.redeemTitle, { color: colors.text }]} numberOfLines={1}>{r.title}</Text>
+                                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                                                        <Star size={12} color={colors.accent} fill={colors.accent} />
+                                                        <Text style={{ color: colors.accent, fontSize: 13, fontWeight: '700' }}>{r.points_required} Punkte</Text>
+                                                    </View>
+                                                </View>
+                                                <Pressable
+                                                    onPress={() => {
+                                                        platformConfirm('Entfernen', `"${r.title}" entfernen?`, async () => {
+                                                            await supabase.from('reward_catalog').delete().eq('id', r.id);
+                                                            loadData();
+                                                        });
+                                                    }}
+                                                    style={[styles.deleteBtn, { backgroundColor: '#EF4444' + '10' }]}
+                                                    hitSlop={8}
+                                                >
+                                                    <Trash2 size={16} color="#EF4444" />
+                                                </Pressable>
+                                            </View>
+                                            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingTop: 10 }}>
+                                                {members.map(m => {
+                                                    const canRedeem = m.points >= r.points_required;
+                                                    return (
+                                                        <Pressable key={m.id}
+                                                            style={[styles.redeemMemberBtn, {
+                                                                borderColor: canRedeem ? '#10B981' : colors.border,
+                                                                backgroundColor: canRedeem ? '#10B981' + '10' : 'transparent',
+                                                            }]}
+                                                            onPress={() => redeemReward(m, r)}
+                                                        >
+                                                            <Text style={{ fontSize: 12, fontWeight: '600', color: canRedeem ? '#10B981' : colors.subtext }}>{m.member_name}</Text>
+                                                            {canRedeem && <Check size={12} color="#10B981" />}
+                                                        </Pressable>
+                                                    );
+                                                })}
+                                            </ScrollView>
+                                        </View>
+                                    ))}
+                                </View>
                             )}
                             <Pressable style={[styles.addFullBtn, { backgroundColor: colors.accent }]} onPress={() => setShowAddReward(true)}>
                                 <Plus size={18} color="#fff" />
@@ -495,6 +607,49 @@ export const FamilyRewards: React.FC<RewardsProps> = ({ visible, onClose }) => {
                                     <Text style={{ color: colors.subtext, fontWeight: '600' }}>Abbrechen</Text>
                                 </Pressable>
                                 <Pressable style={[styles.saveBtn, { backgroundColor: colors.accent, opacity: newRewardTitle.trim() ? 1 : 0.4 }]} onPress={addReward}>
+                                    <Plus size={16} color="#fff" />
+                                    <Text style={{ color: '#fff', fontWeight: '700' }}>Erstellen</Text>
+                                </Pressable>
+                            </View>
+                        </Pressable>
+                    </Pressable>
+                </Modal>
+
+                {/* Add Task Modal */}
+                <Modal visible={showAddTask} transparent animationType="fade">
+                    <Pressable style={styles.overlay} onPress={() => setShowAddTask(false)}>
+                        <Pressable style={[styles.popup, { backgroundColor: colors.card }]} onPress={e => e.stopPropagation()}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+                                <View style={[styles.popupIcon, { backgroundColor: colors.accent + '15' }]}>
+                                    <Award size={20} color={colors.accent} />
+                                </View>
+                                <Text style={[styles.popupTitle, { color: colors.text }]}>Neue Aufgabe</Text>
+                            </View>
+                            <Text style={[styles.popupLabel, { color: colors.subtext }]}>Emoji wählen</Text>
+                            <View style={styles.emojiGrid}>
+                                {EMOJI_OPTIONS.map(e => (
+                                    <Pressable key={e} style={[styles.emojiBtn, newTaskEmoji === e && { backgroundColor: colors.accent + '20', borderColor: colors.accent + '40' }]} onPress={() => setNewTaskEmoji(e)}>
+                                        <Text style={{ fontSize: 22 }}>{e}</Text>
+                                    </Pressable>
+                                ))}
+                            </View>
+                            <Text style={[styles.popupLabel, { color: colors.subtext, marginTop: 14 }]}>Details</Text>
+                            <TextInput
+                                style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
+                                value={newTaskTitle} onChangeText={setNewTaskTitle}
+                                placeholder="z.B. Zimmer aufräumen" placeholderTextColor={colors.subtext + '80'}
+                            />
+                            <TextInput
+                                style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background, marginTop: 8 }]}
+                                value={newTaskPoints} onChangeText={setNewTaskPoints}
+                                placeholder="Punkte (z.B. 20)" placeholderTextColor={colors.subtext + '80'}
+                                keyboardType="numeric"
+                            />
+                            <View style={styles.popupActions}>
+                                <Pressable style={[styles.cancelBtn, { borderColor: colors.border }]} onPress={() => setShowAddTask(false)}>
+                                    <Text style={{ color: colors.subtext, fontWeight: '600' }}>Abbrechen</Text>
+                                </Pressable>
+                                <Pressable style={[styles.saveBtn, { backgroundColor: colors.accent, opacity: newTaskTitle.trim() ? 1 : 0.4 }]} onPress={addTask}>
                                     <Plus size={16} color="#fff" />
                                     <Text style={{ color: '#fff', fontWeight: '700' }}>Erstellen</Text>
                                 </Pressable>
