@@ -93,34 +93,43 @@ Deno.serve(async (req) => {
     }
 
     // 2. If category_key is provided, filter by user preferences
-    let notifType: any = null
+    let isCritical = false
+    let notifSound = 'default'
+
     if (category_key) {
       console.log('Looking up category_key:', category_key)
-      // Look up the notification type
-      const { data: foundType, error: typeError } = await supabase
+      // Look up the notification types matching the category_key 
+      // (there might be multiple, e.g., one per household)
+      const { data: foundTypes, error: typeError } = await supabase
         .from('notification_types')
         .select('id, is_active, is_critical, sound')
-        .eq('category_key', category_key)
-        .maybeSingle()
+        .ilike('category_key', category_key)
       
-      notifType = foundType
-
-      console.log('notifType result:', JSON.stringify(notifType), 'error:', typeError)
+      console.log('foundTypes result:', JSON.stringify(foundTypes), 'error:', typeError)
 
       if (typeError) {
         console.error('Error looking up notification type:', typeError)
-      } else if (notifType) {
-        if (!notifType.is_active) {
+      } else if (foundTypes && foundTypes.length > 0) {
+        // If at least one matching type is critical, we make the alert critical
+        isCritical = foundTypes.some(t => t.is_critical)
+        // Grab a sound from the first match
+        notifSound = foundTypes[0].sound || 'default'
+
+        // Get the IDs of the active types
+        const activeTypeIds = foundTypes.filter(t => t.is_active).map(t => t.id)
+
+        if (activeTypeIds.length === 0) {
           return new Response(
-            JSON.stringify({ message: `Notification type '${category_key}' is deactivated` }),
+            JSON.stringify({ message: `Notification type '${category_key}' is deactivated for all matching households` }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           )
         }
 
+        // Fetch user preferences for these types
         const { data: prefs, error: prefsError } = await supabase
           .from('user_notification_preferences')
           .select('user_id, enabled')
-          .eq('notification_type_id', notifType.id)
+          .in('notification_type_id', activeTypeIds)
 
         console.log('User preferences:', JSON.stringify(prefs), 'error:', prefsError)
 
@@ -160,10 +169,6 @@ Deno.serve(async (req) => {
 
     // 3. Prepare & send notifications
     const tokens = eligibleTokens.map(t => t.token)
-
-    // Determine sound and priority from notification type settings
-    const isCritical = notifType?.is_critical ?? false
-    const notifSound = notifType?.sound ?? 'default'
 
     // Extract badge from data if provided (HA sends it nested in data)
     const badgeCount = data?.badge ?? null
