@@ -719,4 +719,39 @@ export class HomeAssistantService {
             });
         });
     }
+    // Fetch entity history via REST API
+    async fetchEntityHistory(entityId: string): Promise<{ data: any[], error?: string }> {
+        if (!this.isConnected() || !this.credentials) {
+            return { data: [], error: 'Not connected' };
+        }
+
+        try {
+            // Get history for the last 24 hours
+            const past24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+            const cleanBase = this.credentials.url.trim().replace(/\/$/, '');
+            const url = `${cleanBase}/api/history/period/${past24h}?filter_entity_id=${entityId}`;
+            
+            const response = await fetch(url, {
+                headers: {
+                    'Authorization': `Bearer ${this.credentials.token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (!response.ok) {
+                console.warn('Failed to fetch entity history:', response.status);
+                return { data: [], error: `HTTP ${response.status}` };
+            }
+            
+            const data = await response.json();
+            // Data is an array of arrays, e.g. [[{state, last_changed}, ...]]
+            if (data && data.length > 0) {
+                return { data: data[0] };
+            }
+            return { data: [] };
+        } catch (e: any) {
+            console.error('Error fetching entity history:', e);
+            return { data: [], error: e.message || 'Network request failed' };
+        }
+    }
 }

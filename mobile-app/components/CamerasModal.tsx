@@ -463,45 +463,72 @@ export default function CamerasModal({ visible, onClose }: CamerasModalProps) {
                             </ScrollView>
                         </KeyboardAvoidingView>
                     ) : (
-                        /* Camera Grid */
                         <ScrollView style={styles.modalBody} contentContainerStyle={{ paddingBottom: 40 }}>
                             <View style={[styles.cameraGrid, isTablet && styles.cameraGridTablet]}>
                                 {cameras.length > 0 ? (
                                     cameras.map((cam: any) => {
                                         const uri = getCameraUri(cam);
+                                        const extraEntities: ExtraEntity[] = cam._extraEntities || [];
                                         return (
-                                            <Pressable
-                                                key={cam.entity_id}
-                                                onPress={() => openFullscreen(cam)}
-                                                style={({ pressed }) => [
-                                                    styles.cameraCard,
-                                                    isTablet && { width: (width - 56) / 2 },
-                                                    pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }
-                                                ]}
-                                            >
-                                                <Text style={styles.cameraTitle} numberOfLines={1}>{cam.attributes.friendly_name}</Text>
-                                                <View style={[styles.cameraPreview, isTablet && { height: 160 }]}>
-                                                    {uri ? (
-                                                        <CameraImage
-                                                            uri={uri}
-                                                            headers={imageHeaders}
-                                                            style={{ width: '100%', height: '100%' }}
-                                                            resizeMode="cover"
-                                                        />
-                                                    ) : (
-                                                        <View style={styles.cameraPlaceholder}>
-                                                            <VideoIcon size={32} color="#475569" />
+                                            <View key={cam.entity_id} style={[styles.cameraCard, isTablet && { width: (width - 56) / 2 }]}>
+                                                <Pressable
+                                                    onPress={() => openFullscreen(cam)}
+                                                    style={({ pressed }) => [pressed && { opacity: 0.85 }]}
+                                                >
+                                                    <Text style={styles.cameraTitle} numberOfLines={1}>{cam.attributes.friendly_name}</Text>
+                                                    <View style={[styles.cameraPreview, isTablet && { height: 160 }]}>
+                                                        {uri ? (
+                                                            <CameraImage
+                                                                uri={uri}
+                                                                headers={imageHeaders}
+                                                                style={{ width: '100%', height: '100%' }}
+                                                                resizeMode="cover"
+                                                            />
+                                                        ) : (
+                                                            <View style={styles.cameraPlaceholder}>
+                                                                <VideoIcon size={32} color="#475569" />
+                                                            </View>
+                                                        )}
+                                                        <View style={styles.liveBadge}>
+                                                            <View style={styles.liveDot} />
+                                                            <Text style={styles.liveText}>LIVE</Text>
                                                         </View>
-                                                    )}
-                                                    <View style={styles.liveBadge}>
-                                                        <View style={styles.liveDot} />
-                                                        <Text style={styles.liveText}>LIVE</Text>
+                                                        <View style={styles.fullscreenHint}>
+                                                            <Maximize2 size={14} color="#fff" />
+                                                        </View>
                                                     </View>
-                                                    <View style={styles.fullscreenHint}>
-                                                        <Maximize2 size={14} color="#fff" />
+                                                </Pressable>
+
+                                                {/* Extra entity controls on card */}
+                                                {extraEntities.length > 0 && (
+                                                    <View style={styles.cardControls}>
+                                                        {extraEntities.map((extra: ExtraEntity) => {
+                                                            const state = getEntityState(extra.entity_id);
+                                                            const isOn = state === 'on';
+                                                            const domain = extra.entity_id.split('.')[0];
+                                                            const isToggleable = ['switch', 'input_boolean', 'light'].includes(domain);
+                                                            const isButton = domain === 'button';
+                                                            return (
+                                                                <Pressable
+                                                                    key={extra.entity_id}
+                                                                    onPress={() => toggleExtraEntity(extra.entity_id)}
+                                                                    style={[styles.cardControlBtn, isOn && styles.cardControlBtnActive]}
+                                                                >
+                                                                    <Text style={[styles.cardControlLabel, isOn && { color: '#fff' }]} numberOfLines={1}>
+                                                                        {extra.label}
+                                                                    </Text>
+                                                                    {isToggleable && (
+                                                                        <View style={[styles.cardControlDot, isOn && styles.cardControlDotActive]} />
+                                                                    )}
+                                                                    {isButton && (
+                                                                        <Text style={{ color: '#3B82F6', fontSize: 11 }}>▶</Text>
+                                                                    )}
+                                                                </Pressable>
+                                                            );
+                                                        })}
                                                     </View>
-                                                </View>
-                                            </Pressable>
+                                                )}
+                                            </View>
                                         );
                                     })
                                 ) : (
@@ -683,6 +710,26 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(0,0,0,0.5)', padding: 6, borderRadius: 6
     },
     emptyText: { color: '#64748B', fontStyle: 'italic', textAlign: 'center', marginTop: 16, lineHeight: 22 },
+
+    // Card-level extra entity controls
+    cardControls: {
+        flexDirection: 'row', flexWrap: 'wrap', gap: 6,
+        paddingHorizontal: 12, paddingVertical: 10,
+        borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)',
+    },
+    cardControlBtn: {
+        flexDirection: 'row', alignItems: 'center', gap: 6,
+        backgroundColor: 'rgba(255,255,255,0.08)',
+        paddingHorizontal: 12, paddingVertical: 7,
+        borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
+    },
+    cardControlBtnActive: {
+        backgroundColor: 'rgba(59,130,246,0.35)',
+        borderColor: 'rgba(59,130,246,0.5)',
+    },
+    cardControlLabel: { color: '#94A3B8', fontSize: 12, fontWeight: '600' },
+    cardControlDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#475569' },
+    cardControlDotActive: { backgroundColor: '#22C55E' },
 
     // Fullscreen
     fullscreenOverlay: { flex: 1, backgroundColor: '#000' },

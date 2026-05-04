@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Modal, StyleSheet, Pressable, ScrollView, Switch } from 'react-native';
-import { X, Sun, Moon, Palette, RotateCcw } from 'lucide-react-native';
+import { View, Text, Modal, StyleSheet, Pressable, ScrollView, Switch, ActivityIndicator } from 'react-native';
+import { X, Sun, Moon, Palette, RotateCcw, BarChart2 } from 'lucide-react-native';
 import Slider from '@react-native-community/slider';
+import StatisticsModal from './StatisticsModal';
 
 interface LightControlModalProps {
     visible: boolean;
     onClose: () => void;
     light: any; // The entity object
     callService: (domain: string, service: string, entityId: string, data?: any) => void;
+    onShowStats?: (preventGlobal?: boolean) => Promise<{ history: any[], error?: string } | undefined>;
 }
 
 const COLOR_PRESETS = [
@@ -23,9 +25,11 @@ const COLOR_PRESETS = [
     { name: 'Pink', color: '#EC4899', type: 'rgb', value: [255, 192, 203] },
 ];
 
-export default function LightControlModal({ visible, onClose, light, callService }: LightControlModalProps) {
+export default function LightControlModal({ visible, onClose, light, callService, onShowStats }: LightControlModalProps) {
     const [brightness, setBrightness] = useState(light?.attributes?.brightness || 0);
     const [isOn, setIsOn] = useState(light?.state === 'on');
+    const [isLoadingStats, setIsLoadingStats] = useState(false);
+    const [statsModalData, setStatsModalData] = useState<{ visible: boolean; entityName: string; history: any[]; error?: string } | null>(null);
 
     // Supported Features (Relaxed check as requested - assume most lights support dimming/color if they are in this list)
     const supportsTemp = true;
@@ -98,12 +102,44 @@ export default function LightControlModal({ visible, onClose, light, callService
                             <Text style={styles.modalTitle}>{light.attributes.friendly_name}</Text>
                             <Text style={styles.modalSubtitle}>{isOn ? `${Math.round(brightness / 255 * 100)}% Helligkeit` : 'Ausgeschaltet'}</Text>
                         </View>
-                        <Switch
-                            value={isOn}
-                            onValueChange={handleToggle}
-                            trackColor={{ false: '#334155', true: '#3B82F6' }}
-                            thumbColor={'#FFF'}
-                        />
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+                            {onShowStats && (
+                                <Pressable 
+                                    onPress={async () => {
+                                        setIsLoadingStats(true);
+                                        const result = onShowStats ? await onShowStats(true) : null;
+                                        if (result) {
+                                            setStatsModalData({
+                                                visible: true,
+                                                entityName: light.attributes?.friendly_name || light.entity_id,
+                                                history: result.history || [],
+                                                error: result.error
+                                            });
+                                        }
+                                        setIsLoadingStats(false);
+                                    }}
+                                    disabled={isLoadingStats}
+                                    style={({ pressed }) => ({
+                                        padding: 8,
+                                        backgroundColor: 'rgba(255,255,255,0.1)',
+                                        borderRadius: 8,
+                                        opacity: pressed || isLoadingStats ? 0.7 : 1
+                                    })}
+                                >
+                                    {isLoadingStats ? (
+                                        <ActivityIndicator size="small" color="#FFF" />
+                                    ) : (
+                                        <BarChart2 size={20} color="#FFF" />
+                                    )}
+                                </Pressable>
+                            )}
+                            <Switch
+                                value={isOn}
+                                onValueChange={handleToggle}
+                                trackColor={{ false: '#334155', true: '#3B82F6' }}
+                                thumbColor={'#FFF'}
+                            />
+                        </View>
                     </View>
 
                     <ScrollView style={styles.scrollBody} contentContainerStyle={{ paddingBottom: 24 }}>
@@ -171,6 +207,18 @@ export default function LightControlModal({ visible, onClose, light, callService
                     <Pressable onPress={onClose} style={styles.closeBtn}>
                         <Text style={styles.closeBtnText}>Schliessen</Text>
                     </Pressable>
+
+                    {/* Inline Statistics Modal */}
+                    {statsModalData && (
+                        <StatisticsModal
+                            isEmbedded={true}
+                            visible={statsModalData.visible}
+                            onClose={() => setStatsModalData(null)}
+                            entityName={statsModalData.entityName}
+                            history={statsModalData.history}
+                            error={statsModalData.error}
+                        />
+                    )}
                 </View>
             </View>
         </Modal>

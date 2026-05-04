@@ -1,11 +1,12 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
-import { View, Text, Modal, StyleSheet, Pressable, ScrollView, ActivityIndicator, TextInput, SectionList, Keyboard } from 'react-native';
-import { X, Check, ShoppingCart, Plus, Trash2, Settings, Tag, ChevronDown, ChevronRight } from 'lucide-react-native';
+import { View, Text, Modal, StyleSheet, Pressable, ScrollView, ActivityIndicator, TextInput, Keyboard } from 'react-native';
+import { X, Check, ShoppingCart, Plus, Trash2, Settings, Tag, ChevronDown, ChevronRight, Store, Star } from 'lucide-react-native';
 import { useHomeAssistant } from '../contexts/HomeAssistantContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useHousehold } from '../hooks/useHousehold';
 import { supabase } from '../lib/supabase';
 import ShoppingCategoriesManager, { type ShoppingCategory } from './ShoppingCategoriesManager';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface ShoppingListModalProps {
     visible: boolean;
@@ -36,6 +37,11 @@ export default function ShoppingListModal({ visible, onClose }: ShoppingListModa
     const [showCategoriesManager, setShowCategoriesManager] = useState(false);
     const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
 
+    // Store selector
+    const [stores, setStores] = useState<string[]>([]);
+    const [selectedStore, setSelectedStore] = useState<string | null>(null);
+    const [storeOrders, setStoreOrders] = useState<Record<string, number>>({}); // categoryId -> sort_order
+
     // Auto-suggest
     const [suggestions, setSuggestions] = useState<CatalogProduct[]>([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
@@ -46,6 +52,7 @@ export default function ShoppingListModal({ visible, onClose }: ShoppingListModa
     const [pendingItem, setPendingItem] = useState<string | null>(null);
 
     const inputRef = useRef<TextInput>(null);
+    const defaultStoreRef = useRef<string | null>(null);
 
     // ── Load Items from HA ──
     const loadItems = useCallback(async () => {
@@ -103,9 +110,61 @@ export default function ShoppingListModal({ visible, onClose }: ShoppingListModa
             loadItems();
             loadCategories();
             loadCatalog();
+            loadStores();
         }
         prevVisible.current = visible;
     }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Load available stores + auto-select default
+    const loadStores = useCallback(async () => {
+        if (!householdId) return;
+        try {
+            const { data } = await supabase
+                .from('shopping_store_category_orders')
+                .select('store_name')
+                .eq('household_id', householdId);
+            if (data) {
+                const unique = [...new Set(data.map((r: any) => r.store_name as string))].sort();
+                setStores(unique);
+
+                // Auto-select default store
+                const defaultStoreName = await AsyncStorage.getItem(`@smarthome_default_store_${householdId}`);
+                if (defaultStoreName && unique.includes(defaultStoreName)) {
+                    defaultStoreRef.current = defaultStoreName;
+                    setSelectedStore(defaultStoreName);
+                    loadStoreOrders(defaultStoreName);
+                }
+            }
+        } catch (e) {
+            // Table may not exist yet – silently ignore
+        }
+    }, [householdId]);
+
+    // Load category order for selected store
+    const loadStoreOrders = useCallback(async (storeName: string) => {
+        if (!householdId) return;
+        try {
+            const { data } = await supabase
+                .from('shopping_store_category_orders')
+                .select('category_id, sort_order')
+                .eq('household_id', householdId)
+                .eq('store_name', storeName)
+                .order('sort_order', { ascending: true });
+            if (data) {
+                const map: Record<string, number> = {};
+                data.forEach((r: any) => { map[r.category_id] = r.sort_order; });
+                setStoreOrders(map);
+            }
+        } catch (e) {
+            console.warn('Failed to load store orders:', e);
+        }
+    }, [householdId]);
+
+    const handleSelectStore = (name: string | null) => {
+        setSelectedStore(name);
+        if (name) loadStoreOrders(name);
+        else setStoreOrders({});
+    };
 
     // ── Auto-Suggest Logic ──
     useEffect(() => {
@@ -258,10 +317,9 @@ export default function ShoppingListModal({ visible, onClose }: ShoppingListModa
         return map;
     }, [catalog]);
 
-    // Group active items by category
+    // Group active items by category, respecting store order if a store is selected
     const groupedSections = useMemo(() => {
         if (categories.length === 0) {
-            // No categories → single flat list
             return [{ key: 'all', title: 'Einkaufsliste', color: null, data: activeItems }];
         }
 
@@ -279,9 +337,19 @@ export default function ShoppingListModal({ visible, onClose }: ShoppingListModa
             }
         });
 
+        // Sort categories: use store order if a store is selected, else global sort_order
+        const sortedCategories = [...categories].sort((a, b) => {
+            if (selectedStore && Object.keys(storeOrders).length > 0) {
+                const orderA = storeOrders[a.id] ?? 999;
+                const orderB = storeOrders[b.id] ?? 999;
+                return orderA - orderB;
+            }
+            return a.sort_order - b.sort_order;
+        });
+
         const sections: { key: string; title: string; color: string | null; icon: string | null; data: any[] }[] = [];
 
-        categories.forEach(cat => {
+        sortedCategories.forEach(cat => {
             const items = catMap[cat.id] || [];
             if (items.length > 0) {
                 sections.push({ key: cat.id, title: cat.name, color: cat.color, icon: cat.icon, data: items });
@@ -293,7 +361,7 @@ export default function ShoppingListModal({ visible, onClose }: ShoppingListModa
         }
 
         return sections;
-    }, [activeItems, categories, productCategoryMap]);
+    }, [activeItems, categories, productCategoryMap, selectedStore, storeOrders]);
 
     const toggleSection = (key: string) => {
         setCollapsedSections(prev => {
@@ -356,6 +424,43 @@ export default function ShoppingListModal({ visible, onClose }: ShoppingListModa
                                 </Pressable>
                             </View>
                         </View>
+
+                        {/* Store Selector Bar */}
+                        {stores.length > 0 && (
+                            <View style={[styles.storeSelectorRow, { borderBottomColor: colors.border }]}>
+                                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingVertical: 2 }}>
+                                    <Pressable
+                                        onPress={() => handleSelectStore(null)}
+                                        style={[styles.storeChip, {
+                                            backgroundColor: !selectedStore ? colors.accent : colors.background,
+                                            borderColor: !selectedStore ? colors.accent : colors.border,
+                                        }]}
+                                    >
+                                        <ShoppingCart size={13} color={!selectedStore ? '#FFF' : colors.subtext} />
+                                        <Text style={[styles.storeChipText, { color: !selectedStore ? '#FFF' : colors.subtext }]}>Standard</Text>
+                                    </Pressable>
+                                    {stores.map(name => {
+                                        const isDefaultStore = defaultStoreRef.current === name;
+                                        return (
+                                            <Pressable
+                                                key={name}
+                                                onPress={() => handleSelectStore(name)}
+                                                style={[styles.storeChip, {
+                                                    backgroundColor: selectedStore === name ? colors.accent : colors.background,
+                                                    borderColor: selectedStore === name ? colors.accent : colors.border,
+                                                }]}
+                                            >
+                                                <Store size={13} color={selectedStore === name ? '#FFF' : colors.subtext} />
+                                                <Text style={[styles.storeChipText, { color: selectedStore === name ? '#FFF' : colors.subtext }]}>{name}</Text>
+                                                {isDefaultStore && (
+                                                    <Star size={11} color={selectedStore === name ? '#FFF' : '#F59E0B'} fill={selectedStore === name ? '#FFF' : '#F59E0B'} />
+                                                )}
+                                            </Pressable>
+                                        );
+                                    })}
+                                </ScrollView>
+                            </View>
+                        )}
 
                         {/* Input + Auto-Suggest */}
                         <View style={[styles.inputRow, { borderBottomColor: colors.border }]}>
@@ -569,6 +674,10 @@ const styles = StyleSheet.create({
     itemTextDone: { textDecorationLine: 'line-through' },
 
     divider: { height: 1, marginVertical: 16 },
+
+    storeSelectorRow: { paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1 },
+    storeChip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
+    storeChipText: { fontSize: 13, fontWeight: '600' },
 
     empty: { padding: 40, alignItems: 'center' },
     emptyText: {},

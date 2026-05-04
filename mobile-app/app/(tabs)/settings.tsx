@@ -180,19 +180,31 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
                 try {
                     const resolvedTypes = types || [];
                     const categoryPrefs: Record<string, boolean> = {};
+
+                    // Write ALL known categories explicitly (including true-defaults)
+                    // so the background geofencing task always finds a definitive value
                     for (const t of resolvedTypes) {
                         categoryPrefs[t.category_key] = prefMap[t.id] ?? true;
                     }
+
                     // Sync all shopping alias keys for background geofencing task
                     const SHOPPING_ALIASES = ['shopping', 'einkauf', 'einkaufsliste', 'einkaufs_erinnerung', 'shopping_cart', 'shopping-cart'];
                     const isShoppingDisabled = SHOPPING_ALIASES.some(alias => categoryPrefs[alias] === false);
+                    // Write ALL aliases explicitly so task always finds a value
+                    for (const alias of SHOPPING_ALIASES) {
+                        // Only override if the shopping category was explicitly found in resolvedTypes
+                        // otherwise just propagate the disabled flag
+                        if (!(alias in categoryPrefs)) {
+                            categoryPrefs[alias] = !isShoppingDisabled;
+                        }
+                    }
                     if (isShoppingDisabled) {
                         for (const alias of SHOPPING_ALIASES) {
                             categoryPrefs[alias] = false;
                         }
                     }
                     await AsyncStorage.setItem('@smarthome_user_notif_prefs', JSON.stringify(categoryPrefs));
-                    console.log('🛒 Notif prefs cache rebuilt from DB. Shopping disabled:', isShoppingDisabled);
+                    console.log('🛒 Notif prefs cache rebuilt from DB. Shopping disabled:', isShoppingDisabled, 'Keys:', Object.keys(categoryPrefs).join(', '));
                 } catch (cacheErr) {
                     console.warn('Failed to rebuild notif prefs cache:', cacheErr);
                 }
@@ -217,6 +229,7 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
         try {
             const categoryPrefs: Record<string, boolean> = {};
             for (const t of dynamicTypes) {
+                // Write ALL values explicitly — use updatedPrefs for current type, defaults for others
                 categoryPrefs[t.category_key] = updatedPrefs[t.id] ?? true;
             }
 
@@ -224,6 +237,10 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
             // and write ALL known shopping alias keys so the background task always finds 'shopping'
             const SHOPPING_ALIASES = ['shopping', 'einkauf', 'einkaufsliste', 'einkaufs_erinnerung', 'shopping_cart', 'shopping-cart'];
             const isShoppingDisabled = SHOPPING_ALIASES.some(alias => categoryPrefs[alias] === false);
+            // Write ALL aliases explicitly, even if they are true, so the background task never misses them
+            for (const alias of SHOPPING_ALIASES) {
+                categoryPrefs[alias] = !isShoppingDisabled;
+            }
             if (isShoppingDisabled) {
                 for (const alias of SHOPPING_ALIASES) {
                     categoryPrefs[alias] = false;
@@ -231,7 +248,7 @@ const NotificationSettingsModal = ({ visible, onClose }: { visible: boolean; onC
             }
 
             await AsyncStorage.setItem('@smarthome_user_notif_prefs', JSON.stringify(categoryPrefs));
-            console.log('🛒 Notif prefs cache updated. Shopping disabled:', isShoppingDisabled);
+            console.log('🛒 Notif prefs cache updated. Shopping disabled:', isShoppingDisabled, 'Keys written:', Object.keys(categoryPrefs).length);
         } catch (e) {
             console.warn('Failed to update notification prefs cache:', e);
         }

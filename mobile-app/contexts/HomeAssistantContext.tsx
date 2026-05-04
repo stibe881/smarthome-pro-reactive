@@ -292,6 +292,7 @@ interface HomeAssistantContextType {
     dashboardConfig: any;
     saveDashboardConfig: (config: any) => Promise<void>;
     isHAInitialized: boolean;
+    fetchEntityHistory: (entityId: string) => Promise<{ data: any[], error?: string }>;
 }
 
 const HomeAssistantContext = createContext<HomeAssistantContextType | undefined>(undefined);
@@ -1820,6 +1821,7 @@ export function HomeAssistantProvider({ children }: { children: React.ReactNode 
         setIsDoorbellRinging,
         dashboardConfig,
         isHAInitialized,
+        fetchEntityHistory: async (entityId: string) => serviceRef.current?.fetchEntityHistory(entityId) || { data: [] },
         saveDashboardConfig: async (config: any) => {
             try {
                 const { data: { user } } = await supabase.auth.getUser();

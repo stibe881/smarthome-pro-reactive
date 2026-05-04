@@ -413,6 +413,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 savePushTokenToSupabase(session.user.id);
             }
             setIsLoading(false);
+        }).catch(err => {
+            console.error('Error fetching session:', err);
+            setIsLoading(false);
         });
 
         // Listen for auth changes

@@ -1,5 +1,5 @@
 import React, { useMemo, useState, memo, useCallback, useEffect } from 'react';
-import { View, Text, ScrollView, Pressable, useWindowDimensions, Modal, StyleSheet, ActivityIndicator, Image, Alert, Vibration } from 'react-native';
+import { View, Text, ScrollView, Pressable, useWindowDimensions, Modal, StyleSheet, ActivityIndicator, Image, Alert, Vibration, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useHomeAssistant } from '../../contexts/HomeAssistantContext';
@@ -23,6 +23,7 @@ import ShutterControlModal from '../../components/ShutterControlModal';
 import { RoomEditModal } from '../../components/RoomEditModal';
 import { RoomContentEditModal, loadRoomOverride, applyRoomOverrides } from '../../components/RoomContentEditModal';
 import { EntityState } from '../../contexts/HomeAssistantContext';
+import StatisticsModal from '../../components/StatisticsModal';
 
 // Theme Types
 type RoomTheme = {
@@ -324,7 +325,7 @@ const LightTile = memo(({ light, toggleLight, setBrightness, width, onLongPress,
     );
 });
 
-const CoverTile = memo(({ cover, openCover, closeCover, stopCover, pressButton, onPress, width, theme: roomTheme }: any) => {
+const CoverTile = memo(({ cover, openCover, closeCover, stopCover, pressButton, onPress, onLongPress, width, theme: roomTheme }: any) => {
     const { colors } = useTheme();
     const isOpen = cover.state === 'open' || (cover.attributes.current_position && cover.attributes.current_position > 0);
     const position = cover.attributes.current_position;
@@ -333,6 +334,7 @@ const CoverTile = memo(({ cover, openCover, closeCover, stopCover, pressButton, 
     return (
         <Pressable
             onPress={() => onPress?.(cover)}
+            onLongPress={() => onLongPress?.(cover)}
             style={[styles.tile, { width, backgroundColor: roomTheme ? 'rgba(255,255,255,0.1)' : colors.card, borderColor: roomTheme ? 'rgba(255,255,255,0.1)' : colors.border }]}
         >
             <View style={[styles.tileContent, isOpen && { backgroundColor: activeColor + '20', borderColor: activeColor + '50' }]}>
@@ -738,7 +740,7 @@ const CameraTile = memo(({ camera, width, api }: any) => {
     );
 });
 
-const HelperTile = memo(({ entity, api, width, theme }: any) => {
+const HelperTile = memo(({ entity, api, width, theme, onLongPress }: any) => {
     const { colors } = useTheme();
     const activeColor = theme ? theme.accentColor : colors.accent;
     const isInputSelect = entity.entity_id.startsWith('input_select.');
@@ -805,6 +807,7 @@ const HelperTile = memo(({ entity, api, width, theme }: any) => {
             <View style={[styles.tile, { width, backgroundColor: colors.card }]}>
                 <Pressable
                     onPress={() => api.callService('input_boolean', 'toggle', entity.entity_id)}
+                    onLongPress={() => onLongPress && onLongPress(entity)}
                     style={[styles.tileContent, isOn && { backgroundColor: activeColor + '20', borderColor: activeColor + '50' }]}
                 >
                     <View style={styles.tileHeader}>
@@ -866,7 +869,7 @@ const HelperTile = memo(({ entity, api, width, theme }: any) => {
     return null;
 });
 
-const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, onSelectCover, userRole, allEntities }: any) => {
+const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, onSelectCover, userRole, allEntities, onShowStats }: any) => {
     const { width } = useWindowDimensions();
     const { colors } = useTheme();
     const isTablet = width >= 768;
@@ -1121,7 +1124,7 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, on
                                         <SectionHeader title={displayRoom._groupLabels?.helpers || "Einstellungen"} />
                                         <View style={styles.grid}>
                                             {displayRoom.helpers.map((h: any) => (
-                                                <HelperTile key={h.entity_id} entity={h} api={api} width={isTablet ? tileWidth : '100%'} theme={theme} />
+                                                <HelperTile key={h.entity_id} entity={h} api={api} width={isTablet ? tileWidth : '100%'} theme={theme} onLongPress={onShowStats} />
                                             ))}
                                         </View>
                                     </View>
@@ -1136,7 +1139,7 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, on
                                         <View style={styles.grid}>
                                             {displayRoom.covers.map((c: any, idx: number) => {
                                                 const isLastAlone = idx === displayRoom.covers.length - 1 && displayRoom.covers.length % 2 === 1;
-                                                return <CoverTile key={c.entity_id} cover={c} openCover={api.openCover} closeCover={api.closeCover} stopCover={api.stopCover} pressButton={api.pressButton} onPress={onSelectCover} width={isLastAlone ? '100%' : tileWidth} theme={theme} />;
+                                                return <CoverTile key={c.entity_id} cover={c} openCover={api.openCover} closeCover={api.closeCover} stopCover={api.stopCover} pressButton={api.pressButton} onPress={onSelectCover} onLongPress={onShowStats} width={isLastAlone ? '100%' : tileWidth} theme={theme} />;
                                             })}
                                         </View>
                                     </View>
@@ -1185,6 +1188,7 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, on
                                                     <View key={sw.entity_id} style={[styles.tile, { width: swWidth, backgroundColor: colors.card, borderColor: colors.border }]}>
                                                         <Pressable
                                                             onPress={() => api.callService('switch', isOn ? 'turn_off' : 'turn_on', sw.entity_id)}
+                                                            onLongPress={() => onShowStats && onShowStats(sw)}
                                                             style={[styles.tileContent, isOn && { backgroundColor: colors.accent + '20' }]}
                                                         >
                                                             <View style={styles.tileHeader}>
@@ -1239,7 +1243,7 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, on
                                                     return <LightTile key={eid} light={e} toggleLight={api.toggleLight} setBrightness={api.setLightBrightness} width={cgWidth} onLongPress={setSelectedLight} theme={theme} />;
                                                 }
                                                 if (dtype === 'cover') {
-                                                    return <CoverTile key={eid} cover={e} openCover={api.openCover} closeCover={api.closeCover} stopCover={api.stopCover} pressButton={api.pressButton} onPress={onSelectCover} width={cgWidth} theme={theme} />;
+                                                    return <CoverTile key={eid} cover={e} openCover={api.openCover} closeCover={api.closeCover} stopCover={api.stopCover} pressButton={api.pressButton} onPress={onSelectCover} onLongPress={onShowStats} width={cgWidth} theme={theme} />;
                                                 }
                                                 if (dtype === 'scene') {
                                                     const isScript = eid.startsWith('script.');
@@ -1259,6 +1263,7 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, on
                                                         <View key={eid} style={[styles.tile, { width: cgWidth, backgroundColor: colors.card, borderColor: colors.border }]}>
                                                             <Pressable
                                                                 onPress={() => api.callService(domain, isOn ? 'turn_off' : 'turn_on', eid)}
+                                                                onLongPress={() => onShowStats && onShowStats(e)}
                                                                 style={[styles.tileContent, isOn && { backgroundColor: colors.accent + '20' }]}
                                                             >
                                                                 <View style={styles.tileHeader}>
@@ -1283,7 +1288,7 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, on
                                                     return <CameraTile key={eid} camera={e} width="100%" />;
                                                 }
                                                 if (dtype === 'helper') {
-                                                    return <HelperTile key={eid} entity={e} api={api} width={cgWidth} theme={theme} />;
+                                                    return <HelperTile key={eid} entity={e} api={api} width={cgWidth} theme={theme} onLongPress={onShowStats} />;
                                                 }
                                                 // Fallback: generic tile
                                                 return (
@@ -1311,6 +1316,7 @@ const RoomDetailModal = memo(({ room, visible, onClose, api, sleepTimerState, on
                             light={selectedLight}
                             onClose={() => setSelectedLight(null)}
                             callService={api.callService}
+                            onShowStats={(preventGlobal) => onShowStats && onShowStats(selectedLight, preventGlobal)}
                         />
 
                         <View style={{ height: 40 }} />
@@ -1357,11 +1363,42 @@ export default function Rooms() {
         callService,
         setClimateTemperature, // Assuming availability
         activateScene,
-        connect
+        connect,
+        fetchEntityHistory
     } = useHomeAssistant();
 
     const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
     const [selectedCoverForModal, setSelectedCoverForModal] = useState<EntityState | null>(null);
+
+    const [statsModalData, setStatsModalData] = useState<{ visible: boolean; entityName: string; history: any[]; error?: string } | null>(null);
+
+    const handleLongPress = async (entity: any, preventGlobalState = false) => {
+        if (!entity || !entity.entity_id) return null;
+        
+        try {
+            const { data: history, error } = await fetchEntityHistory(entity.entity_id);
+            
+            const result = {
+                visible: true,
+                entityName: entity.attributes?.friendly_name || entity.entity_id,
+                history: history || [],
+                error: error ? `Daten konnten nicht geladen werden (${error}). Testest du im Web-Browser? Dann blockiert Home Assistant wahrscheinlich den Zugriff aus Sicherheitsgründen (CORS).` : undefined
+            };
+
+            if (!preventGlobalState) setStatsModalData(result);
+            return result;
+        } catch (e) {
+            console.error("Historie konnte nicht geladen werden.", e);
+            const result = {
+                visible: true,
+                entityName: entity.attributes?.friendly_name || entity.entity_id,
+                history: [],
+                error: "Historie konnte nicht geladen werden."
+            };
+            if (!preventGlobalState) setStatsModalData(result);
+            return result;
+        }
+    };
 
     // Dynamic Rooms State
     const [customRooms, setCustomRooms] = useState<any[]>([]);
@@ -2328,6 +2365,7 @@ export default function Rooms() {
                 onSelectCover={setSelectedCoverForModal}
                 userRole={userRole}
                 allEntities={entities}
+                onShowStats={handleLongPress}
             />
 
             <ShutterControlModal
@@ -2339,6 +2377,16 @@ export default function Rooms() {
                 stopCover={stopCover}
                 pressButton={pressButton}
             />
+
+            {statsModalData && (
+                <StatisticsModal
+                    visible={statsModalData.visible}
+                    onClose={() => setStatsModalData(prev => prev ? { ...prev, visible: false } : null)}
+                    entityName={statsModalData.entityName}
+                    history={statsModalData.history}
+                    error={statsModalData.error}
+                />
+            )}
         </SafeAreaView>
     );
 }
