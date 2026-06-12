@@ -8,13 +8,15 @@ import {
     X, Plus, Search, Clock, Users, Trash2, Edit3, Check, ChevronRight,
     BookOpen, ChefHat, ArrowLeft, Heart,
     Camera, Tag, Bookmark, Share2, Flame, Dices,
-    ShoppingCart, Star, ChevronLeft, FileJson, ArrowRight,
+    ShoppingCart, Star, ChevronLeft, FileJson, ArrowRight, FileText, Calendar,
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as DocumentPicker from 'expo-document-picker';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 import { activateKeepAwakeAsync, deactivateKeepAwake, useKeepAwake } from 'expo-keep-awake';
 
 const CookingModeKeepAwake = () => {
@@ -68,6 +70,8 @@ interface Recipe {
     difficulty: string | null;
     tags: string[] | null;
     notes: string | null;
+    tips: string | null;
+    hints: string | null;
     created_at: string;
 }
 
@@ -135,7 +139,7 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
     const [customCategories, setCustomCategories] = useState<string[]>([]);
 
     // Cooking mode state
-    const [cookingPhase, setCookingPhase] = useState<'mise_en_place' | 'steps' | 'done'>('mise_en_place');
+    const [cookingPhase, setCookingPhase] = useState<'mise_en_place' | 'hints' | 'steps' | 'tips' | 'done'>('mise_en_place');
     const [activeTimers, setActiveTimers] = useState<Record<number, { endTime: number, duration: number, id: string }>>({});
     const [_timerTick, setTimerTick] = useState(0);
 
@@ -154,6 +158,8 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
     const [formDifficulty, setFormDifficulty] = useState('medium');
     const [formTags, setFormTags] = useState<string[]>([]);
     const [formNotes, setFormNotes] = useState('');
+    const [formTips, setFormTips] = useState('');
+    const [formHints, setFormHints] = useState('');
     const [isSaving, setIsSaving] = useState(false);
     const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null);
 
@@ -411,7 +417,7 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
         setFormInstructions([]); setFormServings(''); setFormPrepTime('');
         setFormCookTime(''); setFormRestTime(''); setFormCategories(['dinner']); setFormImageUrl('');
         setFormSourceUrl(''); setFormDifficulty('medium'); setFormTags([]);
-        setFormNotes(''); setEditingRecipe(null); setNewCategory('');
+        setFormNotes(''); setFormTips(''); setFormHints(''); setEditingRecipe(null); setNewCategory('');
     };
 
     const openCreateOwn = () => { resetForm(); setShowNewPicker(false); setViewMode('create_own'); };
@@ -460,7 +466,7 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
         setFormRestTime(recipe.rest_time ? String(recipe.rest_time) : '');
         setFormCategories(getRecipeCategories(recipe)); setFormImageUrl(recipe.image_url || '');
         setFormSourceUrl(recipe.source_url || ''); setFormDifficulty(recipe.difficulty || 'medium');
-        setFormTags(recipe.tags || []); setFormNotes(recipe.notes || '');
+        setFormTags(recipe.tags || []); setFormNotes(recipe.notes || ''); setFormTips(recipe.tips || ''); setFormHints(recipe.hints || '');
         setViewMode('create_own');
     };
 
@@ -514,7 +520,7 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
                 image_url: formImageUrl || null,
                 source_url: formSourceUrl.trim() || null,
                 added_by_name: members[user?.id || ''] || null,
-                difficulty: formDifficulty, tags: formTags, notes: formNotes.trim() || null,
+                difficulty: formDifficulty, tags: formTags, notes: formNotes.trim() || null, tips: formTips.trim() || null, hints: formHints.trim() || null,
             };
             if (editingRecipe) {
                 const { error } = await supabase.from('family_recipes').update(payload).eq('id', editingRecipe.id);
@@ -566,10 +572,20 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
             setIsLoading(true);
             const fileUri = result.assets[0].uri;
 
-            // On Android we might need to use standard fetch or expo-file-system to read the content
-            const fileContent = await FileSystem.readAsStringAsync(fileUri, {
-                encoding: 'utf8'
-            });
+            let fileContent = '';
+            if (Platform.OS === 'web') {
+                const file = (result.assets[0] as any).file;
+                if (file) {
+                    fileContent = await file.text();
+                } else {
+                    const response = await fetch(fileUri);
+                    fileContent = await response.text();
+                }
+            } else {
+                fileContent = await FileSystem.readAsStringAsync(fileUri, {
+                    encoding: 'utf8'
+                });
+            }
 
             const parsedData = JSON.parse(fileContent);
             const recipesToImport = Array.isArray(parsedData) ? parsedData : [parsedData];
@@ -600,6 +616,8 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
                     difficulty: r.difficulty || 'medium',
                     tags: Array.isArray(r.tags) ? r.tags : [],
                     notes: r.notes || null,
+                    tips: r.tips || null,
+                    hints: r.hints || null,
                 };
 
                 const { error } = await supabase.from('family_recipes').insert(payload);
@@ -648,6 +666,101 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
         const text = `${recipe.title}\n\nZutaten:\n${recipe.ingredients}\n\nZubereitung:\n${recipe.instructions}`;
         const { Share } = require('react-native');
         Share.share({ message: text, title: recipe.title });
+    };
+
+    const handleExportJson = async (recipe: Recipe) => {
+        try {
+            const jsonStr = JSON.stringify(recipe, null, 2);
+            const fileName = `${recipe.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.json`;
+
+            if (Platform.OS === 'web') {
+                const blob = new Blob([jsonStr], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = fileName;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            } else {
+                const fileUri = `${FileSystem.documentDirectory}${fileName}`;
+                await FileSystem.writeAsStringAsync(fileUri, jsonStr, { encoding: FileSystem.EncodingType.UTF8 });
+                await Sharing.shareAsync(fileUri, { UTI: 'public.json', mimeType: 'application/json' });
+            }
+        } catch (e: any) {
+            showAlert('Fehler', 'Konnte JSON nicht exportieren: ' + e.message);
+        }
+    };
+
+    const handleExportPdf = async (recipe: Recipe) => {
+        try {
+            let ingredientLines: any[] = [];
+            try {
+                ingredientLines = JSON.parse(recipe.ingredients);
+            } catch {
+                ingredientLines = recipe.ingredients.split('\n').filter(Boolean).map(line => ({ amount: '', unit: '', name: line }));
+            }
+            
+            let instructionLines: any[] = [];
+            try {
+                const parsed = JSON.parse(recipe.instructions);
+                instructionLines = Array.isArray(parsed) ? parsed : [];
+            } catch {
+                instructionLines = recipe.instructions.split('\n').filter(Boolean).map((i: string) => ({ text: i }));
+            }
+
+            const html = `
+            <html>
+                <head>
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
+                    <style>
+                        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 20px; color: #333; }
+                        h1 { color: #1e3a8a; }
+                        h2 { border-bottom: 2px solid #e5e7eb; padding-bottom: 8px; color: #4b5563; }
+                        .meta { color: #6b7280; font-style: italic; margin-bottom: 20px; }
+                        ul, ol { margin-bottom: 20px; }
+                        li { margin-bottom: 8px; line-height: 1.5; }
+                        img { max-width: 100%; height: auto; border-radius: 8px; margin-bottom: 20px; max-height: 400px; object-fit: cover; }
+                    </style>
+                </head>
+                <body>
+                    ${recipe.image_url ? `<img src="${recipe.image_url}" />` : ''}
+                    <h1>${recipe.title}</h1>
+                    <p class="meta">
+                        ${recipe.servings ? `Portionen: ${recipe.servings} &middot; ` : ''}
+                        ${recipe.prep_time ? `Vorbereitung: ${recipe.prep_time} Min &middot; ` : ''}
+                        ${recipe.cook_time ? `Kochzeit: ${recipe.cook_time} Min` : ''}
+                    </p>
+                    ${recipe.description ? `<p>${recipe.description}</p>` : ''}
+                    <h2>Zutaten</h2>
+                    <ul>
+                        ${ingredientLines.map((ing: any) => `<li><strong>${ing.amount || ''} ${ing.unit || ''}</strong> ${ing.name} ${ing.notes ? `<em>(${ing.notes})</em>` : ''}</li>`).join('')}
+                    </ul>
+                    <h2>Zubereitung</h2>
+                    <ol>
+                        ${instructionLines.map((inst: any) => {
+                            const text = typeof inst === 'string' ? inst : inst.text;
+                            const time = inst.time ? ` <strong>(${inst.time})</strong>` : '';
+                            return `<li>${text}${time}</li>`;
+                        }).join('')}
+                    </ol>
+                    ${recipe.hints ? `<h2>Wichtige Hinweise</h2><p>${recipe.hints}</p>` : ''}
+                    ${recipe.tips ? `<h2>Tipps</h2><p>${recipe.tips}</p>` : ''}
+                    ${recipe.notes ? `<h2>Notizen</h2><p>${recipe.notes}</p>` : ''}
+                </body>
+            </html>
+            `;
+            
+            if (Platform.OS === 'web') {
+                await Print.printAsync({ html });
+            } else {
+                const { uri } = await Print.printToFileAsync({ html });
+                await Sharing.shareAsync(uri, { UTI: 'com.adobe.pdf', mimeType: 'application/pdf' });
+            }
+        } catch (e: any) {
+            showAlert('Fehler', 'Konnte PDF nicht exportieren: ' + e.message);
+        }
     };
 
     const handleAssignCategory = async (recipe: Recipe, categoryKey: string) => {
@@ -824,7 +937,15 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
                                         {totalTime > 0 && (
                                             <View style={s.cardMeta}>
                                                 <Clock size={11} color="rgba(255,255,255,0.7)" />
-                                                <Text style={s.cardMetaText}>{totalTime} Min</Text>
+                                                <Text style={s.cardMetaText}>
+                                                    {totalTime <= 120 ? `${totalTime} Min` : (
+                                                        [
+                                                            Math.floor(totalTime / 1440) > 0 ? `${Math.floor(totalTime / 1440)}T` : null,
+                                                            Math.floor((totalTime % 1440) / 60) > 0 ? `${Math.floor((totalTime % 1440) / 60)}Std` : null,
+                                                            totalTime % 60 > 0 ? `${totalTime % 60}Min` : null
+                                                        ].filter(Boolean).join(' ')
+                                                    )}
+                                                </Text>
                                             </View>
                                         )}
                                     </LinearGradient>
@@ -1067,6 +1188,26 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
                         </>
                     )}
 
+                    {/* Hints */}
+                    {r.hints && (
+                        <>
+                            <Text style={[s.sectionLabel, { color: colors.subtext }]}>WICHTIGE HINWEISE</Text>
+                            <View style={[s.section, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                                <Text style={{ color: colors.text, fontSize: 14, lineHeight: 20 }}>{r.hints}</Text>
+                            </View>
+                        </>
+                    )}
+
+                    {/* Tips */}
+                    {r.tips && (
+                        <>
+                            <Text style={[s.sectionLabel, { color: colors.subtext }]}>TIPPS</Text>
+                            <View style={[s.section, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                                <Text style={{ color: colors.text, fontSize: 14, lineHeight: 20 }}>{r.tips}</Text>
+                            </View>
+                        </>
+                    )}
+
                     {/* Notes */}
                     {r.notes && (
                         <>
@@ -1078,12 +1219,18 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
                     )}
 
                     {/* Action buttons */}
-                    <View style={s.detailActions}>
+                    <View style={[s.detailActions, { flexWrap: 'wrap' }]}>
                         <Pressable style={[s.actionBtn, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => handleShare(r)}>
                             <Share2 size={16} color={colors.text} /><Text style={[s.actionBtnText, { color: colors.text }]}>Teilen</Text>
                         </Pressable>
                         <Pressable style={[s.actionBtn, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => handleAddToShoppingList(r)}>
                             <ShoppingCart size={16} color={colors.text} /><Text style={[s.actionBtnText, { color: colors.text }]}>Einkaufsliste</Text>
+                        </Pressable>
+                        <Pressable style={[s.actionBtn, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => handleExportPdf(r)}>
+                            <FileText size={16} color={colors.text} /><Text style={[s.actionBtnText, { color: colors.text }]}>PDF</Text>
+                        </Pressable>
+                        <Pressable style={[s.actionBtn, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => handleExportJson(r)}>
+                            <FileJson size={16} color={colors.text} /><Text style={[s.actionBtnText, { color: colors.text }]}>JSON</Text>
                         </Pressable>
                     </View>
 
@@ -1096,10 +1243,10 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
                 {/* Bottom bar */}
                 <View style={s.bottomBar}>
                     <Pressable style={[s.bottomBtn, { backgroundColor: colors.accent, flex: 1 }]} onPress={() => handlePlanRecipe(r)}>
-                        <ChefHat size={18} color="#fff" /><Text style={s.bottomBtnText}>Planen</Text>
+                        <Calendar size={18} color="#fff" /><Text style={s.bottomBtnText}>Planen</Text>
                     </Pressable>
                     {instructionLines.length > 0 && (
-                        <Pressable style={[s.bottomBtn, { backgroundColor: '#22C55E' }]} onPress={() => { setCookingPhase('mise_en_place'); setCookingStep(0); setCheckedIngredients(new Set()); setActiveTimers({}); setViewMode('cooking'); }}>
+                        <Pressable style={[s.bottomBtn, { backgroundColor: '#22C55E', flex: 2 }]} onPress={() => { setCookingPhase('mise_en_place'); setCookingStep(0); setCheckedIngredients(new Set()); setActiveTimers({}); setViewMode('cooking'); }}>
                             <ChefHat size={18} color="#fff" /><Text style={s.bottomBtnText}>Kochen</Text>
                         </Pressable>
                     )}
@@ -1438,12 +1585,30 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
                     ))}
                 </ScrollView>
 
+                {/* Hints */}
+                <Text style={[s.formSectionTitle, { color: colors.text }]}>Wichtige Hinweise</Text>
+                <View style={[s.formCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                    <TextInput style={[s.formTextArea, { color: colors.text }]}
+                        value={formHints} onChangeText={setFormHints}
+                        placeholder="Zwingend zu beachten (z.B. Vorsicht scharf, gut durchbraten)…"
+                        placeholderTextColor={colors.subtext} multiline />
+                </View>
+
+                {/* Tips */}
+                <Text style={[s.formSectionTitle, { color: colors.text }]}>{isMovieBoard ? 'Tipps & Film-Empfehlung' : 'Tipps'}</Text>
+                <View style={[s.formCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                    <TextInput style={[s.formTextArea, { color: colors.text }]}
+                        value={formTips} onChangeText={setFormTips}
+                        placeholder={isMovieBoard ? "z.B. Passt perfekt zu: Avengers Marathon 🍿\nTipp: Board 15 Min vorher aufbauen" : "Besondere Tipps oder Alternativen…"}
+                        placeholderTextColor={colors.subtext} multiline />
+                </View>
+
                 {/* Notes */}
-                <Text style={[s.formSectionTitle, { color: colors.text }]}>{isMovieBoard ? 'Tipps & Film-Empfehlung' : 'Notizen'}</Text>
+                <Text style={[s.formSectionTitle, { color: colors.text }]}>Notizen</Text>
                 <View style={[s.formCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                     <TextInput style={[s.formTextArea, { color: colors.text }]}
                         value={formNotes} onChangeText={setFormNotes}
-                        placeholder={isMovieBoard ? "z.B. Passt perfekt zu: Avengers Marathon 🍿\nTipp: Board 15 Min vorher aufbauen" : "Tipps, Variationen oder persönliche Notizen…"}
+                        placeholder="Persönliche Notizen, Variationen…"
                         placeholderTextColor={colors.subtext} multiline />
                 </View>
 
@@ -1538,8 +1703,38 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
                     </ScrollView>
                     <View style={s.cookingNav}>
                         <Pressable style={[s.cookingNavBtn, { backgroundColor: colors.accent, borderColor: colors.accent }]}
-                            onPress={() => setCookingPhase('steps')}>
+                            onPress={() => setCookingPhase(r.hints ? 'hints' : 'steps')}>
                             <Text style={{ color: '#fff', fontSize: 16, fontWeight: '800' }}>Loskochen</Text><ArrowRight size={20} color="#fff" />
+                        </Pressable>
+                    </View>
+                </View>
+            );
+        }
+
+        if (cookingPhase === 'hints') {
+            return (
+                <View style={[s.cookingContainer, { backgroundColor: colors.background }]}>
+                    <CookingModeKeepAwake />
+                    <View style={s.cookingHeader}>
+                        <Pressable onPress={() => setCookingPhase('mise_en_place')}><ArrowLeft size={24} color={colors.text} /></Pressable>
+                        <Text style={[s.cookingTitle, { color: colors.text }]}>Wichtige Hinweise</Text>
+                        <View style={{ width: 24 }} />
+                    </View>
+                    <ScrollView contentContainerStyle={{ padding: 20, justifyContent: 'center', flexGrow: 1 }}>
+                        <View style={{ alignItems: 'center', marginBottom: 24 }}>
+                            <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: '#EF444420', justifyContent: 'center', alignItems: 'center', marginBottom: 16 }}>
+                                <Text style={{ fontSize: 32 }}>⚠️</Text>
+                            </View>
+                            <Text style={{ fontSize: 24, fontWeight: '800', color: colors.text, textAlign: 'center' }}>Bitte beachten</Text>
+                        </View>
+                        <View style={[s.section, { backgroundColor: colors.card, borderColor: '#EF444450', borderWidth: 1 }]}>
+                            <Text style={{ color: colors.text, fontSize: 18, lineHeight: 28, textAlign: 'center' }}>{r.hints}</Text>
+                        </View>
+                    </ScrollView>
+                    <View style={s.cookingNav}>
+                        <Pressable style={[s.cookingNavBtn, { backgroundColor: colors.accent, borderColor: colors.accent, width: '100%' }]}
+                            onPress={() => setCookingPhase('steps')}>
+                            <Text style={{ color: '#fff', fontSize: 16, fontWeight: '800' }}>Verstanden, weiter</Text><ArrowRight size={20} color="#fff" />
                         </Pressable>
                     </View>
                 </View>
@@ -1609,14 +1804,51 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
                                 if (cookingStep < instructionLines.length - 1) {
                                     setCookingStep(cookingStep + 1);
                                 } else {
-                                    setCookingPhase('done');
-                                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                                    if (r.tips) {
+                                        setCookingPhase('tips');
+                                    } else {
+                                        setCookingPhase('done');
+                                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                                    }
                                 }
                             }}>
                             <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>
                                 {cookingStep === instructionLines.length - 1 ? 'Abschließen' : 'Weiter'}
                             </Text>
                             {cookingStep === instructionLines.length - 1 ? <Check size={20} color="#fff" /> : <ArrowRight size={20} color="#fff" />}
+                        </Pressable>
+                    </View>
+                </View>
+            );
+        }
+
+        if (cookingPhase === 'tips') {
+            return (
+                <View style={[s.cookingContainer, { backgroundColor: colors.background }]}>
+                    <CookingModeKeepAwake />
+                    <View style={s.cookingHeader}>
+                        <Pressable onPress={() => setCookingPhase('steps')}><ArrowLeft size={24} color={colors.text} /></Pressable>
+                        <Text style={[s.cookingTitle, { color: colors.text }]}>Tipps zum Rezept</Text>
+                        <View style={{ width: 24 }} />
+                    </View>
+                    <ScrollView contentContainerStyle={{ padding: 20, justifyContent: 'center', flexGrow: 1 }}>
+                        <View style={{ alignItems: 'center', marginBottom: 24 }}>
+                            <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: '#3B82F620', justifyContent: 'center', alignItems: 'center', marginBottom: 16 }}>
+                                <Text style={{ fontSize: 32 }}>💡</Text>
+                            </View>
+                            <Text style={{ fontSize: 24, fontWeight: '800', color: colors.text, textAlign: 'center' }}>Empfehlungen</Text>
+                        </View>
+                        <View style={[s.section, { backgroundColor: colors.card, borderColor: '#3B82F650', borderWidth: 1 }]}>
+                            <Text style={{ color: colors.text, fontSize: 18, lineHeight: 28, textAlign: 'center' }}>{r.tips}</Text>
+                        </View>
+                    </ScrollView>
+                    <View style={s.cookingNav}>
+                        <Pressable style={[s.cookingNavBtn, { backgroundColor: colors.accent, borderColor: colors.accent, width: '100%' }]}
+                            onPress={() => {
+                                setCookingPhase('done');
+                                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                            }}>
+                            <Text style={{ color: '#fff', fontSize: 16, fontWeight: '800' }}>Fertig</Text><Check size={20} color="#fff" />
                         </Pressable>
                     </View>
                 </View>
