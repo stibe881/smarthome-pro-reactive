@@ -2,7 +2,7 @@
   "expo": {
     "name": "HomePilot Pro",
     "slug": "mobile-app",
-    "version": "1.5.1",
+    "version": "1.5.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -16,7 +16,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.stibe88.mobileapp",
       "appleTeamId": "QF59FHQ44R",
-      "buildNumber": "140",
+      "buildNumber": "145",
       "entitlements": {
         "com.apple.security.application-groups": [
           "group.com.stibe88.mobileapp",
@@ -78,6 +78,13 @@
             "./assets/sounds/doorbell.wav",
             "./assets/sounds/chime.wav"
           ]
+        }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Smarthome Pro benötigt Zugriff auf dein Mikrofon für die Sprachsteuerung beim Kochen.",
+          "speechRecognitionPermission": "Smarthome Pro benötigt Spracherkennung für die Sprachsteuerung beim Kochen."
         }
       ],
       "expo-router",

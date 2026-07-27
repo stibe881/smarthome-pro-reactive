@@ -7,7 +7,7 @@ import {
 import {
     X, Plus, Search, Clock, Users, Trash2, Edit3, Check, ChevronRight,
     BookOpen, ChefHat, ArrowLeft, Heart,
-    Camera, Tag, Bookmark, Share2, Flame, Dices,
+    Camera, Tag, Bookmark, Share2, Flame, Dices, Mic, MicOff,
     ShoppingCart, Star, ChevronLeft, FileJson, ArrowRight, FileText, Calendar,
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -17,7 +17,27 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import * as Notifications from 'expo-notifications';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+let ExpoSpeechRecognitionModule: any = null;
+let useSpeechRecognitionEvent: any = (event: string, callback: Function) => {};
+try {
+    const speech = require('expo-speech-recognition');
+    ExpoSpeechRecognitionModule = speech.ExpoSpeechRecognitionModule;
+    useSpeechRecognitionEvent = speech.useSpeechRecognitionEvent;
+} catch (e) {
+    console.warn('Speech recognition module not found');
+}
+const isSpeechSupported = !!ExpoSpeechRecognitionModule;
 import { activateKeepAwakeAsync, deactivateKeepAwake, useKeepAwake } from 'expo-keep-awake';
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 
 const CookingModeKeepAwake = () => {
     useKeepAwake();
@@ -86,9 +106,14 @@ const RECIPE_CATEGORIES = [
     { key: 'dinner', label: 'Abendessen', emoji: '🥘' },
     { key: 'lunch', label: 'Mittagessen', emoji: '🍝' },
     { key: 'breakfast', label: 'Frühstück', emoji: '🥐' },
+    { key: 'soup', label: 'Suppe/Eintopf', emoji: '🥣' },
+    { key: 'bbq', label: 'BBQ', emoji: '🥩' },
     { key: 'snack', label: 'Snacks', emoji: '🍪' },
     { key: 'dessert', label: 'Dessert', emoji: '🍰' },
     { key: 'drink', label: 'Getränke', emoji: '🥤' },
+    { key: 'slushy', label: 'Slushy-Maker', emoji: '🍧' },
+    { key: 'glaze', label: 'Glaze', emoji: '🍯' },
+    { key: 'dough', label: 'Teig', emoji: '🥖' },
     { key: 'movieboard', label: 'Movie Food Board', emoji: '🎬' },
     { key: 'other', label: 'Sonstiges', emoji: '🍴' },
 ];
@@ -142,6 +167,16 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
     const [cookingPhase, setCookingPhase] = useState<'mise_en_place' | 'hints' | 'steps' | 'tips' | 'done'>('mise_en_place');
     const [activeTimers, setActiveTimers] = useState<Record<number, { endTime: number, duration: number, id: string }>>({});
     const [_timerTick, setTimerTick] = useState(0);
+    const [isListening, setIsListening] = useState(false);
+    const cookingStateRef = useRef({ phase: cookingPhase, step: cookingStep, recipe: selectedRecipe });
+
+    useEffect(() => {
+        cookingStateRef.current = { phase: cookingPhase, step: cookingStep, recipe: selectedRecipe };
+    }, [cookingPhase, cookingStep, selectedRecipe]);
+
+    useEffect(() => {
+        Notifications.requestPermissionsAsync();
+    }, []);
 
     // Form state
     const [formTitle, setFormTitle] = useState('');
@@ -227,12 +262,44 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
     }, [householdId]);
 
     useEffect(() => {
-        if (visible) {
-            loadRecipes(); loadMembers();
-            setViewMode('list'); setSelectedRecipe(null); setShowNewPicker(false);
-            Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
-        } else { fadeAnim.setValue(0); }
+        const init = async () => {
+            if (visible) {
+                loadRecipes(); loadMembers();
+                const savedStateStr = await AsyncStorage.getItem('@cooking_state');
+                if (savedStateStr) {
+                    try {
+                        const savedState = JSON.parse(savedStateStr);
+                        setSelectedRecipe(savedState.recipe);
+                        setCookingPhase(savedState.cookingPhase);
+                        setCookingStep(savedState.cookingStep);
+                        setCheckedIngredients(new Set(savedState.checkedIngredients));
+                        setActiveTimers(savedState.activeTimers || {});
+                        setPortionMultiplier(savedState.portionMultiplier || 1);
+                        setViewMode('cooking');
+                    } catch(e) {}
+                } else {
+                    setViewMode('list'); setSelectedRecipe(null); setShowNewPicker(false);
+                }
+                Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
+            } else { fadeAnim.setValue(0); }
+        };
+        init();
     }, [visible, loadRecipes, loadMembers]);
+
+    useEffect(() => {
+        if (viewMode === 'cooking' && selectedRecipe) {
+            AsyncStorage.setItem('@cooking_state', JSON.stringify({
+                recipe: selectedRecipe,
+                cookingPhase,
+                cookingStep,
+                checkedIngredients: Array.from(checkedIngredients),
+                activeTimers,
+                portionMultiplier
+            })).catch(() => {});
+        } else if (viewMode === 'list' || viewMode === 'detail') {
+            AsyncStorage.removeItem('@cooking_state').catch(() => {});
+        }
+    }, [viewMode, selectedRecipe, cookingPhase, cookingStep, checkedIngredients, activeTimers, portionMultiplier]);
 
 
 
@@ -262,14 +329,30 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
         });
     }, [_timerTick, activeTimers, viewMode]);
 
-    const startTimer = (stepIdx: number, minutesStr: string) => {
+    const startTimer = async (stepIdx: number, minutesStr: string) => {
         const mins = parseFloat(minutesStr.replace(',', '.'));
         if (isNaN(mins)) return;
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         const durationMs = mins * 60 * 1000;
+        const id = Date.now().toString();
+        
+        try {
+            await Notifications.scheduleNotificationAsync({
+                content: {
+                    title: '⏱️ Timer abgelaufen!',
+                    body: 'Ein Zubereitungsschritt deines Rezepts ist fertig.',
+                    sound: true,
+                },
+                trigger: { seconds: mins * 60 },
+                identifier: id,
+            });
+        } catch (e) {
+            console.error('Failed to schedule notification', e);
+        }
+
         setActiveTimers(prev => ({
             ...prev,
-            [stepIdx]: { endTime: Date.now() + durationMs, duration: durationMs, id: Date.now().toString() }
+            [stepIdx]: { endTime: Date.now() + durationMs, duration: durationMs, id }
         }));
     };
 
@@ -277,14 +360,94 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         setActiveTimers(prev => {
             const next = { ...prev };
+            const timer = next[stepIdx];
+            if (timer && timer.id) {
+                Notifications.cancelScheduledNotificationAsync(timer.id).catch(() => {});
+            }
             delete next[stepIdx];
             return next;
         });
     };
 
+    useSpeechRecognitionEvent('result', (event) => {
+        const text = event.results[0]?.transcript?.toLowerCase() || '';
+        const { phase, step, recipe } = cookingStateRef.current;
+        if (!recipe) return;
+        
+        let instructionLines: any[] = [];
+        try {
+            const parsed = JSON.parse(recipe.instructions);
+            if (Array.isArray(parsed)) instructionLines = parsed;
+        } catch { instructionLines = recipe.instructions.split('\n').filter(Boolean); }
+
+        if (text.includes('weiter') || text.includes('nächster schritt')) {
+            if (phase === 'mise_en_place') {
+                setCookingPhase(recipe.hints ? 'hints' : 'steps');
+            } else if (phase === 'hints') {
+                setCookingPhase('steps');
+            } else if (phase === 'steps') {
+                if (step < instructionLines.length - 1) {
+                    setCookingStep(step + 1);
+                } else {
+                    setCookingPhase(recipe.tips ? 'tips' : 'done');
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                }
+            } else if (phase === 'tips') {
+                setCookingPhase('done');
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            }
+        } else if (text.includes('zurück') || text.includes('vorheriger schritt')) {
+            if (phase === 'tips') {
+                setCookingPhase('steps');
+            } else if (phase === 'steps') {
+                if (step > 0) {
+                    setCookingStep(step - 1);
+                } else {
+                    setCookingPhase(recipe.hints ? 'hints' : 'mise_en_place');
+                }
+            } else if (phase === 'hints') {
+                setCookingPhase('mise_en_place');
+            }
+        }
+    });
+
+    useSpeechRecognitionEvent('end', () => {
+        if (!isSpeechSupported) return;
+        if (isListening && viewMode === 'cooking') {
+            ExpoSpeechRecognitionModule.start({ lang: 'de-DE', continuous: false, interimResults: false }).catch(() => setIsListening(false));
+        } else {
+            setIsListening(false);
+        }
+    });
+
+    const toggleListening = async () => {
+        if (!isSpeechSupported) {
+            showAlert('Fehler', 'Sprachsteuerung wird auf diesem Gerät nicht unterstützt.');
+            return;
+        }
+        if (isListening) {
+            ExpoSpeechRecognitionModule.stop();
+            setIsListening(false);
+        } else {
+            const { status } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+            if (status === 'granted') {
+                setIsListening(true);
+                ExpoSpeechRecognitionModule.start({ lang: 'de-DE', continuous: false, interimResults: false }).catch((e: any) => {
+                    console.error('Speech error', e);
+                    setIsListening(false);
+                });
+            } else {
+                showAlert('Fehler', 'Mikrofon-Zugriff wurde verweigert.');
+            }
+        }
+    };
+
     const getRecipeCategories = (r: Recipe): string[] => {
-        if (r.categories && Array.isArray(r.categories) && r.categories.length > 0) return r.categories;
-        return r.category ? [r.category] : ['other'];
+        const rawCats = (r.categories && Array.isArray(r.categories) && r.categories.length > 0) ? r.categories : (r.category ? [r.category] : ['other']);
+        return rawCats.map(c => {
+            const found = RECIPE_CATEGORIES.find(cat => cat.key === c?.toLowerCase() || cat.label === c || cat.key === c);
+            return found ? found.key : c;
+        });
     };
 
     const filtered = recipes.filter(r => {
@@ -826,7 +989,7 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
     };
 
     const getDifficultyInfo = (d: string | null) => DIFFICULTY_LEVELS.find(l => l.key === d) || DIFFICULTY_LEVELS[1];
-    const getCategoryInfo = (c: string) => RECIPE_CATEGORIES.find(cat => cat.key === c) || { key: c || 'other', label: c || 'Sonstiges', emoji: '🏷️' };
+    const getCategoryInfo = (c: string) => RECIPE_CATEGORIES.find(cat => cat.key === c?.toLowerCase() || cat.label === c || cat.key === c) || { key: c || 'other', label: c || 'Sonstiges', emoji: '🏷️' };
     const getTotalTime = (r: Recipe) => (r.prep_time || 0) + (r.cook_time || 0) + (r.rest_time || 0);
 
     const scaleIngredient = (line: string, mult: number) => {
@@ -1032,7 +1195,8 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
             instructionLines = r.instructions.split('\n').filter(Boolean).map((i: string) => ({ text: i }));
         }
 
-        const adjServings = Math.round((r.servings || 4) * portionMultiplier);
+        const parsedServings = parseInt(String(r.servings)) || 4;
+        const adjServings = Math.round(parsedServings * portionMultiplier);
 
         return (
             <View style={{ flex: 1 }}>
@@ -1132,7 +1296,7 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
                                     // Scale parsing
                                     let scaledAmount = ing.amount;
                                     if (ing.amount && portionMultiplier !== 1) {
-                                        const num = parseFloat(ing.amount.replace(',', '.'));
+                                        const num = parseFloat(String(ing.amount).replace(',', '.'));
                                         if (!isNaN(num)) {
                                             const scaled = num * portionMultiplier;
                                             scaledAmount = scaled % 1 === 0 ? String(scaled) : scaled.toFixed(1).replace('.', ',');
@@ -1657,7 +1821,8 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
     const renderCooking = () => {
         if (!selectedRecipe) return null;
         const r = selectedRecipe;
-        const adjServings = Math.round((r.servings || 4) * portionMultiplier);
+        const parsedServings = parseInt(String(r.servings)) || 4;
+        const adjServings = Math.round(parsedServings * portionMultiplier);
 
         let ingredientLines: any[] = [];
         try { ingredientLines = JSON.parse(r.ingredients); }
@@ -1668,6 +1833,35 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
             const parsed = JSON.parse(r.instructions);
             if (Array.isArray(parsed)) instructionLines = parsed.map((i: any) => typeof i === 'string' ? { text: i } : { text: i.text, time: i.time });
         } catch { instructionLines = r.instructions.split('\n').filter(Boolean).map((i: string) => ({ text: i })); }
+
+        const highlightIngredients = (text: string, ingredients: any[], multiplier: number) => {
+            if (!text) return text;
+            let res = text;
+            const sorted = [...ingredients].sort((a, b) => (b.name || '').length - (a.name || '').length);
+            
+            sorted.forEach(ing => {
+                if (!ing.name || ing.name.length < 3) return;
+                
+                let scaledAmount = ing.amount;
+                if (ing.amount && multiplier !== 1) {
+                    const num = parseFloat(String(ing.amount).replace(',', '.'));
+                    if (!isNaN(num)) {
+                        const scaled = num * multiplier;
+                        scaledAmount = scaled % 1 === 0 ? String(scaled) : scaled.toFixed(1).replace('.', ',');
+                    }
+                }
+                
+                if (scaledAmount || ing.unit) {
+                    const amountStr = [scaledAmount, ing.unit].filter(Boolean).join(' ').trim();
+                    if (amountStr) {
+                        const escapedName = ing.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                        const regex = new RegExp(`(^|[^a-zäöüßA-ZÄÖÜß])(${escapedName})([^a-zäöüßA-ZÄÖÜß]|$)`, 'gi');
+                        res = res.replace(regex, `$1$2 (${amountStr})$3`);
+                    }
+                }
+            });
+            return res;
+        };
 
         if (cookingPhase === 'mise_en_place') {
             return (
@@ -1685,7 +1879,7 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
                                 const checked = checkedIngredients.has(i);
                                 let scaledAmount = ing.amount;
                                 if (ing.amount && portionMultiplier !== 1) {
-                                    const num = parseFloat(ing.amount.replace(',', '.'));
+                                    const num = parseFloat(String(ing.amount).replace(',', '.'));
                                     if (!isNaN(num)) scaledAmount = (num * portionMultiplier % 1 === 0 ? (num * portionMultiplier).toString() : (num * portionMultiplier).toFixed(1).replace('.', ','));
                                 }
                                 return (
@@ -1759,7 +1953,12 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
                     <View style={s.cookingHeader}>
                         <Pressable onPress={() => setViewMode('detail')}><X size={24} color={colors.text} /></Pressable>
                         <Text style={[s.cookingTitle, { color: colors.subtext, textAlign: 'center' }]}>{r.title}</Text>
-                        <Text style={[s.cookingProgress, { color: colors.accent }]}>{cookingStep + 1} / {instructionLines.length}</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+                            <Pressable onPress={toggleListening}>
+                                {isListening ? <Mic size={24} color="#EF4444" /> : <MicOff size={24} color={colors.text} opacity={0.5} />}
+                            </Pressable>
+                            <Text style={[s.cookingProgress, { color: colors.accent }]}>{cookingStep + 1} / {instructionLines.length}</Text>
+                        </View>
                     </View>
                     <View style={[s.progressBar, { backgroundColor: colors.border }]}>
                         <View style={[s.progressFill, { backgroundColor: colors.accent, width: `${progress * 100}%` }]} />
@@ -1769,7 +1968,9 @@ export function FamilyRecipes({ visible, onClose }: FamilyRecipesProps) {
                         <View style={[s.cookingStepBadge, { backgroundColor: colors.accent + '20' }]}>
                             <Text style={[s.cookingStepNum, { color: colors.accent }]}>SCHRITT {cookingStep + 1}</Text>
                         </View>
-                        <Text style={[s.cookingStepText, { color: colors.text }]}>{step?.text}</Text>
+                        <Text style={[s.cookingStepText, { color: colors.text }]}>
+                            {step?.text ? highlightIngredients(step.text, ingredientLines, portionMultiplier) : ''}
+                        </Text>
 
                         {step?.time && (
                             <View style={{ marginTop: 40, alignItems: 'center' }}>

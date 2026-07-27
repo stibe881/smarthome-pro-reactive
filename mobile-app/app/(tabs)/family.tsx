@@ -44,12 +44,18 @@ export default function FamilyScreen() {
     const { width } = useWindowDimensions();
 
     const [activeModule, setActiveModule] = useState<ModuleKey | null>(null);
+    const [mountedModules, setMountedModules] = useState<Set<ModuleKey>>(new Set());
     const [stats, setStats] = useState<ModuleStats>({ todayEvents: 0, openTodos: 0, recentPins: 0 });
     const [fadeAnim] = useState(new Animated.Value(0));
     const [allowedModules, setAllowedModules] = useState<string[] | null>(null);
     const [overviewMode, setOverviewMode] = useState<'day' | 'week'>('day');
     const [todayEvents, setTodayEvents] = useState<{ id: string; title: string; start_date: string; color?: string }[]>([]);
     const [weekData, setWeekData] = useState<{ date: Date; count: number; events: { title: string; start_date: string }[] }[]>([]);
+
+    const handleOpenModule = (key: ModuleKey) => {
+        setMountedModules(prev => new Set(prev).add(key));
+        setActiveModule(key);
+    };
 
     // Responsive breakpoints
     const isDesktop = width >= 1024;
@@ -190,12 +196,12 @@ export default function FamilyScreen() {
 
     const handleModulePress = async (key: ModuleKey) => {
         if (isProUser) {
-            setActiveModule(key);
+            handleOpenModule(key);
             return;
         }
         const purchased = await presentPaywall();
         if (purchased) {
-            setActiveModule(key);
+            handleOpenModule(key);
         }
     };
 
@@ -487,20 +493,20 @@ export default function FamilyScreen() {
 
             {/* Module Modals */}
             {activeModule === 'calendar' && <FamilyPlanner visible={true} onClose={handleCloseModule} />}
-            <FamilyTodos visible={activeModule === 'todos'} onClose={handleCloseModule} />
-            <ShoppingListModal visible={activeModule === 'shopping'} onClose={handleCloseModule} />
-            <FamilyPinboard visible={activeModule === 'pinboard'} onClose={handleCloseModule} />
-            <MealPlanner visible={activeModule === 'meals'} onClose={handleCloseModule} />
-            <FamilyRewards visible={activeModule === 'rewards'} onClose={handleCloseModule} />
-            <FamilyContacts visible={activeModule === 'contacts'} onClose={handleCloseModule} />
-            <FamilyRoutines visible={activeModule === 'routines'} onClose={handleCloseModule} />
-            <FamilyPackingLists visible={activeModule === 'packing'} onClose={handleCloseModule} />
-            <FamilyCountdowns visible={activeModule === 'countdowns'} onClose={handleCloseModule} />
-            <WeeklyOverview visible={activeModule === 'weekly'} onClose={handleCloseModule} onOpenModule={(key) => setActiveModule(key as ModuleKey)} />
-            <FamilyRecipes visible={activeModule === 'recipes'} onClose={handleCloseModule} />
-            <FamilyLocations visible={activeModule === 'locations'} onClose={handleCloseModule} />
-            <FamilyDocuments visible={activeModule === 'documents'} onClose={handleCloseModule} />
-            <FamilyCelebrations visible={activeModule === 'celebrations'} onClose={handleCloseModule} />
+            {mountedModules.has('todos') && <FamilyTodos visible={activeModule === 'todos'} onClose={handleCloseModule} />}
+            {mountedModules.has('shopping') && <ShoppingListModal visible={activeModule === 'shopping'} onClose={handleCloseModule} />}
+            {mountedModules.has('pinboard') && <FamilyPinboard visible={activeModule === 'pinboard'} onClose={handleCloseModule} />}
+            {mountedModules.has('meals') && <MealPlanner visible={activeModule === 'meals'} onClose={handleCloseModule} />}
+            {mountedModules.has('rewards') && <FamilyRewards visible={activeModule === 'rewards'} onClose={handleCloseModule} />}
+            {mountedModules.has('contacts') && <FamilyContacts visible={activeModule === 'contacts'} onClose={handleCloseModule} />}
+            {mountedModules.has('routines') && <FamilyRoutines visible={activeModule === 'routines'} onClose={handleCloseModule} />}
+            {mountedModules.has('packing') && <FamilyPackingLists visible={activeModule === 'packing'} onClose={handleCloseModule} />}
+            {mountedModules.has('countdowns') && <FamilyCountdowns visible={activeModule === 'countdowns'} onClose={handleCloseModule} />}
+            {mountedModules.has('weekly') && <WeeklyOverview visible={activeModule === 'weekly'} onClose={handleCloseModule} onOpenModule={(key) => handleOpenModule(key as ModuleKey)} />}
+            {mountedModules.has('recipes') && <FamilyRecipes visible={activeModule === 'recipes'} onClose={handleCloseModule} />}
+            {mountedModules.has('locations') && <FamilyLocations visible={activeModule === 'locations'} onClose={handleCloseModule} />}
+            {mountedModules.has('documents') && <FamilyDocuments visible={activeModule === 'documents'} onClose={handleCloseModule} />}
+            {mountedModules.has('celebrations') && <FamilyCelebrations visible={activeModule === 'celebrations'} onClose={handleCloseModule} />}
         </SafeAreaView>
     );
 }

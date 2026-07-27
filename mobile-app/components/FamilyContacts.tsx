@@ -3,7 +3,7 @@ import {
     View, Text, StyleSheet, Pressable, ScrollView, TextInput,
     ActivityIndicator, Alert, Modal, Linking, Image, Platform,
 } from 'react-native';
-import { X, Plus, Trash2, Phone, MapPin, User, Edit3, Siren, Hospital, GraduationCap, Baby, Users, ClipboardList, Heart, Camera } from 'lucide-react-native';
+import { X, Plus, Trash2, Phone, MapPin, User, Edit3, Siren, Hospital, GraduationCap, Baby, Users, ClipboardList, Heart, Camera, Video } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useHousehold } from '../hooks/useHousehold';
@@ -212,7 +212,7 @@ export const FamilyContacts: React.FC<ContactsProps> = ({ visible, onClose }) =>
                                     {group.items.map(c => {
                                         const cat = getCategory(c.category);
                                         return (
-                                            <Pressable key={c.id} style={[styles.contactCard, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => Linking.openURL(`tel:${c.phone}`)}>
+                                            <View key={c.id} style={[styles.contactCard, { backgroundColor: colors.card, borderColor: colors.border, alignItems: 'flex-start' }]}>
                                                 {c.image_url ? (
                                                     <Image source={{ uri: c.image_url }} style={styles.contactImage} />
                                                 ) : (
@@ -221,15 +221,30 @@ export const FamilyContacts: React.FC<ContactsProps> = ({ visible, onClose }) =>
                                                     </View>
                                                 )}
                                                 <View style={{ flex: 1 }}>
-                                                    <Text style={[styles.contactName, { color: colors.text }]}>{c.name}</Text>
-                                                    <Text style={[styles.contactPhone, { color: colors.accent }]}>{c.phone}</Text>
-                                                    {c.notes && <Text style={[styles.contactNotes, { color: colors.subtext }]}>{c.notes}</Text>}
+                                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                                        <View style={{ flex: 1, paddingRight: 8 }}>
+                                                            <Text style={[styles.contactName, { color: colors.text }]}>{c.name}</Text>
+                                                            <Text style={[styles.contactPhone, { color: colors.accent }]}>{c.phone}</Text>
+                                                            {c.notes && <Text style={[styles.contactNotes, { color: colors.subtext }]}>{c.notes}</Text>}
+                                                        </View>
+                                                        <View style={{ flexDirection: 'row', gap: 12, marginTop: 2 }}>
+                                                            <Pressable onPress={() => openEdit(c)} hitSlop={12}><Edit3 size={16} color={colors.subtext} /></Pressable>
+                                                            <Pressable onPress={() => handleDelete(c)} hitSlop={12}><Trash2 size={16} color={colors.subtext} /></Pressable>
+                                                        </View>
+                                                    </View>
+                                                    
+                                                    <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
+                                                        <Pressable style={[styles.actionPill, { backgroundColor: '#22C55E15' }]} onPress={() => Linking.openURL(`facetime-audio://${c.phone}`)}>
+                                                            <Phone size={16} color="#22C55E" />
+                                                            <Text style={{ color: '#22C55E', fontSize: 13, fontWeight: '700' }}>Audio</Text>
+                                                        </Pressable>
+                                                        <Pressable style={[styles.actionPill, { backgroundColor: '#3B82F615' }]} onPress={() => Linking.openURL(`facetime://${c.phone}`)}>
+                                                            <Video size={16} color="#3B82F6" />
+                                                            <Text style={{ color: '#3B82F6', fontSize: 13, fontWeight: '700' }}>Video</Text>
+                                                        </Pressable>
+                                                    </View>
                                                 </View>
-                                                <View style={styles.contactActions}>
-                                                    <Pressable onPress={() => openEdit(c)} hitSlop={8}><Edit3 size={14} color={colors.subtext} /></Pressable>
-                                                    <Pressable onPress={() => handleDelete(c)} hitSlop={8}><Trash2 size={14} color={colors.subtext} /></Pressable>
-                                                </View>
-                                            </Pressable>
+                                            </View>
                                         );
                                     })}
                                 </View>
